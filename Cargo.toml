@@ -2,6 +2,13 @@
 name = "telluride"
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
+authors = ["Michael Ilyin <milyin@gmail.com>"]
+repository = "https://github.com/milyin/telluride"
+documentation = "https://docs.rs/telluride"
+readme = "README.md"
+keywords = ["telegram", "teloxide", "markdown", "bot", "telegram-bot"]
+categories = ["development-tools", "telegram-bots"] 
 
 [dependencies]
 teloxide = { version = "0.17.0", features = ["macros"] }
