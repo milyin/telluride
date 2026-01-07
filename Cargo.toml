@@ -8,7 +8,7 @@ repository = "https://github.com/milyin/telluride"
 documentation = "https://docs.rs/telluride"
 readme = "README.md"
 keywords = ["telegram", "teloxide", "markdown", "bot", "telegram-bot"]
-categories = ["development-tools", "telegram-bots"]
+categories = ["development-tools"]
 description = "The extension for teloxide library providing extended and compile-time safe API"
 
 [dependencies]
