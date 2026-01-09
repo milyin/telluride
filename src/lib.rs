@@ -1,5 +1,26 @@
 mod api;
 
+/// The `markdown` module provides utilities for safe working with MarkdownV2 formatted strings.
+/// The goal is to make it impossible to create invalid MarkdownV2 strings that will cause runtime errors.
+/// 
+/// It provides the type [`MarkdownString`](markdown::MarkdownString) which is 
+/// compile-time validated to ensure correct MarkdownV2 formatting.
+/// This goal is achieved by disallowing direct construction of `MarkdownString` from arbitrary strings. 
+/// Instead the following methods are provided:
+/// 
+/// - [`markdown_string!`] macro: Allows creation of `MarkdownString` from string literals
+///   with compile-time validation.
+/// 
+/// - [`markdown_format!`] macro: Similar to [`format!`], but validates the pattern at compile-time, 
+///   automatically escapes the arguments, and supports special prefixes `@raw` and `@code` to avoid escaping.
+/// 
+/// 
+/// The trait [`MarkdownStringMessage`](markdown::MarkdownStringMessage) provides methods 
+/// [`send_markdown_message`](markdown::MarkdownStringMessage::send_markdown_message) and 
+/// [`edit_markdown_message_text`](markdown::MarkdownStringMessage::edit_markdown_message_text)
+/// which are similar to `Bot::send_message` and `Bot::edit_message_text` respectively,
+/// but accept `MarkdownString` and automatically set the parse mode to MarkdownV2. The teloxide 
+/// `Bot` type is extended with this trait implementation.
 pub mod markdown {
     pub use crate::api::markdown::{
         string::{MarkdownString, MarkdownStringMessage},
