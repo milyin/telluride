@@ -1,8 +1,8 @@
 /// Validates MarkdownV2 format string at compile time
 ///
 /// This function checks for:
-/// - Balanced formatting characters (*, _, ~, |, `, [, ])
-/// - Properly escaped reserved characters (!,.,-, +,=,>,#,{,})
+/// - Balanced formatting characters (\*, \_, \~, \|, \`, \[, \])
+/// - Properly escaped reserved characters (\!, \., \-, \+, \=, \>, \#, \{, \})
 /// - Correct nesting of code blocks and formatting
 /// - Valid link syntax
 pub const fn validate_markdownv2_format(format_str: &str) {
