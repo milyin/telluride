@@ -14,15 +14,21 @@ use teloxide::{
 
 use crate::markdown_string;
 
-/// A wrapper around String that ensures safe MarkdownV2 formatting for Telegram messages.
+/// A wrapper around [`String`] that ensures safe MarkdownV2 formatting for Telegram messages.
 ///
 /// This struct can only be constructed through safe methods:
-/// 1. `markdown_string!` macro - statically validates the format string at compile time
-/// 2. `escape` constructor - automatically escapes markdown characters in the input
-/// 3. `new` constructor - creates an empty MarkdownString
-/// 4. `From`/`Into` trait - automatically escapes the input for safety
+/// 1. [`markdown_string!`](crate::markdown_string!) macro - statically validates the format string at compile time
+/// 2. [`escape`](Self::escape) constructor - automatically escapes markdown characters in the input
+/// 3. [`new`](Self::new) constructor - creates an empty MarkdownString
+/// 4. [`From`]/[`Into`] trait - automatically escapes the input for safety
 ///
 /// Direct construction is not allowed to ensure all content is either validated or escaped.
+///
+/// # MarkdownV2 Support
+///
+/// This type is designed to work with Telegram's [MarkdownV2](https://core.telegram.org/bots/api#markdownv2-style) format.
+/// Use with [`MarkdownStringMessage::send_markdown_message`](crate::markdown::MarkdownStringMessage::send_markdown_message)
+/// to send messages with proper formatting.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MarkdownString(String, bool);
 
@@ -31,6 +37,7 @@ const TRUNCATION_MARKER: &str = "\\.\\.\\.";
 impl MarkdownString {
     /// Creates a MarkdownString by escaping all markdown special characters in the input.
     /// This is safe to use with any string content as all special characters will be escaped.
+    /// Uses [teloxide's markdown escape function](https://docs.rs/teloxide/latest/teloxide/utils/markdown/fn.escape.html).
     ///
     /// # Example
     /// ```rust
@@ -101,8 +108,7 @@ impl MarkdownString {
     }
 
     /// Adds other MarkdownString to self, returning a new combined MarkdownString
-    /// Internally doesn't allow to overflow Telegram's message length limit
-    /// See: TELEGRAM_MAX_MESSAGE_LENGTH constant
+    /// Internally doesn't allow to overflow [Telegram's message length limit](https://core.telegram.org/bots/api#sendmessage).
     /// If the result exceeds the limit minus truncation indicator length,
     /// it adds the truncation indicator "..." at the end and sets the flag
     /// to prevent further additions.
@@ -243,10 +249,10 @@ impl Add<&MarkdownString> for &MarkdownString {
 /// See: https://core.telegram.org/bots/api#sendmessage
 const TELEGRAM_MAX_MESSAGE_LENGTH: usize = 4096;
 
-/// Trait for sending markdown messages with Bot
+/// Trait for sending markdown messages with [teloxide Bot](https://docs.rs/teloxide/latest/teloxide/struct.Bot.html)
 ///
-/// This trait provides a convenient method for sending MarkdownString messages
-/// using teloxide Bot, automatically setting the parse mode to MarkdownV2.
+/// This trait provides a convenient method for sending `MarkdownString` messages
+/// using [teloxide Bot](https://docs.rs/teloxide/latest/teloxide/struct.Bot.html), automatically setting the parse mode to `MarkdownV2`.
 ///
 /// All methods automatically validate message length and truncate with "..."
 /// if the message exceeds Telegram's 4096 character limit.
@@ -262,17 +268,17 @@ const TELEGRAM_MAX_MESSAGE_LENGTH: usize = 4096;
 ///     let message = MarkdownString::escape("Hello *world*!");
 ///
 ///     // Use the trait method - automatically sets ParseMode::MarkdownV2
-///     let request = bot.send_message(chat_id, message);
+///     let request = bot.send_markdown_message(chat_id, message);
 ///     request.await.unwrap();
 /// }
 /// ```
 ///
-/// The trait allows you to use `Bot::send_message` with `MarkdownString` parameters
+/// The trait allows you to use [`send_markdown_message`](Self::send_markdown_message) with `MarkdownString` parameters
 /// while automatically applying the correct parse mode, making it safer and more
 /// convenient than manually setting the parse mode each time.
 #[allow(async_fn_in_trait)]
 pub trait MarkdownStringMessage: Requester {
-    /// This method replaces `Bot::send_message` for `MarkdownString`
+    /// This method replaces [teloxide Bot::send_message](https://docs.rs/teloxide/latest/teloxide/struct.Bot.html#method.send_message) for `MarkdownString`
     fn send_markdown_message<C>(
         &self,
         chat_id: C,
@@ -281,7 +287,7 @@ pub trait MarkdownStringMessage: Requester {
     where
         C: Into<Recipient>;
 
-    /// This method replaces `Bot::edit_message_text` for `MarkdownString`
+    /// This method replaces [teloxide Bot::edit_message_text](https://docs.rs/teloxide/latest/teloxide/struct.Bot.html#method.edit_message_text) for `MarkdownString`
     fn edit_markdown_message_text<C>(
         &self,
         chat_id: C,

@@ -18,9 +18,11 @@ mod api;
 /// The trait [`MarkdownStringMessage`](markdown::MarkdownStringMessage) provides methods 
 /// [`send_markdown_message`](markdown::MarkdownStringMessage::send_markdown_message) and 
 /// [`edit_markdown_message_text`](markdown::MarkdownStringMessage::edit_markdown_message_text)
-/// which are similar to `Bot::send_message` and `Bot::edit_message_text` respectively,
-/// but accept `MarkdownString` and automatically set the parse mode to MarkdownV2. The teloxide 
-/// `Bot` type is extended with this trait implementation.
+/// which are similar to [teloxide](https://docs.rs/teloxide/latest/teloxide/)'s
+///[Bot::send_message](https://docs.rs/teloxide/latest/teloxide/struct.Bot.html#method.send_message) and 
+/// [Bot::edit_message_text](https://docs.rs/teloxide/latest/teloxide/struct.Bot.html#method.edit_message_text) respectively,
+/// but accept [`MarkdownString`](markdown::MarkdownString``) and automatically set the parse mode to `MarkdownV2`.
+/// The teloxide [Bot](https://docs.rs/teloxide/latest/teloxide/struct.Bot.html) type is extended with this trait implementation.
 pub mod markdown {
     pub use crate::api::markdown::{
         string::{MarkdownString, MarkdownStringMessage},
