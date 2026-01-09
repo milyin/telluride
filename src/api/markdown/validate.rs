@@ -138,23 +138,23 @@ pub const fn validate_markdownv2_format(format_str: &str) {
 
     // Validate balanced formatting
     assert!(
-        asterisk_count % 2 == 0,
+        asterisk_count.is_multiple_of(2),
         "Unmatched asterisks (*) in MarkdownV2 format string - bold formatting must be balanced"
     );
     assert!(
-        underscore_count % 2 == 0,
+        underscore_count.is_multiple_of(2),
         "Unmatched underscores (_) in MarkdownV2 format string - italic formatting must be balanced"
     );
     assert!(
-        backtick_count % 2 == 0,
+        backtick_count.is_multiple_of(2),
         "Unmatched backticks (`) in MarkdownV2 format string - code formatting must be balanced"
     );
     assert!(
-        tilde_count % 2 == 0,
+        tilde_count.is_multiple_of(2),
         "Unmatched tildes (~) in MarkdownV2 format string - strikethrough formatting must be balanced"
     );
     assert!(
-        pipe_count % 2 == 0,
+        pipe_count.is_multiple_of(2),
         "Unmatched pipes (|) in MarkdownV2 format string - spoiler formatting must be balanced"
     );
     assert!(
@@ -191,7 +191,7 @@ mod tests {
             }
 
             assert!(
-                asterisk_count % 2 == 0,
+                asterisk_count.is_multiple_of(2),
                 "Unmatched asterisks in markdown format string"
             );
         };
@@ -272,27 +272,27 @@ mod tests {
 
             // Validate all formatting is balanced
             assert!(
-                asterisk_count % 2 == 0,
+                asterisk_count.is_multiple_of(2),
                 "Pattern '{}' has unmatched asterisks",
                 pattern
             );
             assert!(
-                underscore_count % 2 == 0,
+                underscore_count.is_multiple_of(2),
                 "Pattern '{}' has unmatched underscores",
                 pattern
             );
             assert!(
-                backtick_count % 2 == 0,
+                backtick_count.is_multiple_of(2),
                 "Pattern '{}' has unmatched backticks",
                 pattern
             );
             assert!(
-                tilde_count % 2 == 0,
+                tilde_count.is_multiple_of(2),
                 "Pattern '{}' has unmatched tildes",
                 pattern
             );
             assert!(
-                pipe_count % 2 == 0,
+                pipe_count.is_multiple_of(2),
                 "Pattern '{}' has unmatched pipes",
                 pattern
             );

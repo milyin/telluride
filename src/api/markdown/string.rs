@@ -3,10 +3,10 @@ use std::{fmt, ops::Add};
 use teloxide::{
     Bot,
     payloads::{EditMessageTextSetters, SendMessage, SendMessageSetters},
-    prelude::{Requester, ResponseResult},
+    prelude::Requester,
     requests::JsonRequest,
     types::{
-        Message, MessageId,
+        MessageId,
         ParseMode::{self, MarkdownV2},
         Recipient,
     },
@@ -272,20 +272,7 @@ const TELEGRAM_MAX_MESSAGE_LENGTH: usize = 4096;
 /// convenient than manually setting the parse mode each time.
 #[allow(async_fn_in_trait)]
 pub trait MarkdownStringMessage: Requester {
-    /// Send a message with MarkdownString content
-    ///
-    /// This method has the same signature as teloxide's `Bot::send_message`,
-    /// but accepts a MarkdownString instead of regular text and automatically
-    /// sets the parse mode to MarkdownV2.
-    async fn markdown_message<C>(
-        &self,
-        chat_id: C,
-        message_id: Option<MessageId>,
-        text: MarkdownString,
-    ) -> ResponseResult<Message>
-    where
-        C: Into<Recipient>;
-
+    /// This method replaces `Bot::send_message` for `MarkdownString`
     fn send_markdown_message<C>(
         &self,
         chat_id: C,
@@ -294,6 +281,7 @@ pub trait MarkdownStringMessage: Requester {
     where
         C: Into<Recipient>;
 
+    /// This method replaces `Bot::edit_message_text` for `MarkdownString`
     fn edit_markdown_message_text<C>(
         &self,
         chat_id: C,
@@ -304,7 +292,7 @@ pub trait MarkdownStringMessage: Requester {
         C: Into<Recipient>;
 }
 
-/// Implementation of MarkdownStringSendMessage for teloxide Bot
+/// Implementation of `MarkdownStringMessage` for teloxide `Bot`
 impl MarkdownStringMessage for Bot {
     fn send_markdown_message<C>(&self, chat_id: C, text: MarkdownString) -> JsonRequest<SendMessage>
     where
@@ -325,25 +313,6 @@ impl MarkdownStringMessage for Bot {
     {
         self.edit_message_text(chat_id, message_id, text)
             .parse_mode(MarkdownV2)
-    }
-    async fn markdown_message<C>(
-        &self,
-        chat_id: C,
-        message_id: Option<MessageId>,
-        text: MarkdownString,
-    ) -> ResponseResult<Message>
-    where
-        C: Into<Recipient>,
-    {
-        if let Some(message_id) = message_id {
-            self.edit_message_text(chat_id, message_id, text)
-                .parse_mode(ParseMode::MarkdownV2)
-                .await
-        } else {
-            self.send_message(chat_id, text)
-                .parse_mode(ParseMode::MarkdownV2)
-                .await
-        }
     }
 }
 
@@ -835,11 +804,9 @@ mod tests {
     fn test_markdown_format_raw_prefix_complex() {
         // Real-world example: combining pre-formatted regex pattern with regular text
         // @raw and regular arguments can be mixed in any order
-        let words = vec![
-            "word1".to_string(),
+        let words = ["word1".to_string(),
             "word2".to_string(),
-            "word3".to_string(),
-        ];
+            "word3".to_string()];
         let pattern = format!(r"(?i)\b({})\b", words.join("|"));
         let pattern_markdown = markdown_string!("`{}`");
         let formatted_pattern = markdown_format!(pattern_markdown, &pattern);
