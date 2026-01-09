@@ -1,10 +1,23 @@
-/// Validates MarkdownV2 format string at compile time
+/// Validates MarkdownV2 format string at compile time.
 ///
-/// This function checks for:
-/// - Balanced formatting characters (\*, \_, \~, \|, \`, \[, \])
-/// - Properly escaped reserved characters (\!, \., \-, \+, \=, \>, \#, \{, \})
+/// This function validates that a format string follows the [Telegram MarkdownV2 specification](https://core.telegram.org/bots/api#markdownv2-style).
+/// It performs compile-time validation to ensure:
+///
+/// - Balanced formatting characters: \*, \_, \~, \|, \`, \[, \]
+/// - Properly escaped reserved characters: \!, \., \-, \+, \=, \>, \#, \{, \}
 /// - Correct nesting of code blocks and formatting
-/// - Valid link syntax
+/// - Valid link syntax with matching parentheses
+///
+/// # MarkdownV2 Format Support
+///
+/// The validator supports the following MarkdownV2 elements:
+/// - **Bold**: `*bold text*` or `**bold text**`
+/// - _Italic_: `_italic text_` or `__italic text__`
+/// - `Code`: `` `code` `` or ``` ```code block``` ```
+/// - ~~Strikethrough~~: `~strikethrough~`
+/// - ||Spoiler||: `||spoiler||`
+/// - [Links](http://example.com): `[text](url)`
+/// - [User mentions](tg://user?id=123): `[name](tg://user?id=123)`
 pub const fn validate_markdownv2_format(format_str: &str) {
     let format_str_bytes = format_str.as_bytes();
     let mut i = 0;
