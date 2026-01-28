@@ -1,4 +1,6 @@
+use telluride::{markdown::MarkdownStringMessage, markdown_format, markdown_string};
 use teloxide::prelude::*;
+use teloxide::types::ParseMode;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 use teloxide::utils::command::BotCommands;
 
@@ -83,16 +85,22 @@ async fn main() {
 async fn command_handler(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
     match cmd {
         Command::Start => {
-            bot.send_message(msg.chat.id, "Welcome! Use /help to see available commands.")
-                .await?;
+            bot.send_markdown_message(
+                msg.chat.id,
+                markdown_string!("Welcome\\! Use /help to see available commands\\."),
+            )
+            .await?;
         }
         Command::Help => {
-            bot.send_message(msg.chat.id, Command::descriptions().to_string())
-                .await?;
+            bot.send_markdown_message(
+                msg.chat.id,
+                markdown_format!("{}", Command::descriptions().to_string()),
+            )
+            .await?;
         }
         Command::Menu => {
             let keyboard = make_keyboard();
-            bot.send_message(msg.chat.id, "Choose an option:")
+            bot.send_markdown_message(msg.chat.id, markdown_string!("Choose an option:"))
                 .reply_markup(keyboard)
                 .await?;
         }
@@ -103,7 +111,7 @@ async fn command_handler(bot: Bot, msg: Message, cmd: Command) -> ResponseResult
 /// Handler for regular text messages (non-commands)
 async fn text_handler(bot: Bot, msg: Message) -> ResponseResult<()> {
     if let Some(text) = msg.text() {
-        bot.send_message(msg.chat.id, format!("You said: {text}"))
+        bot.send_markdown_message(msg.chat.id, markdown_format!("You said: {}", text))
             .await?;
     }
     Ok(())
@@ -115,14 +123,16 @@ async fn callback_handler(bot: Bot, q: CallbackQuery) -> ResponseResult<()> {
     bot.answer_callback_query(q.id.clone()).await?;
 
     if let Some(data) = &q.data {
-        let text = format!("You pressed: {data}");
+        let text = markdown_format!("You pressed: {}", data);
 
         // Send response - either edit the original message or send a new one
         if let Some(msg) = q.message {
-            bot.edit_message_text(msg.chat().id, msg.id(), &text)
+            bot.edit_markdown_message_text(msg.chat().id, msg.id(), text)
                 .await?;
         } else if let Some(id) = q.inline_message_id {
-            bot.edit_message_text_inline(&id, &text).await?;
+            bot.edit_message_text_inline(&id, text.as_str())
+                .parse_mode(ParseMode::MarkdownV2)
+                .await?;
         }
     }
 
