@@ -2,7 +2,9 @@ use std::{fmt, ops::Add};
 
 use teloxide::{
     Bot,
-    payloads::{EditMessageTextSetters, SendMessage, SendMessageSetters},
+    payloads::{
+        EditMessageTextInlineSetters, EditMessageTextSetters, SendMessage, SendMessageSetters,
+    },
     prelude::Requester,
     requests::JsonRequest,
     types::{
@@ -296,6 +298,13 @@ pub trait MarkdownStringMessage: Requester {
     ) -> <Self as Requester>::EditMessageText
     where
         C: Into<Recipient>;
+
+    /// This method replaces [teloxide Bot::edit_message_text_inline](https://docs.rs/teloxide/latest/teloxide/struct.Bot.html#method.edit_message_text_inline) for `MarkdownString`
+    fn edit_markdown_message_text_inline(
+        &self,
+        inline_message_id: &str,
+        text: MarkdownString,
+    ) -> <Self as Requester>::EditMessageTextInline;
 }
 
 /// Implementation of `MarkdownStringMessage` for teloxide `Bot`
@@ -318,6 +327,15 @@ impl MarkdownStringMessage for Bot {
         C: Into<Recipient>,
     {
         self.edit_message_text(chat_id, message_id, text)
+            .parse_mode(MarkdownV2)
+    }
+
+    fn edit_markdown_message_text_inline(
+        &self,
+        inline_message_id: &str,
+        text: MarkdownString,
+    ) -> <Self as Requester>::EditMessageTextInline {
+        self.edit_message_text_inline(inline_message_id, text)
             .parse_mode(MarkdownV2)
     }
 }
@@ -810,9 +828,11 @@ mod tests {
     fn test_markdown_format_raw_prefix_complex() {
         // Real-world example: combining pre-formatted regex pattern with regular text
         // @raw and regular arguments can be mixed in any order
-        let words = ["word1".to_string(),
+        let words = [
+            "word1".to_string(),
             "word2".to_string(),
-            "word3".to_string()];
+            "word3".to_string(),
+        ];
         let pattern = format!(r"(?i)\b({})\b", words.join("|"));
         let pattern_markdown = markdown_string!("`{}`");
         let formatted_pattern = markdown_format!(pattern_markdown, &pattern);

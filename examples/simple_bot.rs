@@ -1,6 +1,6 @@
 use telluride::{markdown::MarkdownStringMessage, markdown_format, markdown_string};
 use teloxide::prelude::*;
-use teloxide::types::ParseMode;
+
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 use teloxide::utils::command::BotCommands;
 
@@ -130,9 +130,7 @@ async fn callback_handler(bot: Bot, q: CallbackQuery) -> ResponseResult<()> {
             bot.edit_markdown_message_text(msg.chat().id, msg.id(), text)
                 .await?;
         } else if let Some(id) = q.inline_message_id {
-            bot.edit_message_text_inline(&id, text.as_str())
-                .parse_mode(ParseMode::MarkdownV2)
-                .await?;
+            bot.edit_markdown_message_text_inline(&id, text).await?;
         }
     }
 
