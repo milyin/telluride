@@ -59,4 +59,4 @@ echo "Press Ctrl+C to stop watching logs (bot will continue running if detached 
 echo "----------------------------------------"
 
 # Run the bot with the token
-ssh -tt ${DEPLOY_USER}@${DEPLOY_HOST} "cd ${DEPLOY_PATH} && TELOXIDE_TOKEN='${TELOXIDE_TOKEN}' RUST_LOG=info ./simple_bot"
+ssh -tt ${DEPLOY_USER}@${DEPLOY_HOST} "cd ${DEPLOY_PATH} && TELOXIDE_TOKEN='${TELOXIDE_TOKEN}' RUST_LOG=debug ./simple_bot"
