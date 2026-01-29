@@ -48,7 +48,7 @@ ssh ${DEPLOY_USER}@${DEPLOY_HOST} "mkdir -p ${DEPLOY_PATH}"
 
 # Stop existing process if any (simple kill by name - safe for this example)
 echo "Stopping existing simple_bot processes..."
-ssh ${DEPLOY_USER}@${DEPLOY_HOST} "pkill -f simple_bot || true"
+ssh ${DEPLOY_USER}@${DEPLOY_HOST} "pkill -x simple_bot || true"
 
 # Copy binary
 echo "Copying binary..."
