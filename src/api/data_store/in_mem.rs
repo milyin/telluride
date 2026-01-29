@@ -1,5 +1,6 @@
-use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
+
+use serde::{Deserialize, Serialize};
 use teloxide::types::ChatId;
 use tokio::sync::Mutex;
 
@@ -70,7 +71,6 @@ where
             .unwrap_or_default()
     }
 }
-
 
 #[cfg(test)]
 mod tests {

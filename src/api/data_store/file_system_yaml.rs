@@ -1,9 +1,13 @@
-use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
+
+use serde::{Deserialize, Serialize};
 use teloxide::types::ChatId;
 use tokio::{fs, sync::Mutex};
 
-use crate::api::data_store::{data_store_trait::DataStoreTrait, util::{decode_filename_to_key, encode_key_to_filename}};
+use crate::api::data_store::{
+    data_store_trait::DataStoreTrait,
+    util::{decode_filename_to_key, encode_key_to_filename},
+};
 
 /// Filesystem-based YAML data store
 /// Creates a separate directory for each chat, with each key stored as a .yaml file
@@ -182,8 +186,6 @@ where
         }
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {

@@ -2,7 +2,10 @@ use std::{any::TypeId, fmt::Display};
 
 use teloxide::{prelude::ResponseResult, utils::command::ParseError};
 
-use crate::api::command::{command_arg::{EmptyArg, ParseCommandArg}, command_reply_target::CommandReplyTarget};
+use crate::api::command::{
+    command_arg::{EmptyArg, ParseCommandArg},
+    command_reply_target::CommandReplyTarget,
+};
 
 pub trait CommandTrait: Sized + Clone {
     type A: ParseCommandArg + Default + Display + Send + Sync + 'static;

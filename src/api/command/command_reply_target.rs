@@ -1,9 +1,20 @@
 use std::sync::Arc;
 
-use teloxide::{Bot, payloads::{EditMessageReplyMarkupSetters, SendMessage}, prelude::{Requester, ResponseResult}, requests::JsonRequest, types::{Chat, Message, MessageId}};
+use teloxide::{
+    Bot,
+    payloads::{EditMessageReplyMarkupSetters, SendMessage},
+    prelude::{Requester, ResponseResult},
+    requests::JsonRequest,
+    types::{Chat, Message, MessageId},
+};
 
-use crate::{api::{command::command_button::{ButtonData, CallbackDataStorageTrait, pack_callback_data}, markdown::string::MarkdownString}, markdown::MarkdownStringMessage};
-
+use crate::{
+    api::{
+        command::command_button::{ButtonData, CallbackDataStorageTrait, pack_callback_data},
+        markdown::string::MarkdownString,
+    },
+    markdown::MarkdownStringMessage,
+};
 
 #[derive(Clone)]
 pub struct CommandReplyTarget {
@@ -18,11 +29,11 @@ impl CommandReplyTarget {
     /// Send a new or edit a current markdown message without a menu
     pub async fn markdown_message(&self, text: MarkdownString) -> ResponseResult<Message> {
         if let Some(message_id) = self.msg_id {
-            self.bot.edit_markdown_message_text(self.chat.id, message_id, text)
+            self.bot
+                .edit_markdown_message_text(self.chat.id, message_id, text)
                 .await
         } else {
-            self.bot.send_markdown_message(self.chat.id, text)
-                .await
+            self.bot.send_markdown_message(self.chat.id, text).await
         }
     }
 
@@ -37,9 +48,7 @@ impl CommandReplyTarget {
         R: IntoIterator<Item = B>,
         B: Into<ButtonData>,
     {
-        let msg = self
-            .markdown_message(text)
-            .await?;
+        let msg = self.markdown_message(text).await?;
 
         Self::attach_menu_to_message(
             &self.bot,

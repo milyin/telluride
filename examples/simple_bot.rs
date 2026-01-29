@@ -1,9 +1,9 @@
 use telluride::{markdown::MarkdownStringMessage, markdown_format, markdown_string};
-use teloxide::prelude::*;
-use teloxide::types::Me;
-
-use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
-use teloxide::utils::command::BotCommands;
+use teloxide::{
+    prelude::*,
+    types::{InlineKeyboardButton, InlineKeyboardMarkup, Me},
+    utils::command::BotCommands,
+};
 
 #[derive(BotCommands, Clone, Debug)]
 #[command(rename_rule = "lowercase", description = "Supported commands:")]
