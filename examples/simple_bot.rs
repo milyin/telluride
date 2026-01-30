@@ -113,12 +113,16 @@ async fn main() {
 }
 
 /// Helper to get user ID from message, reporting error if not present
-fn get_user_id(msg: &Message) -> Option<UserId> {
+fn get_user_id(msg: &Message) -> ResponseResult<UserId> {
     match msg.from.as_ref().map(|u| u.id) {
-        Some(id) => Some(id),
+        Some(id) => Ok(id),
         None => {
             log::error!("Message from {:?} has no sender information", msg.chat.id);
-            None
+            // We return an error to stop processing
+            Err(teloxide::RequestError::Io(Arc::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "User information missing",
+            ))))
         }
     }
 }
@@ -131,10 +135,7 @@ async fn command_handler(
     storage: Arc<InMemStore<Vec<String>>>,
 ) -> ResponseResult<()> {
     log::info!("Received command: {:?} from {:?}", cmd, msg.chat.id);
-    let user_id = match get_user_id(&msg) {
-        Some(id) => id,
-        None => return Ok(()),
-    };
+    let user_id = get_user_id(&msg)?;
 
     match cmd {
         Command::Start => {
@@ -191,10 +192,7 @@ async fn text_handler(
     storage: Arc<InMemStore<Vec<String>>>,
 ) -> ResponseResult<()> {
     if let Some(text) = msg.text() {
-        let user_id = match get_user_id(&msg) {
-            Some(id) => id,
-            None => return Ok(()),
-        };
+        let user_id = get_user_id(&msg)?;
 
         // Save message to storage
         let mut messages = storage.get(user_id, "messages").await.unwrap_or_default();
