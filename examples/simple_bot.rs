@@ -112,6 +112,17 @@ async fn main() {
         .await;
 }
 
+/// Helper to get user ID from message, reporting error if not present
+fn get_user_id(msg: &Message) -> Option<UserId> {
+    match msg.from.as_ref().map(|u| u.id) {
+        Some(id) => Some(id),
+        None => {
+            log::error!("Message from {:?} has no sender information", msg.chat.id);
+            None
+        }
+    }
+}
+
 /// Handler for bot commands (messages starting with /)
 async fn command_handler(
     bot: Bot,
@@ -120,7 +131,10 @@ async fn command_handler(
     storage: Arc<InMemStore<Vec<String>>>,
 ) -> ResponseResult<()> {
     log::info!("Received command: {:?} from {:?}", cmd, msg.chat.id);
-    let user_id = msg.from.as_ref().map(|u| u.id).unwrap_or(UserId(0));
+    let user_id = match get_user_id(&msg) {
+        Some(id) => id,
+        None => return Ok(()),
+    };
 
     match cmd {
         Command::Start => {
@@ -177,7 +191,10 @@ async fn text_handler(
     storage: Arc<InMemStore<Vec<String>>>,
 ) -> ResponseResult<()> {
     if let Some(text) = msg.text() {
-        let user_id = msg.from.as_ref().map(|u| u.id).unwrap_or(UserId(0));
+        let user_id = match get_user_id(&msg) {
+            Some(id) => id,
+            None => return Ok(()),
+        };
 
         // Save message to storage
         let mut messages = storage.get(user_id, "messages").await.unwrap_or_default();

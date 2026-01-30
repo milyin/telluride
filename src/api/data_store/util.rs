@@ -16,7 +16,7 @@
 ///
 /// # Examples
 /// ```
-/// # use telluride::data_store::util::encode_key_to_filename;
+/// # use telluride::data_store::encode_key_to_filename;
 /// assert_eq!(encode_key_to_filename("simple"), "simple");
 /// assert_eq!(encode_key_to_filename("path/to/key"), "path%2Fto%2Fkey");
 /// assert_eq!(encode_key_to_filename(".hidden"), "%2Ehidden");
@@ -52,7 +52,7 @@ pub fn encode_key_to_filename(key: &str) -> String {
 ///
 /// # Examples
 /// ```
-/// # use telluride::data_store::util::{encode_key_to_filename, decode_filename_to_key};
+/// # use telluride::data_store::{encode_key_to_filename, decode_filename_to_key};
 /// assert_eq!(decode_filename_to_key("simple"), "simple");
 /// assert_eq!(decode_filename_to_key("path%2Fto%2Fkey"), "path/to/key");
 /// assert_eq!(decode_filename_to_key("%2Ehidden"), ".hidden");
