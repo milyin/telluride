@@ -1,7 +1,6 @@
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
 
 use serde::{Deserialize, Serialize};
-use teloxide::types::ChatId;
 use tokio::{fs, sync::Mutex};
 
 use crate::api::data_store::{
@@ -17,10 +16,10 @@ where
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync,
 {
     storage_dir: PathBuf,
-    // In-memory cache for loaded values: ChatId -> (Key -> Value)
-    cache: Arc<Mutex<HashMap<ChatId, HashMap<String, V>>>>,
-    // Track which keys have been loaded from disk: ChatId -> (Key -> bool)
-    loaded_keys: Arc<Mutex<HashMap<ChatId, HashMap<String, bool>>>>,
+    // In-memory cache for loaded values: user_name -> (Key -> Value)
+    cache: Arc<Mutex<HashMap<String, HashMap<String, V>>>>,
+    // Track which keys have been loaded from disk: user_name -> (Key -> bool)
+    loaded_keys: Arc<Mutex<HashMap<String, HashMap<String, bool>>>>,
     _phantom: PhantomData<V>,
 }
 
@@ -37,23 +36,22 @@ where
         }
     }
 
-    /// Get the directory path for a specific chat
-    fn get_chat_dir(&self, chat_id: ChatId) -> PathBuf {
-        let chat_id_str = chat_id.0.to_string();
-        let safe_chat_dir = encode_key_to_filename(&chat_id_str);
-        self.storage_dir.join(safe_chat_dir)
+    /// Get the directory path for a specific user
+    fn get_user_dir(&self, user_name: &str) -> PathBuf {
+        let safe_user_dir = encode_key_to_filename(user_name);
+        self.storage_dir.join(safe_user_dir)
     }
 
-    /// Get the file path for a key within a chat's directory
-    fn get_file_path(&self, chat_id: ChatId, key: &str) -> PathBuf {
+    /// Get the file path for a key within a user's directory
+    fn get_file_path(&self, user_name: &str, key: &str) -> PathBuf {
         let safe_filename = encode_key_to_filename(key);
-        self.get_chat_dir(chat_id)
+        self.get_user_dir(user_name)
             .join(format!("{}.yaml", safe_filename))
     }
 
-    /// Load value from disk for a specific chat and key
-    async fn load_from_disk(&self, chat_id: ChatId, key: &str) -> Option<V> {
-        let file_path = self.get_file_path(chat_id, key);
+    /// Load value from disk for a specific user and key
+    async fn load_from_disk(&self, user_name: &str, key: &str) -> Option<V> {
+        let file_path = self.get_file_path(user_name, key);
 
         match fs::read_to_string(&file_path).await {
             Ok(content) => serde_yaml::from_str::<V>(&content).ok(),
@@ -61,18 +59,18 @@ where
         }
     }
 
-    /// Save value to disk for a specific chat and key
+    /// Save value to disk for a specific user and key
     async fn save_to_disk(
         &self,
-        chat_id: ChatId,
+        user_name: &str,
         key: &str,
         value: &V,
     ) -> Result<(), std::io::Error> {
-        // Create chat directory if it doesn't exist
-        let chat_dir = self.get_chat_dir(chat_id);
-        fs::create_dir_all(&chat_dir).await?;
+        // Create user directory if it doesn't exist
+        let user_dir = self.get_user_dir(user_name);
+        fs::create_dir_all(&user_dir).await?;
 
-        let file_path = self.get_file_path(chat_id, key);
+        let file_path = self.get_file_path(user_name, key);
 
         match serde_yaml::to_string(value) {
             Ok(content) => fs::write(&file_path, content).await,
@@ -84,11 +82,11 @@ where
     }
 
     /// Ensure a value is loaded for a key (lazy loading)
-    async fn ensure_loaded(&self, chat_id: ChatId, key: &str) {
+    async fn ensure_loaded(&self, user_name: &str, key: &str) {
         let loaded_guard = self.loaded_keys.lock().await;
         let is_loaded = loaded_guard
-            .get(&chat_id)
-            .and_then(|chat_keys| chat_keys.get(key).copied())
+            .get(user_name)
+            .and_then(|user_keys| user_keys.get(key).copied())
             .unwrap_or(false);
         if is_loaded {
             // Already loaded
@@ -97,21 +95,25 @@ where
         drop(loaded_guard); // Release lock while doing I/O
 
         // Load from disk
-        if let Some(value) = self.load_from_disk(chat_id, key).await {
+        if let Some(value) = self.load_from_disk(user_name, key).await {
             let mut cache_guard = self.cache.lock().await;
-            let chat_cache = cache_guard.entry(chat_id).or_insert_with(HashMap::new);
-            chat_cache.insert(key.to_string(), value);
+            let user_cache = cache_guard
+                .entry(user_name.to_string())
+                .or_insert_with(HashMap::new);
+            user_cache.insert(key.to_string(), value);
         }
 
         // Mark as loaded (even if file didn't exist)
         let mut loaded_guard = self.loaded_keys.lock().await;
-        let chat_loaded = loaded_guard.entry(chat_id).or_insert_with(HashMap::new);
-        chat_loaded.insert(key.to_string(), true);
+        let user_loaded = loaded_guard
+            .entry(user_name.to_string())
+            .or_insert_with(HashMap::new);
+        user_loaded.insert(key.to_string(), true);
     }
 
     /// Delete file from disk
-    async fn delete_from_disk(&self, chat_id: ChatId, key: &str) -> Result<(), std::io::Error> {
-        let file_path = self.get_file_path(chat_id, key);
+    async fn delete_from_disk(&self, user_name: &str, key: &str) -> Result<(), std::io::Error> {
+        let file_path = self.get_file_path(user_name, key);
         fs::remove_file(&file_path).await
     }
 }
@@ -121,63 +123,67 @@ impl<V> DataStoreTrait<V> for FilesystemYamlStore<V>
 where
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
 {
-    async fn get(&self, chat_id: ChatId, key: &str) -> Option<V> {
-        self.ensure_loaded(chat_id, key).await;
+    async fn get(&self, user_name: &str, key: &str) -> Option<V> {
+        self.ensure_loaded(user_name, key).await;
         let cache_guard = self.cache.lock().await;
         cache_guard
-            .get(&chat_id)
-            .and_then(|chat_cache| chat_cache.get(key).cloned())
+            .get(user_name)
+            .and_then(|user_cache| user_cache.get(key).cloned())
     }
 
-    async fn set(&self, chat_id: ChatId, key: &str, value: V) {
+    async fn set(&self, user_name: &str, key: &str, value: V) {
         // Update cache
         let mut cache_guard = self.cache.lock().await;
-        let chat_cache = cache_guard.entry(chat_id).or_insert_with(HashMap::new);
-        chat_cache.insert(key.to_string(), value.clone());
+        let user_cache = cache_guard
+            .entry(user_name.to_string())
+            .or_insert_with(HashMap::new);
+        user_cache.insert(key.to_string(), value.clone());
         drop(cache_guard);
 
         // Mark as loaded
         let mut loaded_guard = self.loaded_keys.lock().await;
-        let chat_loaded = loaded_guard.entry(chat_id).or_insert_with(HashMap::new);
-        chat_loaded.insert(key.to_string(), true);
+        let user_loaded = loaded_guard
+            .entry(user_name.to_string())
+            .or_insert_with(HashMap::new);
+        user_loaded.insert(key.to_string(), true);
         drop(loaded_guard);
 
         // Save to disk (ignore errors for now - could log them)
-        let _ = self.save_to_disk(chat_id, key, &value).await;
+        let _ = self.save_to_disk(user_name, key, &value).await;
     }
 
-    async fn remove(&self, chat_id: ChatId, key: &str) -> bool {
-        self.ensure_loaded(chat_id, key).await;
+    async fn remove(&self, user_name: &str, key: &str) -> bool {
+        self.ensure_loaded(user_name, key).await;
 
         // Remove from cache
         let mut cache_guard = self.cache.lock().await;
         let existed = cache_guard
-            .get_mut(&chat_id)
-            .map(|chat_cache| chat_cache.remove(key).is_some())
+            .get_mut(user_name)
+            .map(|user_cache| user_cache.remove(key).is_some())
             .unwrap_or(false);
         drop(cache_guard);
 
         if existed {
             // Delete from disk (ignore errors)
-            let _ = self.delete_from_disk(chat_id, key).await;
+            let _ = self.delete_from_disk(user_name, key).await;
         }
 
         existed
     }
 
-    async fn keys(&self, chat_id: ChatId) -> Vec<String> {
-        // For filesystem store, list all .yaml files in the chat's directory
-        let chat_dir = self.get_chat_dir(chat_id);
-        match fs::read_dir(&chat_dir).await {
+    async fn keys(&self, user_name: &str) -> Vec<String> {
+        // For filesystem store, list all .yaml files in the user's directory
+        let user_dir = self.get_user_dir(user_name);
+        match fs::read_dir(&user_dir).await {
             Ok(mut entries) => {
                 let mut keys = Vec::new();
                 while let Ok(Some(entry)) = entries.next_entry().await {
-                    if let Some(file_name) = entry.file_name().to_str()
-                        && file_name.ends_with(".yaml")
-                    {
-                        let encoded_key = file_name.trim_end_matches(".yaml");
-                        let decoded_key = decode_filename_to_key(encoded_key);
-                        keys.push(decoded_key);
+                    if let Ok(file_name_os) = entry.file_name().into_string() {
+                        if file_name_os.ends_with(".yaml") {
+                            let encoded_key = file_name_os.trim_end_matches(".yaml");
+                            let decoded_key = decode_filename_to_key(encoded_key);
+                            keys.push(decoded_key);
+                        }
                     }
                 }
                 keys
@@ -193,7 +199,7 @@ mod tests {
 
     use super::*;
 
-    const TEST_CHAT_ID: ChatId = ChatId(12345);
+    const TEST_USER_NAME: &str = "test_user";
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     struct TestData {
@@ -212,8 +218,8 @@ mod tests {
             count: 42,
         };
 
-        store.set(TEST_CHAT_ID, "key1", data.clone()).await;
-        let retrieved = store.get(TEST_CHAT_ID, "key1").await;
+        store.set(TEST_USER_NAME, "key1", data.clone()).await;
+        let retrieved = store.get(TEST_USER_NAME, "key1").await;
 
         assert_eq!(retrieved, Some(data));
 
@@ -234,13 +240,13 @@ mod tests {
         // Create store and set value
         {
             let store = FilesystemYamlStore::<TestData>::new(temp_dir.clone());
-            store.set(TEST_CHAT_ID, "key1", data.clone()).await;
+            store.set(TEST_USER_NAME, "key1", data.clone()).await;
         }
 
         // Create new store instance and verify value persisted
         {
             let store = FilesystemYamlStore::<TestData>::new(temp_dir.clone());
-            let retrieved = store.get(TEST_CHAT_ID, "key1").await;
+            let retrieved = store.get(TEST_USER_NAME, "key1").await;
             assert_eq!(retrieved, Some(data));
         }
 
@@ -259,15 +265,15 @@ mod tests {
             count: 42,
         };
 
-        store.set(TEST_CHAT_ID, "key1", data.clone()).await;
-        assert_eq!(store.get(TEST_CHAT_ID, "key1").await, Some(data));
+        store.set(TEST_USER_NAME, "key1", data.clone()).await;
+        assert_eq!(store.get(TEST_USER_NAME, "key1").await, Some(data));
 
-        let removed = store.remove(TEST_CHAT_ID, "key1").await;
+        let removed = store.remove(TEST_USER_NAME, "key1").await;
         assert!(removed);
-        assert_eq!(store.get(TEST_CHAT_ID, "key1").await, None);
+        assert_eq!(store.get(TEST_USER_NAME, "key1").await, None);
 
         // Verify file was deleted
-        let file_path = temp_dir.join("key1.yaml");
+        let file_path = temp_dir.join(TEST_USER_NAME).join("key1.yaml");
         assert!(!file_path.exists());
 
         // Clean up
@@ -296,11 +302,11 @@ mod tests {
             };
 
             // Set the value
-            store.set(TEST_CHAT_ID, key, data.clone()).await;
+            store.set(TEST_USER_NAME, key, data.clone()).await;
 
-            // Verify the file was created with encoded filename in the chat directory
-            let chat_dir = temp_dir.join("12345"); // TEST_CHAT_ID.0.to_string()
-            let file_path = chat_dir.join(expected_filename);
+            // Verify the file was created with encoded filename in the user directory
+            let user_dir = temp_dir.join(TEST_USER_NAME);
+            let file_path = user_dir.join(expected_filename);
             assert!(
                 file_path.exists(),
                 "File {:?} should exist for key '{}'",
@@ -309,7 +315,7 @@ mod tests {
             );
 
             // Retrieve the value
-            let retrieved = store.get(TEST_CHAT_ID, key).await;
+            let retrieved = store.get(TEST_USER_NAME, key).await;
             assert_eq!(retrieved, Some(data.clone()));
         }
 
@@ -329,7 +335,7 @@ mod tests {
         for key in &keys {
             store
                 .set(
-                    TEST_CHAT_ID,
+                    TEST_USER_NAME,
                     key,
                     TestData {
                         value: format!("data for {}", key),
@@ -340,7 +346,7 @@ mod tests {
         }
 
         // Retrieve all keys
-        let retrieved_keys = store.keys(TEST_CHAT_ID).await;
+        let retrieved_keys = store.keys(TEST_USER_NAME).await;
 
         // Verify all keys are decoded correctly
         assert_eq!(retrieved_keys.len(), keys.len());
@@ -371,17 +377,17 @@ mod tests {
         // Create store and set value
         {
             let store = FilesystemYamlStore::<TestData>::new(temp_dir.clone());
-            store.set(TEST_CHAT_ID, complex_key, data.clone()).await;
+            store.set(TEST_USER_NAME, complex_key, data.clone()).await;
         }
 
         // Create new store instance and verify value persisted with correct key
         {
             let store = FilesystemYamlStore::<TestData>::new(temp_dir.clone());
-            let retrieved = store.get(TEST_CHAT_ID, complex_key).await;
+            let retrieved = store.get(TEST_USER_NAME, complex_key).await;
             assert_eq!(retrieved, Some(data.clone()));
 
             // Verify the key appears in keys() list
-            let keys = store.keys(TEST_CHAT_ID).await;
+            let keys = store.keys(TEST_USER_NAME).await;
             assert!(keys.contains(&complex_key.to_string()));
         }
 

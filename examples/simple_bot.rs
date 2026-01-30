@@ -1,4 +1,9 @@
-use telluride::{markdown::MarkdownStringMessage, markdown_format, markdown_string};
+use std::sync::Arc;
+use telluride::{
+    data_store::{DataStoreTrait, InMemStore},
+    markdown::MarkdownStringMessage,
+    markdown_format, markdown_string,
+};
 use teloxide::{
     prelude::*,
     types::{InlineKeyboardButton, InlineKeyboardMarkup, Me},
@@ -14,6 +19,8 @@ enum Command {
     Help,
     #[command(description = "show inline keyboard")]
     Menu,
+    #[command(description = "list your saved messages")]
+    Message,
 }
 
 #[tokio::main]
@@ -95,8 +102,10 @@ async fn main() {
     // - Update::filter_chat_member()       - Other chat member status changes
     // - Update::filter_chat_join_request() - Join request updates
 
+    let storage = Arc::new(InMemStore::<Vec<String>>::new());
+
     Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![me])
+        .dependencies(dptree::deps![me, storage])
         .enable_ctrlc_handler()
         .build()
         .dispatch()
@@ -104,8 +113,19 @@ async fn main() {
 }
 
 /// Handler for bot commands (messages starting with /)
-async fn command_handler(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
+async fn command_handler(
+    bot: Bot,
+    msg: Message,
+    cmd: Command,
+    storage: Arc<InMemStore<Vec<String>>>,
+) -> ResponseResult<()> {
     log::info!("Received command: {:?} from {:?}", cmd, msg.chat.id);
+    let user_name = msg
+        .from
+        .as_ref()
+        .and_then(|u| u.username.as_deref())
+        .unwrap_or("anonymous");
+
     match cmd {
         Command::Start => {
             bot.send_markdown_message(
@@ -127,13 +147,51 @@ async fn command_handler(bot: Bot, msg: Message, cmd: Command) -> ResponseResult
                 .reply_markup(keyboard)
                 .await?;
         }
+        Command::Message => {
+            let messages = storage.get(user_name, "messages").await.unwrap_or_default();
+            if messages.is_empty() {
+                bot.send_markdown_message(
+                    msg.chat.id,
+                    markdown_string!("No messages saved yet\\."),
+                )
+                .await?;
+            } else {
+                let list = messages
+                    .iter()
+                    .enumerate()
+                    .map(|(i, m)| format!("{}. {}", i + 1, m))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                bot.send_markdown_message(
+                    msg.chat.id,
+                    markdown_format!("Your saved messages:\n{}", list),
+                )
+                .await?;
+            }
+        }
     }
     Ok(())
 }
 
 /// Handler for regular text messages (non-commands)
-async fn text_handler(bot: Bot, msg: Message, me: Me) -> ResponseResult<()> {
+async fn text_handler(
+    bot: Bot,
+    msg: Message,
+    me: Me,
+    storage: Arc<InMemStore<Vec<String>>>,
+) -> ResponseResult<()> {
     if let Some(text) = msg.text() {
+        let user_name = msg
+            .from
+            .as_ref()
+            .and_then(|u| u.username.as_deref())
+            .unwrap_or("anonymous");
+
+        // Save message to storage
+        let mut messages = storage.get(user_name, "messages").await.unwrap_or_default();
+        messages.push(text.to_string());
+        storage.set(user_name, "messages", messages).await;
+
         if !msg.chat.is_private() {
             let text_lower = text.to_lowercase();
             let username_lower = me.username.as_ref().unwrap().to_lowercase();

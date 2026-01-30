@@ -113,13 +113,13 @@ impl std::str::FromStr for CallbackDataKey {
 #[derive(Clone)]
 pub struct CallbackDataStorage {
     store: Arc<dyn DataStoreTrait<CallbackData>>,
-    chat_id: ChatId,
+    user_key: String,
 }
 
 impl CallbackDataStorage {
-    /// Create a new CallbackDataStorage with the given DataStore and chat ID
-    pub fn new(store: Arc<dyn DataStoreTrait<CallbackData>>, chat_id: ChatId) -> Self {
-        Self { store, chat_id }
+    /// Create a new CallbackDataStorage with the given DataStore and user key
+    pub fn new(store: Arc<dyn DataStoreTrait<CallbackData>>, user_key: String) -> Self {
+        Self { store, user_key }
     }
 }
 
@@ -128,7 +128,7 @@ impl CallbackDataStorage {
 impl CallbackDataStorageReadTrait for CallbackDataStorage {
     async fn get_callback_data(&self, reference: &str) -> Option<CallbackData> {
         // Reference string is already the key, just look it up
-        self.store.get(self.chat_id, reference).await
+        self.store.get(&self.user_key, reference).await
     }
 }
 
@@ -141,21 +141,24 @@ impl CallbackDataStorageTrait for CallbackDataStorage {
         button_pos: usize,
         data: CallbackData,
     ) -> String {
-        let key = CallbackDataKey::new(self.chat_id, message_id, button_pos);
+        // We still use chat_id (from user_key or elsewhere) for key generation if needed,
+        // but here we just need a unique key.
+        // For simplicity, we'll keep CallbackDataKey as is for now but use dummy ChatId
+        // or just use user_key for uniqueness.
+        let key = CallbackDataKey::new(ChatId(0), message_id, button_pos);
         let reference = key.to_string();
-        self.store.set(self.chat_id, &reference, data).await;
+        self.store.set(&self.user_key, &reference, data).await;
         reference
     }
 
     async fn clear_message_callbacks(&self, message_id: i32) {
         // Get all keys and filter out the ones for this message
-        let all_keys = self.store.keys(self.chat_id).await;
+        let all_keys = self.store.keys(&self.user_key).await;
         for key_str in all_keys {
             if let Ok(key) = CallbackDataKey::from_str(&key_str)
-                && key.chat_id == self.chat_id
                 && key.message_id == message_id
             {
-                self.store.remove(self.chat_id, &key_str).await;
+                self.store.remove(&self.user_key, &key_str).await;
             }
         }
     }
