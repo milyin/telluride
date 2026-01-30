@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use serde::{Deserialize, Serialize};
+use teloxide::types::UserId;
 use tokio::sync::Mutex;
 
 use crate::api::data_store::data_store_trait::DataStoreTrait;
@@ -12,8 +13,8 @@ pub struct InMemStore<V>
 where
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
 {
-    // Outer map: Username -> Inner map: Key -> Value
-    data: Arc<Mutex<HashMap<String, HashMap<String, V>>>>,
+    // Outer map: UserId -> Inner map: Key -> Value
+    data: Arc<Mutex<HashMap<UserId, HashMap<String, V>>>>,
 }
 
 impl<V> InMemStore<V>
@@ -41,33 +42,31 @@ impl<V> DataStoreTrait<V> for InMemStore<V>
 where
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
 {
-    async fn get(&self, user_name: &str, key: &str) -> Option<V> {
+    async fn get(&self, user_id: UserId, key: &str) -> Option<V> {
         let data_guard = self.data.lock().await;
-        let user_data = data_guard.get(user_name)?;
+        let user_data = data_guard.get(&user_id)?;
         user_data.get(key).cloned()
     }
 
-    async fn set(&self, user_name: &str, key: &str, value: V) {
+    async fn set(&self, user_id: UserId, key: &str, value: V) {
         let mut data_guard = self.data.lock().await;
-        let user_data = data_guard
-            .entry(user_name.to_string())
-            .or_insert_with(HashMap::new);
+        let user_data = data_guard.entry(user_id).or_insert_with(HashMap::new);
         user_data.insert(key.to_string(), value);
     }
 
-    async fn remove(&self, user_name: &str, key: &str) -> bool {
+    async fn remove(&self, user_id: UserId, key: &str) -> bool {
         let mut data_guard = self.data.lock().await;
-        if let Some(user_data) = data_guard.get_mut(user_name) {
+        if let Some(user_data) = data_guard.get_mut(&user_id) {
             user_data.remove(key).is_some()
         } else {
             false
         }
     }
 
-    async fn keys(&self, user_name: &str) -> Vec<String> {
+    async fn keys(&self, user_id: UserId) -> Vec<String> {
         let data_guard = self.data.lock().await;
         data_guard
-            .get(user_name)
+            .get(&user_id)
             .map(|user_data| user_data.keys().cloned().collect())
             .unwrap_or_default()
     }
@@ -79,7 +78,7 @@ mod tests {
 
     use super::*;
 
-    const TEST_USER: &str = "test_user";
+    const TEST_USER: UserId = UserId(12345);
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     struct TestData {

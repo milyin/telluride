@@ -120,11 +120,7 @@ async fn command_handler(
     storage: Arc<InMemStore<Vec<String>>>,
 ) -> ResponseResult<()> {
     log::info!("Received command: {:?} from {:?}", cmd, msg.chat.id);
-    let user_name = msg
-        .from
-        .as_ref()
-        .and_then(|u| u.username.as_deref())
-        .unwrap_or("anonymous");
+    let user_id = msg.from.as_ref().map(|u| u.id).unwrap_or(UserId(0));
 
     match cmd {
         Command::Start => {
@@ -148,7 +144,7 @@ async fn command_handler(
                 .await?;
         }
         Command::Message => {
-            let messages = storage.get(user_name, "messages").await.unwrap_or_default();
+            let messages = storage.get(user_id, "messages").await.unwrap_or_default();
             if messages.is_empty() {
                 bot.send_markdown_message(
                     msg.chat.id,
@@ -181,16 +177,12 @@ async fn text_handler(
     storage: Arc<InMemStore<Vec<String>>>,
 ) -> ResponseResult<()> {
     if let Some(text) = msg.text() {
-        let user_name = msg
-            .from
-            .as_ref()
-            .and_then(|u| u.username.as_deref())
-            .unwrap_or("anonymous");
+        let user_id = msg.from.as_ref().map(|u| u.id).unwrap_or(UserId(0));
 
         // Save message to storage
-        let mut messages = storage.get(user_name, "messages").await.unwrap_or_default();
+        let mut messages = storage.get(user_id, "messages").await.unwrap_or_default();
         messages.push(text.to_string());
-        storage.set(user_name, "messages", messages).await;
+        storage.set(user_id, "messages", messages).await;
 
         if !msg.chat.is_private() {
             let text_lower = text.to_lowercase();
