@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use telluride::{
     command::{InlineKeyboardButtonPackedExt, PackedValue},
-    data_store::{DataStoreTrait, InMemStore, UserDataStoreTrait, UserStoreProxy},
+    data_store::{DataStoreTrait, InMemStore, UserProxy, UserProxyTrait},
     markdown::MarkdownStringMessage,
     markdown_format, markdown_string,
 };
@@ -174,7 +174,7 @@ async fn command_handler(
             .await?;
         }
         Command::Menu => {
-            let user_store = UserStoreProxy::new(callback_storage.clone(), user_id);
+            let user_store = UserProxy::new(callback_storage.clone(), user_id);
             let keyboard = make_keyboard(&user_store).await;
             bot.send_markdown_message(msg.chat.id, markdown_string!("Choose an option:"))
                 .reply_markup(keyboard)
@@ -287,7 +287,7 @@ async fn callback_handler(
 
     if let Some(data_str) = &q.data {
         let user_id = q.from.id;
-        let user_store = UserStoreProxy::new(callback_storage.clone(), user_id);
+        let user_store = UserProxy::new(callback_storage.clone(), user_id);
 
         if let Ok(packed) = PackedValue::new(data_str) {
             if let Some(data) = packed.unpack::<MyCallbackData>(&user_store).await {
@@ -315,7 +315,7 @@ async fn callback_handler(
 }
 
 /// Creates an inline keyboard with sample buttons
-async fn make_keyboard(store: &dyn UserDataStoreTrait<MyCallbackData>) -> InlineKeyboardMarkup {
+async fn make_keyboard(store: &dyn UserProxyTrait<MyCallbackData>) -> InlineKeyboardMarkup {
     let b1 = InlineKeyboardButton::callback_packed(
         "Option 1",
         PackedValue::pack(

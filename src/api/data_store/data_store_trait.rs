@@ -25,7 +25,7 @@ where
 
 /// Trait for key-value data storage scoped to a specific user
 #[async_trait::async_trait]
-pub trait UserDataStoreTrait<V>: Send + Sync
+pub trait UserProxyTrait<V>: Send + Sync
 where
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
 {
@@ -36,7 +36,7 @@ where
 }
 
 /// A proxy for DataStoreTrait that scopes all operations to a specific user
-pub struct UserStoreProxy<V>
+pub struct UserProxy<V>
 where
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
 {
@@ -44,7 +44,7 @@ where
     user_id: UserId,
 }
 
-impl<V> UserStoreProxy<V>
+impl<V> UserProxy<V>
 where
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
 {
@@ -54,7 +54,7 @@ where
 }
 
 #[async_trait::async_trait]
-impl<V> UserDataStoreTrait<V> for UserStoreProxy<V>
+impl<V> UserProxyTrait<V> for UserProxy<V>
 where
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
 {

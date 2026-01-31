@@ -7,7 +7,7 @@ use std::{
 
 use teloxide::types::InlineKeyboardButton;
 
-use crate::api::data_store::data_store_trait::UserDataStoreTrait;
+use crate::api::data_store::data_store_trait::UserProxyTrait;
 
 use serde::{Deserialize, Serialize};
 
@@ -42,7 +42,7 @@ impl PackedValue {
     }
 
     /// Pack a value into a PackedValue by storing it in the given store and returning its hash-based reference
-    pub async fn pack<V>(value: &V, store: &dyn UserDataStoreTrait<V>) -> Self
+    pub async fn pack<V>(value: &V, store: &dyn UserProxyTrait<V>) -> Self
     where
         V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Hash,
     {
@@ -57,7 +57,7 @@ impl PackedValue {
     }
 
     /// Unpack the value from the store using this reference
-    pub async fn unpack<V>(&self, store: &dyn UserDataStoreTrait<V>) -> Option<V>
+    pub async fn unpack<V>(&self, store: &dyn UserProxyTrait<V>) -> Option<V>
     where
         V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
     {
@@ -104,7 +104,7 @@ impl InlineKeyboardButtonPackedExt for InlineKeyboardButton {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::data_store::data_store_trait::{UserDataStoreTrait, UserStoreProxy};
+    use crate::api::data_store::data_store_trait::{UserProxy, UserProxyTrait};
     use crate::api::data_store::in_mem::InMemStore;
     use std::sync::Arc;
     use teloxide::types::UserId;
@@ -113,7 +113,7 @@ mod tests {
     async fn test_packed_value_symmetry() {
         let store = Arc::new(InMemStore::<String>::new());
         let user_id = UserId(1);
-        let user_store = UserStoreProxy::new(store, user_id);
+        let user_store = UserProxy::new(store, user_id);
         let value = "test_data".to_string();
 
         let packed = PackedValue::pack(&value, &user_store).await;
@@ -127,7 +127,7 @@ mod tests {
     async fn test_packed_value_hash_stability() {
         let store = Arc::new(InMemStore::<String>::new());
         let user_id = UserId(1);
-        let user_store = UserStoreProxy::new(store, user_id);
+        let user_store = UserProxy::new(store, user_id);
         let value = "test_data".to_string();
 
         let packed1 = PackedValue::pack(&value, &user_store).await;

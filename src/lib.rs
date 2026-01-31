@@ -41,7 +41,7 @@ pub mod command {
 
 pub mod data_store {
     pub use crate::api::data_store::{
-        data_store_trait::{DataStoreTrait, UserDataStoreTrait, UserStoreProxy},
+        data_store_trait::{DataStoreTrait, UserProxyTrait, UserProxy},
         file_system_yaml::FilesystemYamlStore,
         in_mem::InMemStore,
         util::{decode_filename_to_key, encode_key_to_filename},
