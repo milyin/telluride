@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use telluride::{
-    command::{CallbackDataStorage, InlineKeyboardButtonPackedExt},
+    command::{InlineKeyboardButtonPackedExt, PackedValue},
     data_store::{DataStoreTrait, InMemStore},
     markdown::MarkdownStringMessage,
     markdown_format, markdown_string,
@@ -25,7 +25,7 @@ enum Command {
     Message,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Hash)]
 struct MyCallbackData {
     action: String,
     value: i32,
@@ -122,10 +122,7 @@ async fn main() {
     // - Update::filter_chat_join_request() - Join request updates
 
     let storage = Arc::new(InMemStore::<Vec<String>>::new());
-    let callback_storage = Arc::new(CallbackDataStorage::<MyCallbackData>::new(
-        Arc::new(InMemStore::<MyCallbackData>::new()),
-        UserId(0), // Placeholder, will be updated per user in handlers
-    ));
+    let callback_storage = Arc::new(InMemStore::<MyCallbackData>::new());
 
     Dispatcher::builder(bot, handler)
         .dependencies(dptree::deps![me, storage, callback_storage])
@@ -156,13 +153,10 @@ async fn command_handler(
     msg: Message,
     cmd: Command,
     storage: Arc<InMemStore<Vec<String>>>,
-    callback_storage: Arc<CallbackDataStorage<MyCallbackData>>,
+    callback_storage: Arc<InMemStore<MyCallbackData>>,
 ) -> ResponseResult<()> {
     log::info!("Received command: {:?} from {:?}", cmd, msg.chat.id);
     let user_id = get_user_id(&msg)?;
-
-    // Update callback storage with current user ID
-    let user_callback_storage = CallbackDataStorage::new(callback_storage.store.clone(), user_id);
 
     match cmd {
         Command::Start => {
@@ -180,7 +174,7 @@ async fn command_handler(
             .await?;
         }
         Command::Menu => {
-            let keyboard = make_keyboard(&user_callback_storage, msg.id.0).await;
+            let keyboard = make_keyboard(callback_storage.as_ref(), user_id).await;
             bot.send_markdown_message(msg.chat.id, markdown_string!("Choose an option:"))
                 .reply_markup(keyboard)
                 .await?;
@@ -285,31 +279,35 @@ async fn new_chat_members_handler(bot: Bot, msg: Message, me: Me) -> ResponseRes
 async fn callback_handler(
     bot: Bot,
     q: CallbackQuery,
-    callback_storage: Arc<CallbackDataStorage<MyCallbackData>>,
+    callback_storage: Arc<InMemStore<MyCallbackData>>,
 ) -> ResponseResult<()> {
     // Always answer the callback to remove the "loading" state
     bot.answer_callback_query(q.id.clone()).await?;
 
     if let Some(data_str) = &q.data {
         let user_id = q.from.id;
-        let user_callback_storage =
-            CallbackDataStorage::new(callback_storage.store.clone(), user_id);
 
-        if let Some(data) = user_callback_storage.unpack(data_str).await {
-            log::info!(
-                "Received callback query from {:?}: action={}, value={}",
-                q.from.id,
-                data.action,
-                data.value
-            );
-            let text = markdown_format!("You pressed: {} with value {}", data.action, data.value);
+        if let Ok(packed) = PackedValue::new(data_str) {
+            if let Some(data) = packed
+                .unpack::<MyCallbackData>(callback_storage.as_ref(), user_id)
+                .await
+            {
+                log::info!(
+                    "Received callback query from {:?}: action={}, value={}",
+                    q.from.id,
+                    data.action,
+                    data.value
+                );
+                let text =
+                    markdown_format!("You pressed: {} with value {}", data.action, data.value);
 
-            // Send response - either edit the original message or send a new one
-            if let Some(msg) = q.message {
-                bot.edit_markdown_message_text(msg.chat().id, msg.id(), text)
-                    .await?;
-            } else if let Some(id) = q.inline_message_id {
-                bot.edit_markdown_message_text_inline(&id, text).await?;
+                // Send response - either edit the original message or send a new one
+                if let Some(msg) = q.message {
+                    bot.edit_markdown_message_text(msg.chat().id, msg.id(), text)
+                        .await?;
+                } else if let Some(id) = q.inline_message_id {
+                    bot.edit_markdown_message_text_inline(&id, text).await?;
+                }
             }
         }
     }
@@ -319,44 +317,47 @@ async fn callback_handler(
 
 /// Creates an inline keyboard with sample buttons
 async fn make_keyboard(
-    storage: &CallbackDataStorage<MyCallbackData>,
-    message_id: i32,
+    store: &InMemStore<MyCallbackData>,
+    user_id: UserId,
 ) -> InlineKeyboardMarkup {
     let b1 = InlineKeyboardButton::callback_packed(
         "Option 1",
-        MyCallbackData {
-            action: "opt1".to_string(),
-            value: 10,
-        },
-        storage,
-        message_id,
-        0,
-    )
-    .await;
+        PackedValue::pack(
+            &MyCallbackData {
+                action: "opt1".to_string(),
+                value: 10,
+            },
+            store,
+            user_id,
+        )
+        .await,
+    );
 
     let b2 = InlineKeyboardButton::callback_packed(
         "Option 2",
-        MyCallbackData {
-            action: "opt2".to_string(),
-            value: 20,
-        },
-        storage,
-        message_id,
-        1,
-    )
-    .await;
+        PackedValue::pack(
+            &MyCallbackData {
+                action: "opt2".to_string(),
+                value: 20,
+            },
+            store,
+            user_id,
+        )
+        .await,
+    );
 
     let b3 = InlineKeyboardButton::callback_packed(
         "Option 3",
-        MyCallbackData {
-            action: "opt3".to_string(),
-            value: 30,
-        },
-        storage,
-        message_id,
-        2,
-    )
-    .await;
+        PackedValue::pack(
+            &MyCallbackData {
+                action: "opt3".to_string(),
+                value: 30,
+            },
+            store,
+            user_id,
+        )
+        .await,
+    );
 
     let buttons = vec![vec![b1, b2], vec![b3]];
     InlineKeyboardMarkup::new(buttons)

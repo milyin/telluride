@@ -9,7 +9,7 @@ use teloxide::{
 };
 
 use crate::{
-    api::{command::command_button::CallbackDataStorageTrait, markdown::string::MarkdownString},
+    api::{data_store::data_store_trait::DataStoreTrait, markdown::string::MarkdownString},
     markdown::MarkdownStringMessage,
 };
 
@@ -25,7 +25,7 @@ where
     pub chat: Chat,
     pub msg_id: Option<MessageId>,
     pub batch: bool,
-    pub callback_data_storage: Arc<dyn CallbackDataStorageTrait<C>>,
+    pub callback_data_store: Arc<dyn DataStoreTrait<C>>,
 }
 
 impl<C> CommandReplyTarget<C>
