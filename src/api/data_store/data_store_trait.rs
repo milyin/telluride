@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 use teloxide::types::UserId;
 
@@ -19,4 +21,56 @@ where
 
     /// List all keys in the store for a specific user
     async fn keys(&self, user_id: UserId) -> Vec<String>;
+}
+
+/// Trait for key-value data storage scoped to a specific user
+#[async_trait::async_trait]
+pub trait UserDataStoreTrait<V>: Send + Sync
+where
+    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
+{
+    async fn get(&self, key: &str) -> Option<V>;
+    async fn set(&self, key: &str, value: V);
+    async fn remove(&self, key: &str) -> bool;
+    async fn keys(&self) -> Vec<String>;
+}
+
+/// A proxy for DataStoreTrait that scopes all operations to a specific user
+pub struct UserStoreProxy<V>
+where
+    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
+{
+    store: Arc<dyn DataStoreTrait<V>>,
+    user_id: UserId,
+}
+
+impl<V> UserStoreProxy<V>
+where
+    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
+{
+    pub fn new(store: Arc<dyn DataStoreTrait<V>>, user_id: UserId) -> Self {
+        Self { store, user_id }
+    }
+}
+
+#[async_trait::async_trait]
+impl<V> UserDataStoreTrait<V> for UserStoreProxy<V>
+where
+    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
+{
+    async fn get(&self, key: &str) -> Option<V> {
+        self.store.get(self.user_id, key).await
+    }
+
+    async fn set(&self, key: &str, value: V) {
+        self.store.set(self.user_id, key, value).await
+    }
+
+    async fn remove(&self, key: &str) -> bool {
+        self.store.remove(self.user_id, key).await
+    }
+
+    async fn keys(&self) -> Vec<String> {
+        self.store.keys(self.user_id).await
+    }
 }

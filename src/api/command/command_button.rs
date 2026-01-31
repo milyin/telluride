@@ -5,9 +5,9 @@ use std::{
     str::FromStr,
 };
 
-use teloxide::types::{InlineKeyboardButton, UserId};
+use teloxide::types::InlineKeyboardButton;
 
-use crate::api::data_store::data_store_trait::DataStoreTrait;
+use crate::api::data_store::data_store_trait::UserDataStoreTrait;
 
 use serde::{Deserialize, Serialize};
 
@@ -42,7 +42,7 @@ impl PackedValue {
     }
 
     /// Pack a value into a PackedValue by storing it in the given store and returning its hash-based reference
-    pub async fn pack<V>(value: &V, store: &dyn DataStoreTrait<V>, user_id: UserId) -> Self
+    pub async fn pack<V>(value: &V, store: &dyn UserDataStoreTrait<V>) -> Self
     where
         V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Hash,
     {
@@ -51,13 +51,13 @@ impl PackedValue {
         let hash = hasher.finish();
         let key = format!("cb:{}", hash);
 
-        store.set(user_id, &key, value.clone()).await;
+        store.set(&key, value.clone()).await;
 
         Self::new(&key).expect("Hash key should always fit in 64 bytes")
     }
 
     /// Unpack the value from the store using this reference
-    pub async fn unpack<V>(&self, store: &dyn DataStoreTrait<V>, user_id: UserId) -> Option<V>
+    pub async fn unpack<V>(&self, store: &dyn UserDataStoreTrait<V>) -> Option<V>
     where
         V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
     {
@@ -65,7 +65,7 @@ impl PackedValue {
         if !key.starts_with("cb:") {
             return None;
         }
-        store.get(user_id, key).await
+        store.get(key).await
     }
 }
 
@@ -104,29 +104,34 @@ impl InlineKeyboardButtonPackedExt for InlineKeyboardButton {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::data_store::data_store_trait::{UserDataStoreTrait, UserStoreProxy};
     use crate::api::data_store::in_mem::InMemStore;
+    use std::sync::Arc;
+    use teloxide::types::UserId;
 
     #[tokio::test]
     async fn test_packed_value_symmetry() {
-        let store = InMemStore::<String>::new();
+        let store = Arc::new(InMemStore::<String>::new());
         let user_id = UserId(1);
+        let user_store = UserStoreProxy::new(store, user_id);
         let value = "test_data".to_string();
 
-        let packed = PackedValue::pack(&value, &store, user_id).await;
+        let packed = PackedValue::pack(&value, &user_store).await;
         assert!(packed.as_str().starts_with("cb:"));
 
-        let unpacked = packed.unpack::<String>(&store, user_id).await;
+        let unpacked = packed.unpack::<String>(&user_store).await;
         assert_eq!(unpacked, Some(value));
     }
 
     #[tokio::test]
     async fn test_packed_value_hash_stability() {
-        let store = InMemStore::<String>::new();
+        let store = Arc::new(InMemStore::<String>::new());
         let user_id = UserId(1);
+        let user_store = UserStoreProxy::new(store, user_id);
         let value = "test_data".to_string();
 
-        let packed1 = PackedValue::pack(&value, &store, user_id).await;
-        let packed2 = PackedValue::pack(&value, &store, user_id).await;
+        let packed1 = PackedValue::pack(&value, &user_store).await;
+        let packed2 = PackedValue::pack(&value, &user_store).await;
 
         assert_eq!(packed1, packed2);
     }

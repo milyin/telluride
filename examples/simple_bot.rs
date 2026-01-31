@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use telluride::{
     command::{InlineKeyboardButtonPackedExt, PackedValue},
-    data_store::{DataStoreTrait, InMemStore},
+    data_store::{DataStoreTrait, InMemStore, UserDataStoreTrait, UserStoreProxy},
     markdown::MarkdownStringMessage,
     markdown_format, markdown_string,
 };
@@ -174,7 +174,8 @@ async fn command_handler(
             .await?;
         }
         Command::Menu => {
-            let keyboard = make_keyboard(callback_storage.as_ref(), user_id).await;
+            let user_store = UserStoreProxy::new(callback_storage.clone(), user_id);
+            let keyboard = make_keyboard(&user_store).await;
             bot.send_markdown_message(msg.chat.id, markdown_string!("Choose an option:"))
                 .reply_markup(keyboard)
                 .await?;
@@ -286,12 +287,10 @@ async fn callback_handler(
 
     if let Some(data_str) = &q.data {
         let user_id = q.from.id;
+        let user_store = UserStoreProxy::new(callback_storage.clone(), user_id);
 
         if let Ok(packed) = PackedValue::new(data_str) {
-            if let Some(data) = packed
-                .unpack::<MyCallbackData>(callback_storage.as_ref(), user_id)
-                .await
-            {
+            if let Some(data) = packed.unpack::<MyCallbackData>(&user_store).await {
                 log::info!(
                     "Received callback query from {:?}: action={}, value={}",
                     q.from.id,
@@ -316,10 +315,7 @@ async fn callback_handler(
 }
 
 /// Creates an inline keyboard with sample buttons
-async fn make_keyboard(
-    store: &InMemStore<MyCallbackData>,
-    user_id: UserId,
-) -> InlineKeyboardMarkup {
+async fn make_keyboard(store: &dyn UserDataStoreTrait<MyCallbackData>) -> InlineKeyboardMarkup {
     let b1 = InlineKeyboardButton::callback_packed(
         "Option 1",
         PackedValue::pack(
@@ -328,7 +324,6 @@ async fn make_keyboard(
                 value: 10,
             },
             store,
-            user_id,
         )
         .await,
     );
@@ -341,7 +336,6 @@ async fn make_keyboard(
                 value: 20,
             },
             store,
-            user_id,
         )
         .await,
     );
@@ -354,7 +348,6 @@ async fn make_keyboard(
                 value: 30,
             },
             store,
-            user_id,
         )
         .await,
     );
