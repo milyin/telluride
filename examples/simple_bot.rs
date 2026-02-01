@@ -52,7 +52,11 @@ async fn main() {
         // Handle callback queries (inline keyboard button presses)
         .branch(
             Update::filter_callback_query()
-                .filter(|q: teloxide::types::CallbackQuery| q.data.is_some())
+                .filter(|q: teloxide::types::CallbackQuery| {
+                    q.data.as_ref().map_or(false, |data| 
+                        CallbackKey::is_packed_data(data)
+                    )
+                })
                 .endpoint(action_handler),
         )
         // Handle new chat members (when bot is added to a group)

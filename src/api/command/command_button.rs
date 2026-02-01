@@ -106,6 +106,11 @@ impl CallbackKey {
         Self::new(&key_str).expect("Hash key should always fit in 64 bytes")
     }
 
+    /// Check if a string contains packed callback data
+    pub fn is_packed_data(data: &str) -> bool {
+        data.starts_with(INLINE_PREFIX) || data.starts_with(STORAGE_PREFIX)
+    }
+
     /// Pack an action into a CallbackKey, using storage if needed.
     ///
     /// If the serialized action fits within 64 bytes (with prefix), it's embedded directly.
