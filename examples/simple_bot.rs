@@ -1,16 +1,16 @@
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use telluride::{
-    command::{CallbackKey, InlineKeyboardButtonPackedExt},
+    command::{BotAction, CallbackKey},
     data_store::{CommonProxy, DataStoreTrait, InMemStore, UserDataStoreTrait, UserProxy},
     markdown::MarkdownStringMessage,
     markdown_format, markdown_string,
 };
 use teloxide::{
     prelude::*,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup, Me, User},
+    types::{InlineKeyboardMarkup, Me, User},
     utils::command::BotCommands,
 };
+use serde::{Deserialize, Serialize};
 
 #[derive(BotCommands, Clone, Debug)]
 #[command(rename_rule = "lowercase", description = "Supported commands:")]
@@ -23,22 +23,42 @@ enum Command {
     Messages,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Hash, PartialEq, Eq)]
-struct MyCallbackData {
-    action: String,
-    value: String,
+/// Application-specific Action enum for callback handling.
+/// Implements BotAction trait via the blanket impl (FromStr + Display).
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+enum Action {
+    ShowUser(u64),
 }
 
-impl std::str::FromStr for MyCallbackData {
+impl std::str::FromStr for Action {
     type Err = String;
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Fallback for simple string callbacks if needed
-        Ok(MyCallbackData {
-            action: s.to_string(),
-            value: "0".to_string(),
-        })
+        let parts: Vec<&str> = s.splitn(2, ':').collect();
+        match parts.get(0).copied() {
+            Some("show_user") => {
+                let uid = parts
+                    .get(1)
+                    .ok_or_else(|| "Missing user ID".to_string())?
+                    .parse::<u64>()
+                    .map_err(|e| e.to_string())?;
+                Ok(Action::ShowUser(uid))
+            }
+            Some(unknown) => Err(format!("Unknown action: {}", unknown)),
+            None => Err("Empty action string".to_string()),
+        }
     }
 }
+
+impl std::fmt::Display for Action {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Action::ShowUser(uid) => write!(f, "show_user:{}", uid),
+        }
+    }
+}
+
+// Action now automatically implements BotAction via the blanket impl!
 
 #[tokio::main]
 async fn main() {
@@ -60,7 +80,12 @@ async fn main() {
                 .endpoint(command_handler),
         )
         // Handle callback queries (inline keyboard button presses)
-        .branch(Update::filter_callback_query().endpoint(callback_handler))
+        // Uses BotAction::from_callback_query for smart action extraction
+        .branch(
+            Update::filter_callback_query()
+                .filter(|q: teloxide::types::CallbackQuery| q.data.is_some())
+                .endpoint(action_handler),
+        )
         // Handle new chat members (when bot is added to a group)
         .branch(
             Update::filter_message()
@@ -125,8 +150,8 @@ async fn main() {
     let global_user_storage: Arc<dyn DataStoreTrait<UserId, User>> =
         Arc::new(CommonProxy::new(InMemStore::<UserId, User>::new()));
 
-    // Per-user callback data storage (uses PackedValue keys)
-    let callback_storage = Arc::new(InMemStore::<CallbackKey, MyCallbackData>::new());
+    // Per-user callback action storage (uses PackedValue keys)
+    let callback_storage = Arc::new(InMemStore::<CallbackKey, Action>::new());
 
     Dispatcher::builder(bot, handler)
         .dependencies(dptree::deps![
@@ -172,7 +197,7 @@ async fn command_handler(
     bot: Bot,
     msg: Message,
     cmd: Command,
-    callback_storage: Arc<InMemStore<CallbackKey, MyCallbackData>>,
+    callback_storage: Arc<InMemStore<CallbackKey, Action>>,
     user_registry: Arc<dyn DataStoreTrait<UserId, User>>,
 ) -> ResponseResult<()> {
     log::info!("Received command: {:?} from {:?}", cmd, msg.chat.id);
@@ -208,16 +233,9 @@ async fn command_handler(
                 for uid in user_ids {
                     if let Some(u) = user_registry.get(&uid).await {
                         let label = format!("User {}", u.full_name());
+                        // Use BotAction::to_button for smart inline/storage routing
                         buttons.push(vec![
-                            InlineKeyboardButton::callback_key(
-                                label,
-                                &MyCallbackData {
-                                    action: "show_user".to_string(),
-                                    value: uid.to_string(),
-                                },
-                                &user_proxy,
-                            )
-                            .await,
+                            Action::ShowUser(uid.0).to_button(label, &user_proxy).await,
                         ]);
                     }
                 }
@@ -311,12 +329,13 @@ async fn new_chat_members_handler(bot: Bot, msg: Message, me: Me) -> ResponseRes
     Ok(())
 }
 
-/// Handler for callback queries (inline keyboard button presses)
-async fn callback_handler(
+/// Handler for actions (inline keyboard button presses)
+/// Uses BotAction::from_callback_query for smart action extraction
+async fn action_handler(
     bot: Bot,
     q: CallbackQuery,
+    callback_storage: Arc<InMemStore<CallbackKey, Action>>,
     storage: Arc<InMemStore<String, Vec<String>>>,
-    callback_storage: Arc<InMemStore<CallbackKey, MyCallbackData>>,
     user_registry: Arc<dyn DataStoreTrait<UserId, User>>,
 ) -> ResponseResult<()> {
     // Update user info
@@ -325,49 +344,48 @@ async fn callback_handler(
     // Always answer the callback to remove the "loading" state
     bot.answer_callback_query(q.id.clone()).await?;
 
-    if let Some(data_str) = &q.data {
-        let user_id = q.from.id;
-        let callback_storage = UserProxy::new(callback_storage.clone(), user_id);
+    // Extract action using BotAction trait - handles both inline and storage-backed actions
+    let user_proxy = UserProxy::new(callback_storage.clone(), q.from.id);
+    let action = match Action::from_callback_query(&q, &user_proxy).await {
+        Ok(action) => action,
+        Err(e) => {
+            log::warn!("Failed to extract action from callback: {}", e);
+            return Ok(());
+        }
+    };
 
-        if let Ok(packed) = CallbackKey::new(data_str) {
-            if let Some(data) = callback_storage.get(&packed).await {
-                if data.action == "show_user" {
-                    if let Ok(target_uid) = data.value.parse::<u64>() {
-                        let target_user_id = UserId(target_uid);
-                        let messages = storage
-                            .get(target_user_id, &"messages".to_string())
-                            .await
-                            .unwrap_or_default();
+    match action {
+        Action::ShowUser(target_uid) => {
+            let target_user_id = UserId(target_uid);
+            let messages = storage
+                .get(target_user_id, &"messages".to_string())
+                .await
+                .unwrap_or_default();
 
-                        let text = if messages.is_empty() {
-                            markdown_format!(
-                                "No messages saved for user {}",
-                                target_user_id.0.to_string()
-                            )
-                        } else {
-                            let list = messages
-                                .iter()
-                                .enumerate()
-                                .map(|(i, m)| format!("{}. {}", i + 1, m))
-                                .collect::<Vec<_>>()
-                                .join("\n");
-                            markdown_format!(
-                                "Saved messages for user {}:\n{}",
-                                target_user_id.0.to_string(),
-                                list
-                            )
-                        };
+            let text = if messages.is_empty() {
+                markdown_format!(
+                    "No messages saved for user {}",
+                    target_user_id.0.to_string()
+                )
+            } else {
+                let list = messages
+                    .iter()
+                    .enumerate()
+                    .map(|(i, m)| format!("{}. {}", i + 1, m))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                markdown_format!(
+                    "Saved messages for user {}:\n{}",
+                    target_user_id.0.to_string(),
+                    list
+                )
+            };
 
-                        if let Some(msg) = q.message {
-                            bot.edit_markdown_message_text(msg.chat().id, msg.id(), text)
-                                .await?;
-                        } else if let Some(id) = q.inline_message_id {
-                            bot.edit_markdown_message_text_inline(&id, text).await?;
-                        }
-                    }
-                } else {
-                    log::info!("Unhandled callback action: {}", data.action);
-                }
+            if let Some(msg) = q.message {
+                bot.edit_markdown_message_text(msg.chat().id, msg.id(), text)
+                    .await?;
+            } else if let Some(id) = q.inline_message_id {
+                bot.edit_markdown_message_text_inline(&id, text).await?;
             }
         }
     }

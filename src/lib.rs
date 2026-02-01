@@ -32,7 +32,8 @@ pub mod markdown {
 
 pub mod command {
     pub use crate::api::command::{
-        command_button::{CallbackKey, InlineKeyboardButtonPackedExt},
+        action::{ActionError, BotAction},
+        command_button::{CallbackKey, InlineKeyboardButtonPackedExt, MAX_CALLBACK_DATA_SIZE},
     };
 }
 
