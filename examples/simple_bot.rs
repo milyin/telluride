@@ -121,11 +121,9 @@ async fn main() {
 
     let storage = Arc::new(InMemStore::<String, Vec<String>>::new());
     // Use in-memory storage for global user registry
-    // The base storage is indexed by UserId
-    let global_user_storage_base = Arc::new(InMemStore::<UserId, User>::new());
-    // Wrap it with CommonProxy to share it among all users (it will use UserId(0) as namespace in InMemStore)
+    // It will use UserId(0) as namespace in InMemStore
     let global_user_storage: Arc<dyn DataStoreTrait<UserId, User>> =
-        Arc::new(CommonProxy::new(global_user_storage_base));
+        Arc::new(CommonProxy::new(InMemStore::<UserId, User>::new()));
 
     // Per-user callback data storage (uses default String keys)
     let callback_storage = Arc::new(InMemStore::<String, MyCallbackData>::new());

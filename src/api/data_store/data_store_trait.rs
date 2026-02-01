@@ -28,6 +28,34 @@ where
     async fn users(&self) -> Vec<UserId>;
 }
 
+#[async_trait::async_trait]
+impl<K, V, T> UserDataStoreTrait<K, V> for Arc<T>
+where
+    T: UserDataStoreTrait<K, V> + Send + Sync + ?Sized,
+    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash + 'static,
+    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
+{
+    async fn get(&self, user_id: UserId, key: &K) -> Option<V> {
+        (**self).get(user_id, key).await
+    }
+
+    async fn set(&self, user_id: UserId, key: &K, value: V) {
+        (**self).set(user_id, key, value).await
+    }
+
+    async fn remove(&self, user_id: UserId, key: &K) -> bool {
+        (**self).remove(user_id, key).await
+    }
+
+    async fn keys(&self, user_id: UserId) -> Vec<K> {
+        (**self).keys(user_id).await
+    }
+
+    async fn users(&self) -> Vec<UserId> {
+        (**self).users().await
+    }
+}
+
 /// Trait for key-value data storage scoped to a specific user
 #[async_trait::async_trait]
 pub trait DataStoreTrait<K, V>: Send + Sync
@@ -42,30 +70,24 @@ where
 }
 
 /// A proxy for DataStoreTrait that scopes all operations to a specific user
-pub struct UserProxy<K, V>
-where
-    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash,
-    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
-{
-    store: Arc<dyn UserDataStoreTrait<K, V>>,
+#[derive(Clone)]
+pub struct UserProxy<S> {
+    store: S,
     user_id: UserId,
 }
 
-impl<K, V> UserProxy<K, V>
-where
-    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash + 'static,
-    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
-{
-    pub fn new(store: Arc<dyn UserDataStoreTrait<K, V>>, user_id: UserId) -> Self {
+impl<S> UserProxy<S> {
+    pub fn new(store: S, user_id: UserId) -> Self {
         Self { store, user_id }
     }
 }
 
 #[async_trait::async_trait]
-impl<K, V> DataStoreTrait<K, V> for UserProxy<K, V>
+impl<K, V, S> DataStoreTrait<K, V> for UserProxy<S>
 where
     K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash + 'static,
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
+    S: UserDataStoreTrait<K, V>,
 {
     async fn get(&self, key: &K) -> Option<V> {
         self.store.get(self.user_id, key).await
@@ -85,29 +107,23 @@ where
 }
 
 /// A proxy for DataStoreTrait that scopes all operations to a single common user (UserId(0))
-pub struct CommonProxy<K, V>
-where
-    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash,
-    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
-{
-    store: Arc<dyn UserDataStoreTrait<K, V>>,
+#[derive(Clone)]
+pub struct CommonProxy<S> {
+    store: S,
 }
 
-impl<K, V> CommonProxy<K, V>
-where
-    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash + 'static,
-    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
-{
-    pub fn new(store: Arc<dyn UserDataStoreTrait<K, V>>) -> Self {
+impl<S> CommonProxy<S> {
+    pub fn new(store: S) -> Self {
         Self { store }
     }
 }
 
 #[async_trait::async_trait]
-impl<K, V> DataStoreTrait<K, V> for CommonProxy<K, V>
+impl<K, V, S> DataStoreTrait<K, V> for CommonProxy<S>
 where
     K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash + 'static,
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
+    S: UserDataStoreTrait<K, V>,
 {
     async fn get(&self, key: &K) -> Option<V> {
         self.store.get(UserId(0), key).await
