@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use telluride::{
-    command::CallbackKey,
+    command::{CallbackKey, InlineKeyboardButtonPackedExt},
     data_store::{CommonProxy, DataStoreTrait, InMemStore, UserDataStoreTrait, UserProxy},
     markdown::MarkdownStringMessage,
     markdown_format, markdown_string,
@@ -205,10 +205,12 @@ async fn command_handler(
                 for uid in user_ids {
                     if let Some(u) = user_registry.get(&uid).await {
                         let label = format!("User {}", u.full_name());
-                        let key = CallbackKey::pack(&Action::ShowUser(uid.0), &callback_storage).await;
-                        buttons.push(vec![
-                            InlineKeyboardButton::callback(label, key.to_string()),
-                        ]);
+                        let button = InlineKeyboardButton::callback_key(
+                            label,
+                            &Action::ShowUser(uid.0),
+                            &callback_storage,
+                        ).await;
+                        buttons.push(vec![button]);
                     }
                 }
                 let keyboard = InlineKeyboardMarkup::new(buttons);
