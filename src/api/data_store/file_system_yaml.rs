@@ -1,4 +1,5 @@
-use std::hash::Hash;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
 
 use serde::{Deserialize, Serialize};
@@ -9,6 +10,14 @@ use crate::api::data_store::{
     data_store_trait::UserDataStoreTrait,
     util::{decode_filename_to_key, encode_key_to_filename},
 };
+
+/// Internal wrapper to store both key and value in the filesystem
+/// This allows us to use hash-based filenames while still being able to list keys
+#[derive(Serialize, Deserialize)]
+struct StorageEntry<K, V> {
+    key: K,
+    value: V,
+}
 
 /// Filesystem-based YAML data store
 /// Creates a separate directory for each chat, with each key stored as a .yaml file
@@ -48,10 +57,11 @@ where
 
     /// Get the file path for a key within a user's directory
     fn get_file_path(&self, user_id: UserId, key: &K) -> PathBuf {
-        let key_json = serde_json::to_string(key).unwrap_or_else(|_| "invalid_key".to_string());
-        let safe_filename = encode_key_to_filename(&key_json);
+        let mut hasher = DefaultHasher::new();
+        key.hash(&mut hasher);
+        let hash = hasher.finish();
         self.get_user_dir(user_id)
-            .join(format!("{}.yaml", safe_filename))
+            .join(format!("{:016x}.yaml", hash))
     }
 
     /// Load value from disk for a specific user and key
@@ -59,7 +69,10 @@ where
         let file_path = self.get_file_path(user_id, key);
 
         match fs::read_to_string(&file_path).await {
-            Ok(content) => serde_yaml::from_str::<V>(&content).ok(),
+            Ok(content) => {
+                let entry: StorageEntry<K, V> = serde_yaml::from_str(&content).ok()?;
+                Some(entry.value)
+            }
             Err(_) => None, // File doesn't exist or can't be read
         }
     }
@@ -76,8 +89,12 @@ where
         fs::create_dir_all(&user_dir).await?;
 
         let file_path = self.get_file_path(user_id, key);
+        let entry = StorageEntry {
+            key: key.clone(),
+            value: value.clone(),
+        };
 
-        match serde_yaml::to_string(value) {
+        match serde_yaml::to_string(&entry) {
             Ok(content) => fs::write(&file_path, content).await,
             Err(e) => Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -178,10 +195,13 @@ where
                 while let Ok(Some(entry)) = entries.next_entry().await {
                     if let Ok(file_name_os) = entry.file_name().into_string() {
                         if file_name_os.ends_with(".yaml") {
-                            let encoded_key = file_name_os.trim_end_matches(".yaml");
-                            let decoded_key_json = decode_filename_to_key(encoded_key);
-                            if let Ok(key) = serde_json::from_str::<K>(&decoded_key_json) {
-                                keys.push(key);
+                            let file_path = entry.path();
+                            if let Ok(content) = fs::read_to_string(&file_path).await {
+                                if let Ok(entry) =
+                                    serde_yaml::from_str::<StorageEntry<K, V>>(&content)
+                                {
+                                    keys.push(entry.key);
+                                }
                             }
                         }
                     }
@@ -302,9 +322,11 @@ mod tests {
         assert_eq!(store.get(TEST_USER_ID, &"key1".to_string()).await, None);
 
         // Verify file was deleted
-        // Note: Filename is now based on JSON representation of the key
-        let key_json = serde_json::to_string(&"key1".to_string()).unwrap();
-        let expected_filename = format!("{}.yaml", encode_key_to_filename(&key_json));
+        // Note: Filename is now based on hash of the key
+        let mut hasher = DefaultHasher::new();
+        "key1".to_string().hash(&mut hasher);
+        let hash = hasher.finish();
+        let expected_filename = format!("{:016x}.yaml", hash);
         let file_path = temp_dir
             .join(encode_key_to_filename(&TEST_USER_ID.to_string()))
             .join(expected_filename);

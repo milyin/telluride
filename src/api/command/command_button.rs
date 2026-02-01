@@ -104,7 +104,7 @@ impl InlineKeyboardButtonPackedExt for InlineKeyboardButton {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::data_store::data_store_trait::{DataStoreTrait, UserProxy};
+    use crate::api::data_store::data_store_trait::UserProxy;
     use crate::api::data_store::in_mem::InMemStore;
     use std::sync::Arc;
     use teloxide::types::UserId;
