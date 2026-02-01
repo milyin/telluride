@@ -1,6 +1,6 @@
 use std::{fmt::Display, hash::{Hash, Hasher}, str::FromStr};
 use serde::{Deserialize, Serialize};
-use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode, percent_decode_str};
+use percent_encoding::{AsciiSet, CONTROLS};
 
 use crate::api::data_store::data_store_trait::DataStoreTrait;
 use super::callback_errors::UnpackError;
@@ -8,6 +8,16 @@ use super::callback_errors::UnpackError;
 // Minimal encoding set - only encode control characters and percent itself
 // This allows most UTF-8 characters to pass through unchanged for maximum compactness
 const MINIMAL_ENCODE: &AsciiSet = &CONTROLS.add(b'%');
+
+/// Percent-encode raw bytes directly, preserving all byte values
+fn percent_encode_bytes(bytes: &[u8]) -> String {
+    percent_encoding::percent_encode(bytes, MINIMAL_ENCODE).to_string()
+}
+
+/// Decode percent-encoded string back to raw bytes
+fn percent_decode_bytes(s: &str) -> Vec<u8> {
+    percent_encoding::percent_decode_str(s).collect()
+}
 
 /// Prefix used for inline (directly embedded) callback data
 const INLINE_PREFIX: &str = "i:";
@@ -166,13 +176,14 @@ impl CallbackKey {
         let value_clone = value.clone();
 
         async move {
-            // Try to interpret bitcode as UTF-8 - most bytes will be valid
-            let as_utf8 = String::from_utf8_lossy(&serialized);
-            let with_prefix = format!("{}{}", INLINE_PREFIX, as_utf8);
+            // Combine prefix and serialized data as bytes
+            let mut inline_data = Vec::with_capacity(INLINE_PREFIX.len() + serialized.len());
+            inline_data.extend_from_slice(INLINE_PREFIX.as_bytes());
+            inline_data.extend_from_slice(&serialized);
             
-            if with_prefix.len() <= MAX_CALLBACK_DATA_SIZE {
-                // Fits inline - use minimal percent-encoding only for control chars
-                let encoded = utf8_percent_encode(&with_prefix, MINIMAL_ENCODE).to_string();
+            if inline_data.len() <= MAX_CALLBACK_DATA_SIZE {
+                // Fits inline - use minimal percent-encoding on raw bytes
+                let encoded = percent_encode_bytes(&inline_data);
                 match Self::new(&encoded) {
                     Ok(key) => key,
                     Err(_) => {
@@ -213,13 +224,18 @@ impl CallbackKey {
 
         async move {
             if data.starts_with(INLINE_PREFIX) {
-                // Inline data - decode from percent-encoding then deserialize
+                // Inline data - decode from percent-encoding to get raw bytes
                 let encoded = &data[INLINE_PREFIX.len()..];
-                let decoded = percent_decode_str(encoded)
-                    .collect::<Vec<u8>>();
+                let decoded = percent_decode_bytes(encoded);
                 
-                bitcode::decode(&decoded)
-                    .map_err(|e| UnpackError::DeserializeError(e.to_string()))
+                // The first part is the prefix, skip it and get the actual bitcode data
+                if decoded.starts_with(INLINE_PREFIX.as_bytes()) {
+                    let bitcode_data = &decoded[INLINE_PREFIX.len()..];
+                    bitcode::decode(bitcode_data)
+                        .map_err(|e| UnpackError::DeserializeError(e.to_string()))
+                } else {
+                    Err(UnpackError::InvalidKey("Missing inline prefix in decoded data".to_string()))
+                }
             } else if data.starts_with(STORAGE_PREFIX) {
                 // Storage-backed - look up
                 let key = Self::new(&data)?;
