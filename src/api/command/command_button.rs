@@ -21,14 +21,14 @@ pub const MAX_CALLBACK_DATA_SIZE: usize = 64;
 /// Rationale for 64-byte limit:
 /// Telegram API specifies that `callback_data` for inline keyboard buttons must not exceed 64 bytes.
 /// If the data is longer, it will cause an error when sending the message.
-/// `CallbackData` ensures compliance by hashing longer data and storing it in a backend.
+/// `CallbackKey` ensures compliance by hashing longer data and storing it in a backend.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct CallbackData {
+pub struct CallbackKey {
     data: [u8; MAX_CALLBACK_DATA_SIZE],
     len: usize,
 }
 
-impl serde::Serialize for CallbackData {
+impl serde::Serialize for CallbackKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -37,7 +37,7 @@ impl serde::Serialize for CallbackData {
     }
 }
 
-impl<'de> serde::Deserialize<'de> for CallbackData {
+impl<'de> serde::Deserialize<'de> for CallbackKey {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -45,7 +45,7 @@ impl<'de> serde::Deserialize<'de> for CallbackData {
         struct CallbackDataVisitor;
 
         impl<'de> serde::de::Visitor<'de> for CallbackDataVisitor {
-            type Value = CallbackData;
+            type Value = CallbackKey;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 formatter.write_str("a byte slice up to 64 bytes")
@@ -64,7 +64,7 @@ impl<'de> serde::Deserialize<'de> for CallbackData {
                 }
                 let mut data = [0u8; MAX_CALLBACK_DATA_SIZE];
                 data[..v.len()].copy_from_slice(v);
-                Ok(CallbackData { data, len: v.len() })
+                Ok(CallbackKey { data, len: v.len() })
             }
         }
 
@@ -72,8 +72,8 @@ impl<'de> serde::Deserialize<'de> for CallbackData {
     }
 }
 
-impl CallbackData {
-    /// Create a new CallbackData from a string, ensuring it fits in Telegram's limit
+impl CallbackKey {
+    /// Create a new CallbackKey from a string, ensuring it fits in Telegram's limit
     pub fn new(s: &str) -> Result<Self, String> {
         let bytes = s.as_bytes();
         if bytes.len() > MAX_CALLBACK_DATA_SIZE {
@@ -95,7 +95,7 @@ impl CallbackData {
         std::str::from_utf8(&self.data[..self.len]).unwrap_or("")
     }
 
-    /// Pack a value into a CallbackData by storing it in the given store and returning its hash-based reference
+    /// Pack a value into a CallbackKey by storing it in the given store and returning its hash-based reference
     pub async fn pack<V>(value: &V, store: &dyn DataStoreTrait<Self, V>) -> Self
     where
         V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Hash,
@@ -120,13 +120,13 @@ impl CallbackData {
     }
 }
 
-impl Display for CallbackData {
+impl Display for CallbackKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
     }
 }
 
-impl FromStr for CallbackData {
+impl FromStr for CallbackKey {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -134,20 +134,20 @@ impl FromStr for CallbackData {
     }
 }
 
-impl From<CallbackData> for String {
-    fn from(p: CallbackData) -> Self {
+impl From<CallbackKey> for String {
+    fn from(p: CallbackKey) -> Self {
         p.to_string()
     }
 }
 
 /// Extension trait for InlineKeyboardButton to support packed (stored) callback data
 pub trait InlineKeyboardButtonPackedExt {
-    /// Create a callback button from a CallbackData
-    fn callback_packed(text: impl Into<String>, packed: CallbackData) -> InlineKeyboardButton;
+    /// Create a callback button from a CallbackKey
+    fn callback_packed(text: impl Into<String>, packed: CallbackKey) -> InlineKeyboardButton;
 }
 
 impl InlineKeyboardButtonPackedExt for InlineKeyboardButton {
-    fn callback_packed(text: impl Into<String>, packed: CallbackData) -> InlineKeyboardButton {
+    fn callback_packed(text: impl Into<String>, packed: CallbackKey) -> InlineKeyboardButton {
         InlineKeyboardButton::callback(text, packed.to_string())
     }
 }
@@ -162,12 +162,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_packed_value_symmetry() {
-        let store = Arc::new(InMemStore::<CallbackData, String>::new());
+        let store = Arc::new(InMemStore::<CallbackKey, String>::new());
         let user_id = UserId(1);
         let user_store = UserProxy::new(store, user_id);
         let value = "test_data".to_string();
 
-        let packed = CallbackData::pack(&value, &user_store).await;
+        let packed = CallbackKey::pack(&value, &user_store).await;
         assert!(packed.as_str().starts_with("cb:"));
 
         let unpacked = packed.unpack::<String>(&user_store).await;
@@ -176,13 +176,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_packed_value_hash_stability() {
-        let store = Arc::new(InMemStore::<CallbackData, String>::new());
+        let store = Arc::new(InMemStore::<CallbackKey, String>::new());
         let user_id = UserId(1);
         let user_store = UserProxy::new(store, user_id);
         let value = "test_data".to_string();
 
-        let packed1 = CallbackData::pack(&value, &user_store).await;
-        let packed2 = CallbackData::pack(&value, &user_store).await;
+        let packed1 = CallbackKey::pack(&value, &user_store).await;
+        let packed2 = CallbackKey::pack(&value, &user_store).await;
 
         assert_eq!(packed1, packed2);
     }
@@ -190,9 +190,9 @@ mod tests {
     #[test]
     fn test_packed_value_limit() {
         let long_string = "a".repeat(64);
-        assert!(CallbackData::new(&long_string).is_ok());
+        assert!(CallbackKey::new(&long_string).is_ok());
 
         let too_long_string = "a".repeat(65);
-        assert!(CallbackData::new(&too_long_string).is_err());
+        assert!(CallbackKey::new(&too_long_string).is_err());
     }
 }
