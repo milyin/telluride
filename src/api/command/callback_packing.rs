@@ -15,7 +15,7 @@ pub trait CallbackEncode: Hash + Clone + Send + Sync {
     fn encode_callback(&self) -> Vec<u8>;
     
     /// Decode the value from bytes
-    fn decode_callback(bytes: &[u8]) -> Result<Self, String>
+    fn decode_callback(bytes: &[u8]) -> Result<Self, UnpackError>
     where
         Self: Sized;
     
@@ -50,11 +50,11 @@ pub trait CallbackBitcode: bitcode::Encode + for<'a> bitcode::Decode<'a> + Hash 
     
     /// Decode the value using bitcode.
     /// Override this method to customize decoding behavior.
-    fn decode_callback(bytes: &[u8]) -> Result<Self, String>
+    fn decode_callback(bytes: &[u8]) -> Result<Self, UnpackError>
     where
         Self: Sized,
     {
-        bitcode::decode(bytes).map_err(|e| e.to_string())
+        bitcode::decode(bytes).map_err(|e| UnpackError::DeserializeError(e.to_string()))
     }
     
     /// Returns true if encoding should be bypassed for this instance.
@@ -74,7 +74,7 @@ where
         <T as CallbackBitcode>::encode_callback(self)
     }
     
-    fn decode_callback(bytes: &[u8]) -> Result<Self, String>
+    fn decode_callback(bytes: &[u8]) -> Result<Self, UnpackError>
     where
         Self: Sized,
     {
@@ -323,7 +323,6 @@ impl CallbackKey {
                 // Inline data - skip the prefix and decode using the trait
                 let encoded_data = &decoded[INLINE_PREFIX.len()..];
                 V::decode_callback(encoded_data)
-                    .map_err(|e| UnpackError::DeserializeError(e))
             } else if decoded.starts_with(STORAGE_PREFIX.as_bytes()) {
                 // Storage-backed - look up
                 let key = Self::new(&data)?;
@@ -382,11 +381,11 @@ mod tests {
         fn encode_callback(&self) -> Vec<u8> {
             self.data.as_bytes().to_vec()
         }
-        
-        fn decode_callback(bytes: &[u8]) -> Result<Self, String> {
+
+        fn decode_callback(bytes: &[u8]) -> Result<Self, UnpackError> {
             String::from_utf8(bytes.to_vec())
                 .map(|data| CustomEncodedAction { data })
-                .map_err(|e| e.to_string())
+                .map_err(|e| UnpackError::DeserializeError(e.to_string()))
         }
     }
 
@@ -404,13 +403,14 @@ mod tests {
             bitcode::encode(&self.0)
         }
         
-        fn decode_callback(bytes: &[u8]) -> Result<Self, String> {
+        fn decode_callback(bytes: &[u8]) -> Result<Self, UnpackError> {
             bitcode::decode::<LargeData>(bytes)
                 .map(LargeAction)
-                .map_err(|e| e.to_string())
+                .map_err(|e| UnpackError::DeserializeError(e.to_string()))
         }
-        
+
         fn bypass_encoding(&self) -> bool {
+            // If payload is larger than 50 bytes, skip inline encoding
             self.0.payload.len() > 50
         }
     }
@@ -429,11 +429,11 @@ mod tests {
             encoded
         }
 
-        fn decode_callback(bytes: &[u8]) -> Result<Self, String> {
+        fn decode_callback(bytes: &[u8]) -> Result<Self, UnpackError> {
             if bytes.len() < 2 || &bytes[0..2] != [0xCA, 0xFE] {
-                return Err("Missing magic prefix".to_string());
+                return Err(UnpackError::DeserializeError("Missing magic prefix".to_string()));
             }
-            bitcode::decode(&bytes[2..]).map_err(|e| e.to_string())
+            bitcode::decode(&bytes[2..]).map_err(|e| UnpackError::DeserializeError(e.to_string()))
         }
 
         fn bypass_encoding(&self) -> bool {

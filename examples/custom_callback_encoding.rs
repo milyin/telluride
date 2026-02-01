@@ -36,11 +36,11 @@ impl CallbackEncode for CustomEncodedAction {
         self.data.as_bytes().to_vec()
     }
     
-    fn decode_callback(bytes: &[u8]) -> Result<Self, String> {
+    fn decode_callback(bytes: &[u8]) -> Result<Self, telluride::command::UnpackError> {
         // Custom decoding: convert bytes back to string
         String::from_utf8(bytes.to_vec())
             .map(|data| CustomEncodedAction { data })
-            .map_err(|e| e.to_string())
+            .map_err(|e| telluride::command::UnpackError::DeserializeError(e.to_string()))
     }
 }
 
@@ -60,10 +60,10 @@ impl telluride::command::CallbackEncode for LargeAction {
         bitcode::encode(&self.0)
     }
     
-    fn decode_callback(bytes: &[u8]) -> Result<Self, String> {
+    fn decode_callback(bytes: &[u8]) -> Result<Self, telluride::command::UnpackError> {
         bitcode::decode::<LargeData>(bytes)
             .map(LargeAction)
-            .map_err(|e| e.to_string())
+            .map_err(|e| telluride::command::UnpackError::DeserializeError(e.to_string()))
     }
     
     fn bypass_encoding(&self) -> bool {
