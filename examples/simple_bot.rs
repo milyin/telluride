@@ -126,13 +126,13 @@ async fn main() {
         Arc::new(CommonProxy::new(InMemStore::<UserId, User>::new()));
 
     // Per-user callback data storage (uses PackedValue keys)
-    let callback_storage = InMemStore::<CallbackData, MyCallbackData>::new();
+    let callback_storage = Arc::new(InMemStore::<CallbackData, MyCallbackData>::new());
 
     Dispatcher::builder(bot, handler)
         .dependencies(dptree::deps![
             me,
             storage,
-            callback_storage.clone(),
+            callback_storage,
             global_user_storage
         ])
         .enable_ctrlc_handler()
@@ -172,7 +172,7 @@ async fn command_handler(
     bot: Bot,
     msg: Message,
     cmd: Command,
-    callback_storage: InMemStore<CallbackData, MyCallbackData>,
+    callback_storage: Arc<InMemStore<CallbackData, MyCallbackData>>,
     user_registry: Arc<dyn DataStoreTrait<UserId, User>>,
 ) -> ResponseResult<()> {
     log::info!("Received command: {:?} from {:?}", cmd, msg.chat.id);
@@ -316,7 +316,7 @@ async fn callback_handler(
     bot: Bot,
     q: CallbackQuery,
     storage: Arc<InMemStore<String, Vec<String>>>,
-    callback_storage: InMemStore<CallbackData, MyCallbackData>,
+    callback_storage: Arc<InMemStore<CallbackData, MyCallbackData>>,
     user_registry: Arc<dyn DataStoreTrait<UserId, User>>,
 ) -> ResponseResult<()> {
     // Update user info

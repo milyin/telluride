@@ -1,5 +1,5 @@
+use std::collections::HashMap;
 use std::hash::Hash;
-use std::{collections::HashMap, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use teloxide::types::UserId;
@@ -9,14 +9,13 @@ use crate::api::data_store::data_store_trait::UserDataStoreTrait;
 
 /// In-memory data store implementation using HashMap
 /// Organizes data per-chat with nested HashMaps
-#[derive(Clone)]
 pub struct InMemStore<K, V>
 where
     K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash,
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
 {
     // Outer map: UserId -> Inner map: Key -> Value
-    data: Arc<Mutex<HashMap<UserId, HashMap<K, V>>>>,
+    data: Mutex<HashMap<UserId, HashMap<K, V>>>,
 }
 
 impl<K, V> InMemStore<K, V>
@@ -26,7 +25,7 @@ where
 {
     pub fn new() -> Self {
         Self {
-            data: Arc::new(Mutex::new(HashMap::new())),
+            data: Mutex::new(HashMap::new()),
         }
     }
 }

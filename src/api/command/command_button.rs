@@ -157,11 +157,12 @@ mod tests {
     use super::*;
     use crate::api::data_store::data_store_trait::UserProxy;
     use crate::api::data_store::in_mem::InMemStore;
+    use std::sync::Arc;
     use teloxide::types::UserId;
 
     #[tokio::test]
     async fn test_packed_value_symmetry() {
-        let store = InMemStore::<CallbackData, String>::new();
+        let store = Arc::new(InMemStore::<CallbackData, String>::new());
         let user_id = UserId(1);
         let user_store = UserProxy::new(store, user_id);
         let value = "test_data".to_string();
@@ -175,7 +176,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_packed_value_hash_stability() {
-        let store = InMemStore::<CallbackData, String>::new();
+        let store = Arc::new(InMemStore::<CallbackData, String>::new());
         let user_id = UserId(1);
         let user_store = UserProxy::new(store, user_id);
         let value = "test_data".to_string();

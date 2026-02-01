@@ -1,6 +1,6 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, marker::PhantomData, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 use teloxide::types::UserId;
@@ -21,7 +21,6 @@ struct StorageEntry<K, V> {
 
 /// Filesystem-based YAML data store
 /// Creates a separate directory for each chat, with each key stored as a .yaml file
-#[derive(Clone)]
 pub struct FilesystemYamlStore<K, V>
 where
     K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash,
@@ -29,9 +28,9 @@ where
 {
     storage_dir: PathBuf,
     // In-memory cache for loaded values: user_id -> (Key -> Value)
-    cache: Arc<Mutex<HashMap<UserId, HashMap<K, V>>>>,
+    cache: Mutex<HashMap<UserId, HashMap<K, V>>>,
     // Track which keys have been loaded from disk: user_id -> (Key -> bool)
-    loaded_keys: Arc<Mutex<HashMap<UserId, HashMap<K, bool>>>>,
+    loaded_keys: Mutex<HashMap<UserId, HashMap<K, bool>>>,
     _phantom: PhantomData<(K, V)>,
 }
 
@@ -43,8 +42,8 @@ where
     pub fn new(storage_dir: PathBuf) -> Self {
         Self {
             storage_dir,
-            cache: Arc::new(Mutex::new(HashMap::new())),
-            loaded_keys: Arc::new(Mutex::new(HashMap::new())),
+            cache: Mutex::new(HashMap::new()),
+            loaded_keys: Mutex::new(HashMap::new()),
             _phantom: PhantomData,
         }
     }
