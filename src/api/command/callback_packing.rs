@@ -357,34 +357,171 @@ mod tests {
     use std::sync::Arc;
     use teloxide::types::UserId;
 
-    /// Test type that implements CallbackBitcode with custom encoding override
+    // Test type 1: Standard bitcode encoding with empty impl
+    #[derive(Debug, Clone, Hash, PartialEq, bitcode::Encode, bitcode::Decode)]
+    struct SimpleAction {
+        action_type: u8,
+        user_id: u64,
+    }
+
+    impl CallbackBitcode for SimpleAction {}
+
+    // Test type 2: Custom encoding without bitcode
+    #[derive(Debug, Clone, PartialEq)]
+    struct CustomEncodedAction {
+        data: String,
+    }
+
+    impl std::hash::Hash for CustomEncodedAction {
+        fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+            self.data.hash(state);
+        }
+    }
+
+    impl CallbackEncode for CustomEncodedAction {
+        fn encode_callback(&self) -> Vec<u8> {
+            self.data.as_bytes().to_vec()
+        }
+        
+        fn decode_callback(bytes: &[u8]) -> Result<Self, String> {
+            String::from_utf8(bytes.to_vec())
+                .map(|data| CustomEncodedAction { data })
+                .map_err(|e| e.to_string())
+        }
+    }
+
+    // Test type 3: Bitcode with custom bypass logic
+    #[derive(Debug, Clone, Hash, PartialEq, bitcode::Encode, bitcode::Decode)]
+    struct LargeData {
+        payload: Vec<u8>,
+    }
+
+    #[derive(Debug, Clone, Hash, PartialEq)]
+    struct LargeAction(LargeData);
+
+    impl CallbackEncode for LargeAction {
+        fn encode_callback(&self) -> Vec<u8> {
+            bitcode::encode(&self.0)
+        }
+        
+        fn decode_callback(bytes: &[u8]) -> Result<Self, String> {
+            bitcode::decode::<LargeData>(bytes)
+                .map(LargeAction)
+                .map_err(|e| e.to_string())
+        }
+        
+        fn bypass_encoding(&self) -> bool {
+            self.0.payload.len() > 50
+        }
+    }
+
+    // Test type 4: CallbackBitcode with custom encoding override
     #[derive(Debug, Clone, Hash, PartialEq, bitcode::Encode, bitcode::Decode)]
     struct CustomBitcodeType {
         value: u32,
     }
 
-    /// Custom implementation that overrides default methods
     impl CallbackBitcode for CustomBitcodeType {
         fn encode_callback(&self) -> Vec<u8> {
             // Custom encoding: prefix with magic bytes
-            let mut encoded = vec![0xCA, 0xFE]; // Magic prefix
+            let mut encoded = vec![0xCA, 0xFE];
             encoded.extend_from_slice(&bitcode::encode(self));
             encoded
         }
 
         fn decode_callback(bytes: &[u8]) -> Result<Self, String> {
-            // Check for magic prefix
             if bytes.len() < 2 || &bytes[0..2] != [0xCA, 0xFE] {
                 return Err("Missing magic prefix".to_string());
             }
-            // Decode the rest with bitcode
             bitcode::decode(&bytes[2..]).map_err(|e| e.to_string())
         }
 
         fn bypass_encoding(&self) -> bool {
-            // Custom bypass logic: bypass if value is large
             self.value > 1000
         }
+    }
+
+    #[tokio::test]
+    async fn test_simple_bitcode_encoding() {
+        let storage = Arc::new(InMemStore::new());
+        let user_id = UserId(123);
+        let user_store = UserProxy::new(storage, user_id);
+
+        let action = SimpleAction {
+            action_type: 1,
+            user_id: 12345,
+        };
+        
+        let key = CallbackKey::pack(action.clone(), &user_store).await;
+        assert!(key.is_inline(), "Small bitcode value should be inlined");
+        
+        let unpacked = CallbackKey::unpack::<SimpleAction, _>(key.as_str(), &user_store)
+            .await
+            .expect("Should unpack");
+        
+        assert_eq!(unpacked, action);
+    }
+
+    #[tokio::test]
+    async fn test_custom_encoding_without_bitcode() {
+        let storage = Arc::new(InMemStore::new());
+        let user_id = UserId(456);
+        let user_store = UserProxy::new(storage, user_id);
+
+        let action = CustomEncodedAction {
+            data: "test_data".to_string(),
+        };
+        
+        let key = CallbackKey::pack(action.clone(), &user_store).await;
+        assert!(key.is_inline(), "Small custom encoded value should be inlined");
+        
+        let unpacked = CallbackKey::unpack::<CustomEncodedAction, _>(key.as_str(), &user_store)
+            .await
+            .expect("Should unpack");
+        
+        assert_eq!(unpacked.data, action.data);
+    }
+
+    #[tokio::test]
+    async fn test_small_value_with_bypass_logic() {
+        let storage = Arc::new(InMemStore::new());
+        let user_id = UserId(789);
+        let user_store = UserProxy::new(storage, user_id);
+
+        // Small payload - should be inlined (bypass returns false)
+        let small_action = LargeAction(LargeData {
+            payload: vec![1, 2, 3, 4, 5],
+        });
+        
+        let key = CallbackKey::pack(small_action.clone(), &user_store).await;
+        assert!(key.is_inline(), "Small payload should be inlined");
+        
+        let unpacked = CallbackKey::unpack::<LargeAction, _>(key.as_str(), &user_store)
+            .await
+            .expect("Should unpack");
+        
+        assert_eq!(unpacked.0.payload, small_action.0.payload);
+    }
+
+    #[tokio::test]
+    async fn test_large_value_with_bypass_logic() {
+        let storage = Arc::new(InMemStore::new());
+        let user_id = UserId(101112);
+        let user_store = UserProxy::new(storage, user_id);
+
+        // Large payload - should bypass encoding and go to storage
+        let large_action = LargeAction(LargeData {
+            payload: vec![0; 100],
+        });
+        
+        let key = CallbackKey::pack(large_action.clone(), &user_store).await;
+        assert!(key.is_storage_backed(), "Large payload should be stored due to bypass");
+        
+        let unpacked = CallbackKey::unpack::<LargeAction, _>(key.as_str(), &user_store)
+            .await
+            .expect("Should unpack");
+        
+        assert_eq!(unpacked.0.payload, large_action.0.payload);
     }
 
     #[tokio::test]
@@ -423,5 +560,54 @@ mod tests {
             .expect("Should unpack");
         
         assert_eq!(unpacked, large_value);
+    }
+
+    #[tokio::test]
+    async fn test_long_string_goes_to_storage() {
+        let storage = Arc::new(InMemStore::new());
+        let user_id = UserId(999);
+        let user_store = UserProxy::new(storage, user_id);
+
+        // Very long string that will exceed 64 bytes after encoding
+        let long_action = CustomEncodedAction {
+            data: "a".repeat(100),
+        };
+        
+        let key = CallbackKey::pack(long_action.clone(), &user_store).await;
+        assert!(key.is_storage_backed(), "Long string should be stored");
+        
+        let unpacked = CallbackKey::unpack::<CustomEncodedAction, _>(key.as_str(), &user_store)
+            .await
+            .expect("Should unpack");
+        
+        assert_eq!(unpacked.data, long_action.data);
+    }
+
+    #[tokio::test]
+    async fn test_round_trip_with_multiple_types() {
+        let user_id = UserId(555);
+        
+        // Test multiple different types can coexist (with separate stores per type)
+        let simple = SimpleAction { action_type: 5, user_id: 100 };
+        let custom = CustomEncodedAction { data: "test".to_string() };
+        
+        let storage1 = Arc::new(InMemStore::new());
+        let user_store1 = UserProxy::new(storage1, user_id);
+        
+        let storage2 = Arc::new(InMemStore::new());
+        let user_store2 = UserProxy::new(storage2, user_id);
+        
+        let key1 = CallbackKey::pack(simple.clone(), &user_store1).await;
+        let key2 = CallbackKey::pack(custom.clone(), &user_store2).await;
+        
+        let unpacked1 = CallbackKey::unpack::<SimpleAction, _>(key1.as_str(), &user_store1)
+            .await
+            .expect("Should unpack simple");
+        let unpacked2 = CallbackKey::unpack::<CustomEncodedAction, _>(key2.as_str(), &user_store2)
+            .await
+            .expect("Should unpack custom");
+        
+        assert_eq!(unpacked1, simple);
+        assert_eq!(unpacked2.data, custom.data);
     }
 }
