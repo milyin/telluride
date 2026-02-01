@@ -25,7 +25,7 @@ where
     pub chat: Chat,
     pub msg_id: Option<MessageId>,
     pub batch: bool,
-    pub callback_data_store: Arc<dyn UserDataStoreTrait<C>>,
+    pub callback_data_store: Arc<dyn UserDataStoreTrait<String, C>>,
 }
 
 impl<C> CommandReplyTarget<C>

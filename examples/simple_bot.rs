@@ -2,13 +2,13 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use telluride::{
     command::{InlineKeyboardButtonPackedExt, PackedValue},
-    data_store::{InMemStore, UserDataStoreTrait, UserProxy},
+    data_store::{CommonProxy, DataStoreTrait, InMemStore, UserDataStoreTrait, UserProxy},
     markdown::MarkdownStringMessage,
     markdown_format, markdown_string,
 };
 use teloxide::{
     prelude::*,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup, Me},
+    types::{InlineKeyboardButton, InlineKeyboardMarkup, Me, User},
     utils::command::BotCommands,
 };
 
@@ -23,7 +23,7 @@ enum Command {
     Messages,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, Hash, PartialEq, Eq)]
 struct MyCallbackData {
     action: String,
     value: String,
@@ -119,24 +119,48 @@ async fn main() {
     // - Update::filter_chat_member()       - Other chat member status changes
     // - Update::filter_chat_join_request() - Join request updates
 
-    let storage = Arc::new(InMemStore::<Vec<String>>::new());
-    let callback_storage = Arc::new(InMemStore::<MyCallbackData>::new());
+    let storage = Arc::new(InMemStore::<String, Vec<String>>::new());
+    // Use in-memory storage for global user registry
+    // The base storage is indexed by UserId
+    let global_user_storage_base = Arc::new(InMemStore::<UserId, User>::new());
+    // Wrap it with CommonProxy to share it among all users (it will use UserId(0) as namespace in InMemStore)
+    let global_user_storage: Arc<dyn DataStoreTrait<UserId, User>> =
+        Arc::new(CommonProxy::new(global_user_storage_base));
+
+    // Per-user callback data storage (uses default String keys)
+    let callback_storage = Arc::new(InMemStore::<String, MyCallbackData>::new());
 
     Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![me, storage, callback_storage])
+        .dependencies(dptree::deps![
+            me,
+            storage,
+            callback_storage,
+            global_user_storage
+        ])
         .enable_ctrlc_handler()
         .build()
         .dispatch()
         .await;
 }
 
-/// Helper to get user ID from message, reporting error if not present
-fn get_user_id(msg: &Message) -> ResponseResult<UserId> {
-    match msg.from.as_ref().map(|u| u.id) {
-        Some(id) => Ok(id),
+/// Helper to update user info in global registry
+async fn update_user(user: &User, user_registry: &Arc<dyn DataStoreTrait<UserId, User>>) {
+    // Update user registry using UserId directly as key
+    user_registry.set(&user.id, user.clone()).await;
+}
+
+/// Helper to get user from message and update registry
+async fn get_user_from_message(
+    msg: &Message,
+    user_registry: &Arc<dyn DataStoreTrait<UserId, User>>,
+) -> ResponseResult<User> {
+    match msg.from.as_ref() {
+        Some(user) => {
+            update_user(user, user_registry).await;
+            Ok(user.clone())
+        }
         None => {
             log::error!("Message from {:?} has no sender information", msg.chat.id);
-            // We return an error to stop processing
             Err(teloxide::RequestError::Io(Arc::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 "User information missing",
@@ -150,11 +174,12 @@ async fn command_handler(
     bot: Bot,
     msg: Message,
     cmd: Command,
-    storage: Arc<InMemStore<Vec<String>>>,
-    callback_storage: Arc<InMemStore<MyCallbackData>>,
+    callback_storage: Arc<InMemStore<String, MyCallbackData>>,
+    user_registry: Arc<dyn DataStoreTrait<UserId, User>>,
 ) -> ResponseResult<()> {
     log::info!("Received command: {:?} from {:?}", cmd, msg.chat.id);
-    let user_id = get_user_id(&msg)?;
+    let user = get_user_from_message(&msg, &user_registry).await?;
+    let user_id = user.id;
 
     match cmd {
         Command::Start => {
@@ -172,29 +197,31 @@ async fn command_handler(
             .await?;
         }
         Command::Messages => {
-            let users = storage.users().await;
-            if users.is_empty() {
+            let user_ids = user_registry.keys().await;
+            if user_ids.is_empty() {
                 bot.send_markdown_message(
                     msg.chat.id,
-                    markdown_string!("No users have saved messages yet\\."),
+                    markdown_string!("No users have registered yet\\."),
                 )
                 .await?;
             } else {
                 let user_proxy = UserProxy::new(callback_storage.clone(), user_id);
                 let mut buttons = Vec::new();
-                for uid in users {
-                    let label = format!("User {}", uid);
-                    buttons.push(vec![InlineKeyboardButton::callback_packed(
-                        label,
-                        PackedValue::pack(
-                            &MyCallbackData {
-                                action: "show_user".to_string(),
-                                value: uid.to_string(),
-                            },
-                            &user_proxy,
-                        )
-                        .await,
-                    )]);
+                for uid in user_ids {
+                    if let Some(u) = user_registry.get(&uid).await {
+                        let label = format!("User {}", u.full_name());
+                        buttons.push(vec![InlineKeyboardButton::callback_packed(
+                            label,
+                            PackedValue::pack(
+                                &MyCallbackData {
+                                    action: "show_user".to_string(),
+                                    value: uid.to_string(),
+                                },
+                                &user_proxy,
+                            )
+                            .await,
+                        )]);
+                    }
                 }
                 let keyboard = InlineKeyboardMarkup::new(buttons);
                 bot.send_markdown_message(
@@ -214,15 +241,22 @@ async fn text_handler(
     bot: Bot,
     msg: Message,
     me: Me,
-    storage: Arc<InMemStore<Vec<String>>>,
+    storage: Arc<InMemStore<String, Vec<String>>>,
+    user_registry: Arc<dyn DataStoreTrait<UserId, User>>,
 ) -> ResponseResult<()> {
     if let Some(text) = msg.text() {
-        let user_id = get_user_id(&msg)?;
+        let user = get_user_from_message(&msg, &user_registry).await?;
+        let user_id = user.id;
 
         // Save message to storage
-        let mut messages = storage.get(user_id, "messages").await.unwrap_or_default();
+        let mut messages = storage
+            .get(user_id, &"messages".to_string())
+            .await
+            .unwrap_or_default();
         messages.push(text.to_string());
-        storage.set(user_id, "messages", messages).await;
+        storage
+            .set(user_id, &"messages".to_string(), messages)
+            .await;
 
         if !msg.chat.is_private() {
             let text_lower = text.to_lowercase();
@@ -283,9 +317,13 @@ async fn new_chat_members_handler(bot: Bot, msg: Message, me: Me) -> ResponseRes
 async fn callback_handler(
     bot: Bot,
     q: CallbackQuery,
-    storage: Arc<InMemStore<Vec<String>>>,
-    callback_storage: Arc<InMemStore<MyCallbackData>>,
+    storage: Arc<InMemStore<String, Vec<String>>>,
+    callback_storage: Arc<InMemStore<String, MyCallbackData>>,
+    user_registry: Arc<dyn DataStoreTrait<UserId, User>>,
 ) -> ResponseResult<()> {
+    // Update user info
+    update_user(&q.from, &user_registry).await;
+
     // Always answer the callback to remove the "loading" state
     bot.answer_callback_query(q.id.clone()).await?;
 
@@ -299,7 +337,7 @@ async fn callback_handler(
                     if let Ok(target_uid) = data.value.parse::<u64>() {
                         let target_user_id = UserId(target_uid);
                         let messages = storage
-                            .get(target_user_id, "messages")
+                            .get(target_user_id, &"messages".to_string())
                             .await
                             .unwrap_or_default();
 

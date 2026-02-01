@@ -1,3 +1,4 @@
+use std::hash::Hash;
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
 
 use serde::{Deserialize, Serialize};
@@ -12,20 +13,22 @@ use crate::api::data_store::{
 /// Filesystem-based YAML data store
 /// Creates a separate directory for each chat, with each key stored as a .yaml file
 #[derive(Clone)]
-pub struct FilesystemYamlStore<V>
+pub struct FilesystemYamlStore<K, V>
 where
-    V: Serialize + for<'de> Deserialize<'de> + Send + Sync,
+    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash,
+    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
 {
     storage_dir: PathBuf,
     // In-memory cache for loaded values: user_id -> (Key -> Value)
-    cache: Arc<Mutex<HashMap<UserId, HashMap<String, V>>>>,
+    cache: Arc<Mutex<HashMap<UserId, HashMap<K, V>>>>,
     // Track which keys have been loaded from disk: user_id -> (Key -> bool)
-    loaded_keys: Arc<Mutex<HashMap<UserId, HashMap<String, bool>>>>,
-    _phantom: PhantomData<V>,
+    loaded_keys: Arc<Mutex<HashMap<UserId, HashMap<K, bool>>>>,
+    _phantom: PhantomData<(K, V)>,
 }
 
-impl<V> FilesystemYamlStore<V>
+impl<K, V> FilesystemYamlStore<K, V>
 where
+    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash,
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
 {
     pub fn new(storage_dir: PathBuf) -> Self {
@@ -44,14 +47,15 @@ where
     }
 
     /// Get the file path for a key within a user's directory
-    fn get_file_path(&self, user_id: UserId, key: &str) -> PathBuf {
-        let safe_filename = encode_key_to_filename(key);
+    fn get_file_path(&self, user_id: UserId, key: &K) -> PathBuf {
+        let key_json = serde_json::to_string(key).unwrap_or_else(|_| "invalid_key".to_string());
+        let safe_filename = encode_key_to_filename(&key_json);
         self.get_user_dir(user_id)
             .join(format!("{}.yaml", safe_filename))
     }
 
     /// Load value from disk for a specific user and key
-    async fn load_from_disk(&self, user_id: UserId, key: &str) -> Option<V> {
+    async fn load_from_disk(&self, user_id: UserId, key: &K) -> Option<V> {
         let file_path = self.get_file_path(user_id, key);
 
         match fs::read_to_string(&file_path).await {
@@ -64,7 +68,7 @@ where
     async fn save_to_disk(
         &self,
         user_id: UserId,
-        key: &str,
+        key: &K,
         value: &V,
     ) -> Result<(), std::io::Error> {
         // Create user directory if it doesn't exist
@@ -83,7 +87,7 @@ where
     }
 
     /// Ensure a value is loaded for a key (lazy loading)
-    async fn ensure_loaded(&self, user_id: UserId, key: &str) {
+    async fn ensure_loaded(&self, user_id: UserId, key: &K) {
         let loaded_guard = self.loaded_keys.lock().await;
         let is_loaded = loaded_guard
             .get(&user_id)
@@ -99,28 +103,29 @@ where
         if let Some(value) = self.load_from_disk(user_id, key).await {
             let mut cache_guard = self.cache.lock().await;
             let user_cache = cache_guard.entry(user_id).or_insert_with(HashMap::new);
-            user_cache.insert(key.to_string(), value);
+            user_cache.insert(key.clone(), value);
         }
 
         // Mark as loaded (even if file didn't exist)
         let mut loaded_guard = self.loaded_keys.lock().await;
         let user_loaded = loaded_guard.entry(user_id).or_insert_with(HashMap::new);
-        user_loaded.insert(key.to_string(), true);
+        user_loaded.insert(key.clone(), true);
     }
 
     /// Delete file from disk
-    async fn delete_from_disk(&self, user_id: UserId, key: &str) -> Result<(), std::io::Error> {
+    async fn delete_from_disk(&self, user_id: UserId, key: &K) -> Result<(), std::io::Error> {
         let file_path = self.get_file_path(user_id, key);
         fs::remove_file(&file_path).await
     }
 }
 
 #[async_trait::async_trait]
-impl<V> UserDataStoreTrait<V> for FilesystemYamlStore<V>
+impl<K, V> UserDataStoreTrait<K, V> for FilesystemYamlStore<K, V>
 where
+    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash,
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
 {
-    async fn get(&self, user_id: UserId, key: &str) -> Option<V> {
+    async fn get(&self, user_id: UserId, key: &K) -> Option<V> {
         self.ensure_loaded(user_id, key).await;
         let cache_guard = self.cache.lock().await;
         cache_guard
@@ -128,24 +133,24 @@ where
             .and_then(|user_cache| user_cache.get(key).cloned())
     }
 
-    async fn set(&self, user_id: UserId, key: &str, value: V) {
+    async fn set(&self, user_id: UserId, key: &K, value: V) {
         // Update cache
         let mut cache_guard = self.cache.lock().await;
         let user_cache = cache_guard.entry(user_id).or_insert_with(HashMap::new);
-        user_cache.insert(key.to_string(), value.clone());
+        user_cache.insert(key.clone(), value.clone());
         drop(cache_guard);
 
         // Mark as loaded
         let mut loaded_guard = self.loaded_keys.lock().await;
         let user_loaded = loaded_guard.entry(user_id).or_insert_with(HashMap::new);
-        user_loaded.insert(key.to_string(), true);
+        user_loaded.insert(key.clone(), true);
         drop(loaded_guard);
 
         // Save to disk (ignore errors for now - could log them)
         let _ = self.save_to_disk(user_id, key, &value).await;
     }
 
-    async fn remove(&self, user_id: UserId, key: &str) -> bool {
+    async fn remove(&self, user_id: UserId, key: &K) -> bool {
         self.ensure_loaded(user_id, key).await;
 
         // Remove from cache
@@ -164,7 +169,7 @@ where
         existed
     }
 
-    async fn keys(&self, user_id: UserId) -> Vec<String> {
+    async fn keys(&self, user_id: UserId) -> Vec<K> {
         // For filesystem store, list all .yaml files in the user's directory
         let user_dir = self.get_user_dir(user_id);
         match fs::read_dir(&user_dir).await {
@@ -174,8 +179,10 @@ where
                     if let Ok(file_name_os) = entry.file_name().into_string() {
                         if file_name_os.ends_with(".yaml") {
                             let encoded_key = file_name_os.trim_end_matches(".yaml");
-                            let decoded_key = decode_filename_to_key(encoded_key);
-                            keys.push(decoded_key);
+                            let decoded_key_json = decode_filename_to_key(encoded_key);
+                            if let Ok(key) = serde_json::from_str::<K>(&decoded_key_json) {
+                                keys.push(key);
+                            }
                         }
                     }
                 }
@@ -192,8 +199,8 @@ where
                 while let Ok(Some(entry)) = entries.next_entry().await {
                     if entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
                         if let Ok(dir_name) = entry.file_name().into_string() {
-                            let decoded_user_id = decode_filename_to_key(&dir_name);
-                            if let Ok(user_id) = decoded_user_id.parse::<u64>() {
+                            let decoded_user_id_str = decode_filename_to_key(&dir_name);
+                            if let Ok(user_id) = decoded_user_id_str.parse::<u64>() {
                                 users.push(UserId(user_id));
                             }
                         }
@@ -224,15 +231,17 @@ mod tests {
     async fn test_filesystem_store_set_and_get() {
         let temp_dir = std::env::temp_dir().join("yoroolbot_test_fs_store");
         let _ = fs::remove_dir_all(&temp_dir).await; // Clean up if exists
-        let store = FilesystemYamlStore::<TestData>::new(temp_dir.clone());
+        let store = FilesystemYamlStore::<String, TestData>::new(temp_dir.clone());
 
         let data = TestData {
             value: "test".to_string(),
             count: 42,
         };
 
-        store.set(TEST_USER_ID, "key1", data.clone()).await;
-        let retrieved = store.get(TEST_USER_ID, "key1").await;
+        store
+            .set(TEST_USER_ID, &"key1".to_string(), data.clone())
+            .await;
+        let retrieved = store.get(TEST_USER_ID, &"key1".to_string()).await;
 
         assert_eq!(retrieved, Some(data));
 
@@ -252,14 +261,16 @@ mod tests {
 
         // Create store and set value
         {
-            let store = FilesystemYamlStore::<TestData>::new(temp_dir.clone());
-            store.set(TEST_USER_ID, "key1", data.clone()).await;
+            let store = FilesystemYamlStore::<String, TestData>::new(temp_dir.clone());
+            store
+                .set(TEST_USER_ID, &"key1".to_string(), data.clone())
+                .await;
         }
 
         // Create new store instance and verify value persisted
         {
-            let store = FilesystemYamlStore::<TestData>::new(temp_dir.clone());
-            let retrieved = store.get(TEST_USER_ID, "key1").await;
+            let store = FilesystemYamlStore::<String, TestData>::new(temp_dir.clone());
+            let retrieved = store.get(TEST_USER_ID, &"key1".to_string()).await;
             assert_eq!(retrieved, Some(data));
         }
 
@@ -271,22 +282,32 @@ mod tests {
     async fn test_filesystem_store_remove() {
         let temp_dir = std::env::temp_dir().join("yoroolbot_test_fs_remove");
         let _ = fs::remove_dir_all(&temp_dir).await; // Clean up if exists
-        let store = FilesystemYamlStore::<TestData>::new(temp_dir.clone());
+        let store = FilesystemYamlStore::<String, TestData>::new(temp_dir.clone());
 
         let data = TestData {
             value: "test".to_string(),
             count: 42,
         };
 
-        store.set(TEST_USER_ID, "key1", data.clone()).await;
-        assert_eq!(store.get(TEST_USER_ID, "key1").await, Some(data));
+        store
+            .set(TEST_USER_ID, &"key1".to_string(), data.clone())
+            .await;
+        assert_eq!(
+            store.get(TEST_USER_ID, &"key1".to_string()).await,
+            Some(data)
+        );
 
-        let removed = store.remove(TEST_USER_ID, "key1").await;
+        let removed = store.remove(TEST_USER_ID, &"key1".to_string()).await;
         assert!(removed);
-        assert_eq!(store.get(TEST_USER_ID, "key1").await, None);
+        assert_eq!(store.get(TEST_USER_ID, &"key1".to_string()).await, None);
 
         // Verify file was deleted
-        let file_path = temp_dir.join(TEST_USER_ID.to_string()).join("key1.yaml");
+        // Note: Filename is now based on JSON representation of the key
+        let key_json = serde_json::to_string(&"key1".to_string()).unwrap();
+        let expected_filename = format!("{}.yaml", encode_key_to_filename(&key_json));
+        let file_path = temp_dir
+            .join(encode_key_to_filename(&TEST_USER_ID.to_string()))
+            .join(expected_filename);
         assert!(!file_path.exists());
 
         // Clean up
@@ -297,39 +318,34 @@ mod tests {
     async fn test_filesystem_store_with_encoded_keys() {
         let temp_dir = std::env::temp_dir().join("yoroolbot_test_fs_encoded");
         let _ = fs::remove_dir_all(&temp_dir).await; // Clean up if exists
-        let store = FilesystemYamlStore::<TestData>::new(temp_dir.clone());
+        let store = FilesystemYamlStore::<String, TestData>::new(temp_dir.clone());
 
-        // Test keys with forbidden characters
-        let test_cases = vec![
-            ("path/to/key", "path%2Fto%2Fkey.yaml"),
-            ("key:value", "key%3Avalue.yaml"),
-            (".hidden", "%2Ehidden.yaml"),
-            ("file*.txt", "file%2A.txt.yaml"),
-            ("space key", "space%20key.yaml"),
+        // Test keys with characters that need encoding
+        let test_keys = vec![
+            "path/to/key",
+            "key:value",
+            ".hidden",
+            "file*.txt",
+            "space key",
         ];
 
-        for (key, expected_filename) in test_cases {
+        for key in test_keys {
+            let key_string = key.to_string();
             let data = TestData {
                 value: format!("data for {}", key),
                 count: 1,
             };
 
             // Set the value
-            store.set(TEST_USER_ID, key, data.clone()).await;
-
-            // Verify the file was created with encoded filename in the user directory
-            let user_dir = temp_dir.join(TEST_USER_ID.to_string());
-            let file_path = user_dir.join(expected_filename);
-            assert!(
-                file_path.exists(),
-                "File {:?} should exist for key '{}'",
-                file_path,
-                key
-            );
+            store.set(TEST_USER_ID, &key_string, data.clone()).await;
 
             // Retrieve the value
-            let retrieved = store.get(TEST_USER_ID, key).await;
+            let retrieved = store.get(TEST_USER_ID, &key_string).await;
             assert_eq!(retrieved, Some(data.clone()));
+
+            // Verify file exists (indirectly)
+            let keys = store.keys(TEST_USER_ID).await;
+            assert!(keys.contains(&key_string));
         }
 
         // Clean up
@@ -340,16 +356,16 @@ mod tests {
     async fn test_filesystem_store_keys_with_encoding() {
         let temp_dir = std::env::temp_dir().join("yoroolbot_test_fs_keys_encoded");
         let _ = fs::remove_dir_all(&temp_dir).await; // Clean up if exists
-        let store = FilesystemYamlStore::<TestData>::new(temp_dir.clone());
+        let store = FilesystemYamlStore::<String, TestData>::new(temp_dir.clone());
 
-        // Store values with various keys including forbidden chars
+        // Store values with various keys including chars needing encoding
         let keys = vec!["simple", "path/to/key", "key:value", ".hidden", "space key"];
 
         for key in &keys {
             store
                 .set(
                     TEST_USER_ID,
-                    key,
+                    &key.to_string(),
                     TestData {
                         value: format!("data for {}", key),
                         count: 1,
@@ -380,8 +396,8 @@ mod tests {
         let temp_dir = std::env::temp_dir().join("yoroolbot_test_fs_complex");
         let _ = fs::remove_dir_all(&temp_dir).await; // Clean up if exists
 
-        // Test with complex keys that have multiple forbidden characters
-        let complex_key = "path/to:key*.txt with spaces";
+        // Test with complex keys that have multiple characters needing encoding
+        let complex_key = "path/to:key*.txt with spaces".to_string();
         let data = TestData {
             value: "complex data".to_string(),
             count: 99,
@@ -389,19 +405,19 @@ mod tests {
 
         // Create store and set value
         {
-            let store = FilesystemYamlStore::<TestData>::new(temp_dir.clone());
-            store.set(TEST_USER_ID, complex_key, data.clone()).await;
+            let store = FilesystemYamlStore::<String, TestData>::new(temp_dir.clone());
+            store.set(TEST_USER_ID, &complex_key, data.clone()).await;
         }
 
         // Create new store instance and verify value persisted with correct key
         {
-            let store = FilesystemYamlStore::<TestData>::new(temp_dir.clone());
-            let retrieved = store.get(TEST_USER_ID, complex_key).await;
+            let store = FilesystemYamlStore::<String, TestData>::new(temp_dir.clone());
+            let retrieved = store.get(TEST_USER_ID, &complex_key).await;
             assert_eq!(retrieved, Some(data.clone()));
 
             // Verify the key appears in keys() list
             let keys = store.keys(TEST_USER_ID).await;
-            assert!(keys.contains(&complex_key.to_string()));
+            assert!(keys.contains(&complex_key));
         }
 
         // Clean up
@@ -412,7 +428,7 @@ mod tests {
     async fn test_filesystem_store_users() {
         let temp_dir = std::env::temp_dir().join("yoroolbot_test_fs_users");
         let _ = fs::remove_dir_all(&temp_dir).await;
-        let store = FilesystemYamlStore::<TestData>::new(temp_dir.clone());
+        let store = FilesystemYamlStore::<String, TestData>::new(temp_dir.clone());
 
         let user1 = UserId(111);
         let user2 = UserId(222);
@@ -421,8 +437,8 @@ mod tests {
             count: 1,
         };
 
-        store.set(user1, "k1", data.clone()).await;
-        store.set(user2, "k2", data.clone()).await;
+        store.set(user1, &"k1".to_string(), data.clone()).await;
+        store.set(user2, &"k2".to_string(), data.clone()).await;
 
         let users = store.users().await;
         assert_eq!(users.len(), 2);

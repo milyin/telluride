@@ -42,7 +42,7 @@ impl PackedValue {
     }
 
     /// Pack a value into a PackedValue by storing it in the given store and returning its hash-based reference
-    pub async fn pack<V>(value: &V, store: &dyn DataStoreTrait<V>) -> Self
+    pub async fn pack<V>(value: &V, store: &dyn DataStoreTrait<String, V>) -> Self
     where
         V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Hash,
     {
@@ -57,7 +57,7 @@ impl PackedValue {
     }
 
     /// Unpack the value from the store using this reference
-    pub async fn unpack<V>(&self, store: &dyn DataStoreTrait<V>) -> Option<V>
+    pub async fn unpack<V>(&self, store: &dyn DataStoreTrait<String, V>) -> Option<V>
     where
         V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
     {
@@ -65,7 +65,7 @@ impl PackedValue {
         if !key.starts_with("cb:") {
             return None;
         }
-        store.get(key).await
+        store.get(&key.to_string()).await
     }
 }
 
@@ -111,7 +111,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_packed_value_symmetry() {
-        let store = Arc::new(InMemStore::<String>::new());
+        let store = Arc::new(InMemStore::<String, String>::new());
         let user_id = UserId(1);
         let user_store = UserProxy::new(store, user_id);
         let value = "test_data".to_string();
@@ -125,7 +125,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_packed_value_hash_stability() {
-        let store = Arc::new(InMemStore::<String>::new());
+        let store = Arc::new(InMemStore::<String, String>::new());
         let user_id = UserId(1);
         let user_store = UserProxy::new(store, user_id);
         let value = "test_data".to_string();
