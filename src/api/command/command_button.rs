@@ -7,7 +7,7 @@ use std::{
 use teloxide::types::InlineKeyboardButton;
 
 use crate::api::data_store::data_store_trait::DataStoreTrait;
-use super::action::ActionError;
+use super::action::UnpackError;
 
 use serde::{Deserialize, Serialize};
 
@@ -171,7 +171,7 @@ impl CallbackKey {
     pub fn unpack<V, S>(
         data: &str,
         storage: &S,
-    ) -> impl std::future::Future<Output = Result<V, ActionError>> + Send
+    ) -> impl std::future::Future<Output = Result<V, UnpackError>> + Send
     where
         V: Serialize + for<'de> Deserialize<'de> + Clone + Send + Sync,
         S: DataStoreTrait<CallbackKey, V>,
@@ -182,15 +182,15 @@ impl CallbackKey {
             if let Some(json) = data.strip_prefix(INLINE_PREFIX) {
                 // Inline data - deserialize directly
                 serde_json::from_str(json)
-                    .map_err(|e| ActionError::DeserializeError(e.to_string()))
+                    .map_err(|e| UnpackError::DeserializeError(e.to_string()))
             } else if data.starts_with(STORAGE_PREFIX) {
                 // Storage-backed - look up
                 let key = Self::new(&data)?;
-                storage.get(&key).await.ok_or(ActionError::NotFound)
+                storage.get(&key).await.ok_or(UnpackError::NotFound)
             } else {
                 // Legacy format or unknown - try storage lookup
                 let key = Self::new(&data)?;
-                storage.get(&key).await.ok_or(ActionError::NotFound)
+                storage.get(&key).await.ok_or(UnpackError::NotFound)
             }
         }
     }
