@@ -33,7 +33,7 @@ pub mod markdown {
 pub mod command {
     pub use crate::api::command::{
         command_arg::{EmptyArg, ParseCommandArg},
-        command_button::{InlineKeyboardButtonPackedExt, PackedValue},
+        command_button::{InlineKeyboardButtonPackedExt, CallbackData},
         command_reply_target::CommandReplyTarget,
         command_trait::{CommandTrait, NoopCommand},
     };

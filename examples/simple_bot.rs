@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use telluride::{
-    command::{InlineKeyboardButtonPackedExt, PackedValue},
+    command::{CallbackData, InlineKeyboardButtonPackedExt},
     data_store::{CommonProxy, DataStoreTrait, InMemStore, UserDataStoreTrait, UserProxy},
     markdown::MarkdownStringMessage,
     markdown_format, markdown_string,
@@ -125,14 +125,14 @@ async fn main() {
     let global_user_storage: Arc<dyn DataStoreTrait<UserId, User>> =
         Arc::new(CommonProxy::new(InMemStore::<UserId, User>::new()));
 
-    // Per-user callback data storage (uses default String keys)
-    let callback_storage = Arc::new(InMemStore::<String, MyCallbackData>::new());
+    // Per-user callback data storage (uses PackedValue keys)
+    let callback_storage = InMemStore::<CallbackData, MyCallbackData>::new();
 
     Dispatcher::builder(bot, handler)
         .dependencies(dptree::deps![
             me,
             storage,
-            callback_storage,
+            callback_storage.clone(),
             global_user_storage
         ])
         .enable_ctrlc_handler()
@@ -172,7 +172,7 @@ async fn command_handler(
     bot: Bot,
     msg: Message,
     cmd: Command,
-    callback_storage: Arc<InMemStore<String, MyCallbackData>>,
+    callback_storage: InMemStore<CallbackData, MyCallbackData>,
     user_registry: Arc<dyn DataStoreTrait<UserId, User>>,
 ) -> ResponseResult<()> {
     log::info!("Received command: {:?} from {:?}", cmd, msg.chat.id);
@@ -210,7 +210,7 @@ async fn command_handler(
                         let label = format!("User {}", u.full_name());
                         buttons.push(vec![InlineKeyboardButton::callback_packed(
                             label,
-                            PackedValue::pack(
+                            CallbackData::pack(
                                 &MyCallbackData {
                                     action: "show_user".to_string(),
                                     value: uid.to_string(),
@@ -316,7 +316,7 @@ async fn callback_handler(
     bot: Bot,
     q: CallbackQuery,
     storage: Arc<InMemStore<String, Vec<String>>>,
-    callback_storage: Arc<InMemStore<String, MyCallbackData>>,
+    callback_storage: InMemStore<CallbackData, MyCallbackData>,
     user_registry: Arc<dyn DataStoreTrait<UserId, User>>,
 ) -> ResponseResult<()> {
     // Update user info
@@ -329,7 +329,7 @@ async fn callback_handler(
         let user_id = q.from.id;
         let user_store = UserProxy::new(callback_storage.clone(), user_id);
 
-        if let Ok(packed) = PackedValue::new(data_str) {
+        if let Ok(packed) = CallbackData::new(data_str) {
             if let Some(data) = packed.unpack::<MyCallbackData>(&user_store).await {
                 if data.action == "show_user" {
                     if let Ok(target_uid) = data.value.parse::<u64>() {
