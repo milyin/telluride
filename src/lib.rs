@@ -32,8 +32,9 @@ pub mod markdown {
 
 pub mod command {
     pub use crate::api::command::{
-        action::UnpackError,
-        command_button::{CallbackKey, InlineKeyboardButtonPackedExt, MAX_CALLBACK_DATA_SIZE},
+        callback_errors::UnpackError,
+        callback_packing::{CallbackKey, MAX_CALLBACK_DATA_SIZE},
+        button_extensions::InlineKeyboardButtonPackedExt,
     };
 }
 

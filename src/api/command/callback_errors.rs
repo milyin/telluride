@@ -1,9 +1,7 @@
-use std::fmt::Debug;
-
-/// Error type for unpacking failures
+/// Error type for callback data unpacking failures
 #[derive(Debug, Clone)]
 pub enum UnpackError {
-    /// The callback data could not be deserialized as this action type
+    /// The callback data could not be deserialized as this value type
     DeserializeError(String),
     /// The callback key was not found in storage
     NotFound,
@@ -31,5 +29,3 @@ impl From<String> for UnpackError {
         UnpackError::InvalidKey(s)
     }
 }
-
-
