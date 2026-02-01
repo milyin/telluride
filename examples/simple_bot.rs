@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use telluride::{
     command::{InlineKeyboardButtonPackedExt, PackedValue},
-    data_store::{DataStoreTrait, InMemStore, UserProxy, UserProxyTrait},
+    data_store::{DataStoreTrait, InMemStore, UserProxy},
     markdown::MarkdownStringMessage,
     markdown_format, markdown_string,
 };
@@ -19,8 +19,6 @@ enum Command {
     Start,
     #[command(description = "display help")]
     Help,
-    #[command(description = "show inline keyboard")]
-    Menu,
     #[command(description = "list saved messages from users")]
     Messages,
 }
@@ -172,13 +170,6 @@ async fn command_handler(
                 markdown_format!("{}", Command::descriptions().to_string()),
             )
             .await?;
-        }
-        Command::Menu => {
-            let user_store = UserProxy::new(callback_storage.clone(), user_id);
-            let keyboard = make_keyboard(&user_store).await;
-            bot.send_markdown_message(msg.chat.id, markdown_string!("Choose an option:"))
-                .reply_markup(keyboard)
-                .await?;
         }
         Command::Messages => {
             let users = storage.users().await;
@@ -339,68 +330,11 @@ async fn callback_handler(
                         }
                     }
                 } else {
-                    log::info!(
-                        "Received callback query from {:?}: action={}, value={}",
-                        q.from.id,
-                        data.action,
-                        data.value
-                    );
-                    let text =
-                        markdown_format!("You pressed: {} with value {}", data.action, data.value);
-
-                    // Send response - either edit the original message or send a new one
-                    if let Some(msg) = q.message {
-                        bot.edit_markdown_message_text(msg.chat().id, msg.id(), text)
-                            .await?;
-                    } else if let Some(id) = q.inline_message_id {
-                        bot.edit_markdown_message_text_inline(&id, text).await?;
-                    }
+                    log::info!("Unhandled callback action: {}", data.action);
                 }
             }
         }
     }
 
     Ok(())
-}
-
-/// Creates an inline keyboard with sample buttons
-async fn make_keyboard(store: &dyn UserProxyTrait<MyCallbackData>) -> InlineKeyboardMarkup {
-    let b1 = InlineKeyboardButton::callback_packed(
-        "Option 1",
-        PackedValue::pack(
-            &MyCallbackData {
-                action: "opt1".to_string(),
-                value: "10".to_string(),
-            },
-            store,
-        )
-        .await,
-    );
-
-    let b2 = InlineKeyboardButton::callback_packed(
-        "Option 2",
-        PackedValue::pack(
-            &MyCallbackData {
-                action: "opt2".to_string(),
-                value: "20".to_string(),
-            },
-            store,
-        )
-        .await,
-    );
-
-    let b3 = InlineKeyboardButton::callback_packed(
-        "Option 3",
-        PackedValue::pack(
-            &MyCallbackData {
-                action: "opt3".to_string(),
-                value: "30".to_string(),
-            },
-            store,
-        )
-        .await,
-    );
-
-    let buttons = vec![vec![b1, b2], vec![b3]];
-    InlineKeyboardMarkup::new(buttons)
 }
