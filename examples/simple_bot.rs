@@ -50,7 +50,6 @@ async fn main() {
                 .endpoint(command_handler),
         )
         // Handle callback queries (inline keyboard button presses)
-        // Uses BotAction::from_callback_query for smart action extraction
         .branch(
             Update::filter_callback_query()
                 .filter(|q: teloxide::types::CallbackQuery| q.data.is_some())
