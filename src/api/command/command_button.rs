@@ -1,5 +1,4 @@
 use std::{
-    collections::hash_map::DefaultHasher,
     fmt::Display,
     hash::{Hash, Hasher},
     str::FromStr,
@@ -95,20 +94,10 @@ impl CallbackKey {
         std::str::from_utf8(&self.data[..self.len]).unwrap_or("")
     }
 
-    /// Pack a value into a CallbackKey by storing it in the given store and returning its hash-based reference
-    pub async fn pack<V>(value: &V, store: &dyn DataStoreTrait<Self, V>) -> Self
-    where
-        V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Hash,
-    {
-        let mut hasher = DefaultHasher::new();
-        value.hash(&mut hasher);
-        let hash = hasher.finish();
+    /// Create a CallbackKey from a hash value
+    pub fn from_hash(hash: u64) -> Self {
         let key_str = format!("cb:{}", hash);
-        let key = Self::new(&key_str).expect("Hash key should always fit in 64 bytes");
-
-        store.set(&key, value.clone()).await;
-
-        key
+        Self::new(&key_str).expect("Hash key should always fit in 64 bytes")
     }
 
     /// Unpack the value from the store using this reference
@@ -140,6 +129,18 @@ impl From<CallbackKey> for String {
     }
 }
 
+impl<T> From<&T> for CallbackKey
+where
+    T: Hash,
+{
+    fn from(value: &T) -> Self {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        value.hash(&mut hasher);
+        let hash = hasher.finish();
+        Self::from_hash(hash)
+    }
+}
+
 /// Extension trait for InlineKeyboardButton to support packed (stored) callback data
 #[async_trait::async_trait]
 pub trait InlineKeyboardButtonPackedExt {
@@ -163,7 +164,12 @@ impl InlineKeyboardButtonPackedExt for InlineKeyboardButton {
     where
         V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + std::hash::Hash,
     {
-        let key = CallbackKey::pack(value, storage).await;
+        // Create key from value using From trait
+        let key = CallbackKey::from(value);
+
+        // Store value in storage
+        storage.set(&key, value.clone()).await;
+
         InlineKeyboardButton::callback(text, key.to_string())
     }
 }
@@ -183,9 +189,16 @@ mod tests {
         let user_store = UserProxy::new(store, user_id);
         let value = "test_data".to_string();
 
-        let packed = CallbackKey::pack(&value, &user_store).await;
-        assert!(packed.as_str().starts_with("cb:"));
+        let button = InlineKeyboardButton::callback_key("Test", &value, &user_store).await;
 
+        // Extract callback data from button kind
+        let callback_data = match &button.kind {
+            teloxide::types::InlineKeyboardButtonKind::CallbackData(data) => data.clone(),
+            _ => panic!("Expected CallbackData kind"),
+        };
+        assert!(callback_data.starts_with("cb:"));
+
+        let packed = CallbackKey::new(&callback_data).unwrap();
         let unpacked = packed.unpack::<String>(&user_store).await;
         assert_eq!(unpacked, Some(value));
     }
@@ -197,10 +210,20 @@ mod tests {
         let user_store = UserProxy::new(store, user_id);
         let value = "test_data".to_string();
 
-        let packed1 = CallbackKey::pack(&value, &user_store).await;
-        let packed2 = CallbackKey::pack(&value, &user_store).await;
+        let button1 = InlineKeyboardButton::callback_key("Test", &value, &user_store).await;
+        let button2 = InlineKeyboardButton::callback_key("Test", &value, &user_store).await;
 
-        assert_eq!(packed1, packed2);
+        // Extract and compare callback data
+        let data1 = match &button1.kind {
+            teloxide::types::InlineKeyboardButtonKind::CallbackData(data) => data,
+            _ => panic!("Expected CallbackData kind"),
+        };
+        let data2 = match &button2.kind {
+            teloxide::types::InlineKeyboardButtonKind::CallbackData(data) => data,
+            _ => panic!("Expected CallbackData kind"),
+        };
+
+        assert_eq!(data1, data2);
     }
 
     #[test]
