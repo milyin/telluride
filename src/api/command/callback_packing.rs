@@ -1,5 +1,6 @@
 use std::{fmt::Display, hash::{Hash, Hasher}, str::FromStr};
 use serde::{Deserialize, Serialize};
+use percent_encoding::{utf8_percent_encode, percent_decode_str, NON_ALPHANUMERIC};
 
 use crate::api::data_store::data_store_trait::DataStoreTrait;
 use super::callback_errors::UnpackError;
@@ -153,33 +154,39 @@ impl CallbackKey {
         storage: &S,
     ) -> impl std::future::Future<Output = Self> + Send
     where
-        V: Serialize + for<'de> Deserialize<'de> + Hash + Clone + Send + Sync,
+        V: Serialize + for<'de> Deserialize<'de> + bitcode::Encode + for<'a> bitcode::Decode<'a> + Hash + Clone + Send + Sync,
         S: DataStoreTrait<CallbackKey, V> + ?Sized,
     {
         // Serialize the value
-        let serialized = serde_json::to_string(value);
+        let serialized = bitcode::encode(value);
         let value_clone = value.clone();
 
         async move {
-            match serialized {
-                Ok(json) => {
-                    let inline_data = format!("{}{}", INLINE_PREFIX, json);
-                    if inline_data.len() <= MAX_CALLBACK_DATA_SIZE {
-                        // Fits inline - embed directly with prefix
-                        Self::new(&inline_data).expect("Already checked length")
-                    } else {
-                        // Too large - store and use hash key
+            let mut inline_data = Vec::with_capacity(INLINE_PREFIX.len() + serialized.len());
+            inline_data.extend_from_slice(INLINE_PREFIX.as_bytes());
+            inline_data.extend_from_slice(&serialized);
+            
+            if inline_data.len() <= MAX_CALLBACK_DATA_SIZE {
+                // Fits inline - embed directly with prefix
+                // Use percent-encoding for compactness (only encodes non-alphanumeric)
+                let encoded = utf8_percent_encode(
+                    std::str::from_utf8(&inline_data).unwrap_or(""),
+                    NON_ALPHANUMERIC
+                ).to_string();
+                match Self::new(&encoded) {
+                    Ok(key) => key,
+                    Err(_) => {
+                        // Encoding made it too large - store instead
                         let key = Self::from(&value_clone);
                         storage.set(&key, value_clone).await;
                         key
                     }
                 }
-                Err(_) => {
-                    // Serialization failed - store as fallback
-                    let key = Self::from(&value_clone);
-                    storage.set(&key, value_clone).await;
-                    key
-                }
+            } else {
+                // Too large - store and use hash key
+                let key = Self::from(&value_clone);
+                storage.set(&key, value_clone).await;
+                key
             }
         }
     }
@@ -199,15 +206,19 @@ impl CallbackKey {
         storage: &S,
     ) -> impl std::future::Future<Output = Result<V, UnpackError>> + Send
     where
-        V: Serialize + for<'de> Deserialize<'de> + Clone + Send + Sync,
+        V: Serialize + for<'de> Deserialize<'de> + for<'a> bitcode::Decode<'a> + Clone + Send + Sync,
         S: DataStoreTrait<CallbackKey, V> + ?Sized,
     {
         let data = data.to_string();
 
         async move {
-            if let Some(json) = data.strip_prefix(INLINE_PREFIX) {
-                // Inline data - deserialize directly
-                serde_json::from_str(json)
+            if data.starts_with(INLINE_PREFIX) {
+                // Inline data - decode from percent-encoding then deserialize
+                let encoded = &data[INLINE_PREFIX.len()..];
+                let decoded = percent_decode_str(encoded)
+                    .collect::<Vec<u8>>();
+                
+                bitcode::decode(&decoded)
                     .map_err(|e| UnpackError::DeserializeError(e.to_string()))
             } else if data.starts_with(STORAGE_PREFIX) {
                 // Storage-backed - look up

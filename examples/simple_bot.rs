@@ -25,7 +25,7 @@ enum Command {
 
 /// Application-specific Action enum for callback handling.
 /// Uses CallbackKey::pack/unpack for smart serialization.
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize, bitcode::Encode, bitcode::Decode)]
 enum Action {
     ShowUser(u64),
 }
