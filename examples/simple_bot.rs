@@ -1,13 +1,13 @@
 use std::sync::Arc;
 use telluride::{
-    command::{BotAction, CallbackKey},
+    command::CallbackKey,
     data_store::{CommonProxy, DataStoreTrait, InMemStore, UserDataStoreTrait, UserProxy},
     markdown::MarkdownStringMessage,
     markdown_format, markdown_string,
 };
 use teloxide::{
     prelude::*,
-    types::{InlineKeyboardMarkup, Me, User},
+    types::{InlineKeyboardButton, InlineKeyboardMarkup, Me, User},
     utils::command::BotCommands,
 };
 use serde::{Deserialize, Serialize};
@@ -24,41 +24,11 @@ enum Command {
 }
 
 /// Application-specific Action enum for callback handling.
-/// Implements BotAction trait via the blanket impl (FromStr + Display).
+/// Uses CallbackKey::pack/unpack for smart serialization.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 enum Action {
     ShowUser(u64),
 }
-
-impl std::str::FromStr for Action {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts: Vec<&str> = s.splitn(2, ':').collect();
-        match parts.get(0).copied() {
-            Some("show_user") => {
-                let uid = parts
-                    .get(1)
-                    .ok_or_else(|| "Missing user ID".to_string())?
-                    .parse::<u64>()
-                    .map_err(|e| e.to_string())?;
-                Ok(Action::ShowUser(uid))
-            }
-            Some(unknown) => Err(format!("Unknown action: {}", unknown)),
-            None => Err("Empty action string".to_string()),
-        }
-    }
-}
-
-impl std::fmt::Display for Action {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Action::ShowUser(uid) => write!(f, "show_user:{}", uid),
-        }
-    }
-}
-
-// Action now automatically implements BotAction via the blanket impl!
 
 #[tokio::main]
 async fn main() {
@@ -233,9 +203,10 @@ async fn command_handler(
                 for uid in user_ids {
                     if let Some(u) = user_registry.get(&uid).await {
                         let label = format!("User {}", u.full_name());
-                        // Use BotAction::to_button for smart inline/storage routing
+                        // Use CallbackKey::pack for smart inline/storage routing
+                        let key = CallbackKey::pack(&Action::ShowUser(uid.0), &user_proxy).await;
                         buttons.push(vec![
-                            Action::ShowUser(uid.0).to_button(label, &user_proxy).await,
+                            InlineKeyboardButton::callback(label, key.to_string()),
                         ]);
                     }
                 }
@@ -330,7 +301,7 @@ async fn new_chat_members_handler(bot: Bot, msg: Message, me: Me) -> ResponseRes
 }
 
 /// Handler for actions (inline keyboard button presses)
-/// Uses BotAction::from_callback_query for smart action extraction
+/// Uses CallbackKey::unpack for smart action extraction
 async fn action_handler(
     bot: Bot,
     q: CallbackQuery,
@@ -344,12 +315,20 @@ async fn action_handler(
     // Always answer the callback to remove the "loading" state
     bot.answer_callback_query(q.id.clone()).await?;
 
-    // Extract action using BotAction trait - handles both inline and storage-backed actions
+    // Extract action using CallbackKey::unpack - handles both inline and storage-backed actions
+    let callback_data = match &q.data {
+        Some(data) => data,
+        None => {
+            log::warn!("Callback query has no data");
+            return Ok(());
+        }
+    };
+
     let user_proxy = UserProxy::new(callback_storage.clone(), q.from.id);
-    let action = match Action::from_callback_query(&q, &user_proxy).await {
+    let action: Action = match CallbackKey::unpack(callback_data, &user_proxy).await {
         Ok(action) => action,
         Err(e) => {
-            log::warn!("Failed to extract action from callback: {}", e);
+            log::warn!("Failed to unpack action from callback: {}", e);
             return Ok(());
         }
     };

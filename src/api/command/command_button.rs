@@ -7,8 +7,14 @@ use std::{
 use teloxide::types::InlineKeyboardButton;
 
 use crate::api::data_store::data_store_trait::DataStoreTrait;
+use super::action::ActionError;
 
 use serde::{Deserialize, Serialize};
+
+/// Prefix used for inline (directly embedded) callback data
+const INLINE_PREFIX: &str = "i:";
+/// Prefix used for storage-backed (hash reference) callback data  
+const STORAGE_PREFIX: &str = "s:";
 
 /// Telegram's maximum allowed size for callback data (64 bytes).
 /// See: https://core.telegram.org/bots/api#inlinekeyboardbutton
@@ -94,10 +100,104 @@ impl CallbackKey {
         std::str::from_utf8(&self.data[..self.len]).unwrap_or("")
     }
 
-    /// Create a CallbackKey from a hash value
+    /// Create a CallbackKey from a hash value (for storage-backed actions)
     pub fn from_hash(hash: u64) -> Self {
-        let key_str = format!("cb:{}", hash);
+        let key_str = format!("{}{}", STORAGE_PREFIX, hash);
         Self::new(&key_str).expect("Hash key should always fit in 64 bytes")
+    }
+
+    /// Pack an action into a CallbackKey, using storage if needed.
+    ///
+    /// If the serialized action fits within 64 bytes (with prefix), it's embedded directly.
+    /// Otherwise, it's stored in the provided storage and referenced by a hash key.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let key = CallbackKey::pack(&Action::ShowUser(123), &storage).await;
+    /// InlineKeyboardButton::callback("Show User", key.to_string())
+    /// ```
+    pub fn pack<V, S>(
+        value: &V,
+        storage: &S,
+    ) -> impl std::future::Future<Output = Self> + Send
+    where
+        V: Serialize + for<'de> Deserialize<'de> + Hash + Clone + Send + Sync,
+        S: DataStoreTrait<CallbackKey, V>,
+    {
+        // Serialize the value
+        let serialized = serde_json::to_string(value);
+        let value_clone = value.clone();
+
+        async move {
+            match serialized {
+                Ok(json) => {
+                    let inline_data = format!("{}{}", INLINE_PREFIX, json);
+                    if inline_data.len() <= MAX_CALLBACK_DATA_SIZE {
+                        // Fits inline - embed directly with prefix
+                        Self::new(&inline_data).expect("Already checked length")
+                    } else {
+                        // Too large - store and use hash key
+                        let key = Self::from(&value_clone);
+                        storage.set(&key, value_clone).await;
+                        key
+                    }
+                }
+                Err(_) => {
+                    // Serialization failed, fall back to storage
+                    let key = Self::from(&value_clone);
+                    storage.set(&key, value_clone).await;
+                    key
+                }
+            }
+        }
+    }
+
+    /// Unpack an action from callback data string, using storage if needed.
+    ///
+    /// First checks if the data contains an inline-serialized action (prefix "i:").
+    /// If not (prefix "s:"), looks up the action in storage.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let action: Action = CallbackKey::unpack(&callback_data, &storage).await?;
+    /// ```
+    pub fn unpack<V, S>(
+        data: &str,
+        storage: &S,
+    ) -> impl std::future::Future<Output = Result<V, ActionError>> + Send
+    where
+        V: Serialize + for<'de> Deserialize<'de> + Clone + Send + Sync,
+        S: DataStoreTrait<CallbackKey, V>,
+    {
+        let data = data.to_string();
+
+        async move {
+            if let Some(json) = data.strip_prefix(INLINE_PREFIX) {
+                // Inline data - deserialize directly
+                serde_json::from_str(json)
+                    .map_err(|e| ActionError::DeserializeError(e.to_string()))
+            } else if data.starts_with(STORAGE_PREFIX) {
+                // Storage-backed - look up
+                let key = Self::new(&data)?;
+                storage.get(&key).await.ok_or(ActionError::NotFound)
+            } else {
+                // Legacy format or unknown - try storage lookup
+                let key = Self::new(&data)?;
+                storage.get(&key).await.ok_or(ActionError::NotFound)
+            }
+        }
+    }
+
+    /// Check if this key contains inline data (directly embedded action)
+    pub fn is_inline(&self) -> bool {
+        self.as_str().starts_with(INLINE_PREFIX)
+    }
+
+    /// Check if this key is storage-backed (hash reference)
+    pub fn is_storage_backed(&self) -> bool {
+        self.as_str().starts_with(STORAGE_PREFIX)
     }
 }
 
@@ -175,7 +275,42 @@ mod tests {
     use teloxide::types::UserId;
 
     #[tokio::test]
-    async fn test_packed_value_symmetry() {
+    async fn test_pack_unpack_inline() {
+        // Test that small values are inlined (prefix "i:")
+        let store = Arc::new(InMemStore::<CallbackKey, String>::new());
+        let user_id = UserId(1);
+        let user_store = UserProxy::new(store, user_id);
+        let value = "test".to_string();
+
+        let key = CallbackKey::pack(&value, &user_store).await;
+        assert!(key.is_inline(), "Small value should be inlined");
+
+        let unpacked: String = CallbackKey::unpack(key.as_str(), &user_store)
+            .await
+            .expect("Should unpack");
+        assert_eq!(unpacked, value);
+    }
+
+    #[tokio::test]
+    async fn test_pack_unpack_storage() {
+        // Test that large values use storage (prefix "s:")
+        let store = Arc::new(InMemStore::<CallbackKey, String>::new());
+        let user_id = UserId(1);
+        let user_store = UserProxy::new(store, user_id);
+        let value = "a".repeat(100); // Too large for inline
+
+        let key = CallbackKey::pack(&value, &user_store).await;
+        assert!(key.is_storage_backed(), "Large value should use storage");
+
+        let unpacked: String = CallbackKey::unpack(key.as_str(), &user_store)
+            .await
+            .expect("Should unpack");
+        assert_eq!(unpacked, value);
+    }
+
+    #[tokio::test]
+    async fn test_legacy_callback_key_still_works() {
+        // Test backward compatibility with old callback_key method
         let store = Arc::new(InMemStore::<CallbackKey, String>::new());
         let user_id = UserId(1);
         let user_store = UserProxy::new(store, user_id);
@@ -188,7 +323,7 @@ mod tests {
             teloxide::types::InlineKeyboardButtonKind::CallbackData(data) => data.clone(),
             _ => panic!("Expected CallbackData kind"),
         };
-        assert!(callback_data.starts_with("cb:"));
+        assert!(callback_data.starts_with(STORAGE_PREFIX));
 
         let packed = CallbackKey::new(&callback_data).unwrap();
         let unpacked = user_store.get(&packed).await;
@@ -225,5 +360,16 @@ mod tests {
 
         let too_long_string = "a".repeat(65);
         assert!(CallbackKey::new(&too_long_string).is_err());
+    }
+
+    #[test]
+    fn test_inline_detection() {
+        let inline_key = CallbackKey::new("i:{\"val\":1}").unwrap();
+        assert!(inline_key.is_inline());
+        assert!(!inline_key.is_storage_backed());
+
+        let storage_key = CallbackKey::from_hash(12345);
+        assert!(!storage_key.is_inline());
+        assert!(storage_key.is_storage_backed());
     }
 }
