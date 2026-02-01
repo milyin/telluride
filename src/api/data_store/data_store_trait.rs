@@ -21,6 +21,9 @@ where
 
     /// List all keys in the store for a specific user
     async fn keys(&self, user_id: UserId) -> Vec<String>;
+
+    /// List all users who have stored data in this store
+    async fn users(&self) -> Vec<UserId>;
 }
 
 /// Trait for key-value data storage scoped to a specific user

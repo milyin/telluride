@@ -184,6 +184,26 @@ where
             Err(_) => Vec::new(),
         }
     }
+
+    async fn users(&self) -> Vec<UserId> {
+        match fs::read_dir(&self.storage_dir).await {
+            Ok(mut entries) => {
+                let mut users = Vec::new();
+                while let Ok(Some(entry)) = entries.next_entry().await {
+                    if entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
+                        if let Ok(dir_name) = entry.file_name().into_string() {
+                            let decoded_user_id = decode_filename_to_key(&dir_name);
+                            if let Ok(user_id) = decoded_user_id.parse::<u64>() {
+                                users.push(UserId(user_id));
+                            }
+                        }
+                    }
+                }
+                users
+            }
+            Err(_) => Vec::new(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -385,6 +405,30 @@ mod tests {
         }
 
         // Clean up
+        let _ = fs::remove_dir_all(&temp_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_filesystem_store_users() {
+        let temp_dir = std::env::temp_dir().join("yoroolbot_test_fs_users");
+        let _ = fs::remove_dir_all(&temp_dir).await;
+        let store = FilesystemYamlStore::<TestData>::new(temp_dir.clone());
+
+        let user1 = UserId(111);
+        let user2 = UserId(222);
+        let data = TestData {
+            value: "test".to_string(),
+            count: 1,
+        };
+
+        store.set(user1, "k1", data.clone()).await;
+        store.set(user2, "k2", data.clone()).await;
+
+        let users = store.users().await;
+        assert_eq!(users.len(), 2);
+        assert!(users.contains(&user1));
+        assert!(users.contains(&user2));
+
         let _ = fs::remove_dir_all(&temp_dir).await;
     }
 }

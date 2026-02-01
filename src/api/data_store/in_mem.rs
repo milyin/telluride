@@ -70,6 +70,11 @@ where
             .map(|user_data| user_data.keys().cloned().collect())
             .unwrap_or_default()
     }
+
+    async fn users(&self) -> Vec<UserId> {
+        let data_guard = self.data.lock().await;
+        data_guard.keys().cloned().collect()
+    }
 }
 
 #[cfg(test)]
@@ -148,5 +153,24 @@ mod tests {
         assert_eq!(keys.len(), 2);
         assert!(keys.contains(&"key1".to_string()));
         assert!(keys.contains(&"key2".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_inmem_store_users() {
+        let store = InMemStore::<TestData>::new();
+        let user1 = UserId(111);
+        let user2 = UserId(222);
+        let data = TestData {
+            value: "test".to_string(),
+            count: 1,
+        };
+
+        store.set(user1, "k1", data.clone()).await;
+        store.set(user2, "k2", data.clone()).await;
+
+        let users = store.users().await;
+        assert_eq!(users.len(), 2);
+        assert!(users.contains(&user1));
+        assert!(users.contains(&user2));
     }
 }

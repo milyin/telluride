@@ -21,14 +21,14 @@ enum Command {
     Help,
     #[command(description = "show inline keyboard")]
     Menu,
-    #[command(description = "list your saved messages")]
-    Message,
+    #[command(description = "list saved messages from users")]
+    Messages,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Hash)]
 struct MyCallbackData {
     action: String,
-    value: i32,
+    value: String,
 }
 
 impl std::str::FromStr for MyCallbackData {
@@ -37,7 +37,7 @@ impl std::str::FromStr for MyCallbackData {
         // Fallback for simple string callbacks if needed
         Ok(MyCallbackData {
             action: s.to_string(),
-            value: 0,
+            value: "0".to_string(),
         })
     }
 }
@@ -180,25 +180,37 @@ async fn command_handler(
                 .reply_markup(keyboard)
                 .await?;
         }
-        Command::Message => {
-            let messages = storage.get(user_id, "messages").await.unwrap_or_default();
-            if messages.is_empty() {
+        Command::Messages => {
+            let users = storage.users().await;
+            if users.is_empty() {
                 bot.send_markdown_message(
                     msg.chat.id,
-                    markdown_string!("No messages saved yet\\."),
+                    markdown_string!("No users have saved messages yet\\."),
                 )
                 .await?;
             } else {
-                let list = messages
-                    .iter()
-                    .enumerate()
-                    .map(|(i, m)| format!("{}. {}", i + 1, m))
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                let user_proxy = UserProxy::new(callback_storage.clone(), user_id);
+                let mut buttons = Vec::new();
+                for uid in users {
+                    let label = format!("User {}", uid);
+                    buttons.push(vec![InlineKeyboardButton::callback_packed(
+                        label,
+                        PackedValue::pack(
+                            &MyCallbackData {
+                                action: "show_user".to_string(),
+                                value: uid.to_string(),
+                            },
+                            &user_proxy,
+                        )
+                        .await,
+                    )]);
+                }
+                let keyboard = InlineKeyboardMarkup::new(buttons);
                 bot.send_markdown_message(
                     msg.chat.id,
-                    markdown_format!("Your saved messages:\n{}", list),
+                    markdown_string!("Select a user to see their messages:"),
                 )
+                .reply_markup(keyboard)
                 .await?;
             }
         }
@@ -280,6 +292,7 @@ async fn new_chat_members_handler(bot: Bot, msg: Message, me: Me) -> ResponseRes
 async fn callback_handler(
     bot: Bot,
     q: CallbackQuery,
+    storage: Arc<InMemStore<Vec<String>>>,
     callback_storage: Arc<InMemStore<MyCallbackData>>,
 ) -> ResponseResult<()> {
     // Always answer the callback to remove the "loading" state
@@ -291,21 +304,57 @@ async fn callback_handler(
 
         if let Ok(packed) = PackedValue::new(data_str) {
             if let Some(data) = packed.unpack::<MyCallbackData>(&user_store).await {
-                log::info!(
-                    "Received callback query from {:?}: action={}, value={}",
-                    q.from.id,
-                    data.action,
-                    data.value
-                );
-                let text =
-                    markdown_format!("You pressed: {} with value {}", data.action, data.value);
+                if data.action == "show_user" {
+                    if let Ok(target_uid) = data.value.parse::<u64>() {
+                        let target_user_id = UserId(target_uid);
+                        let messages = storage
+                            .get(target_user_id, "messages")
+                            .await
+                            .unwrap_or_default();
 
-                // Send response - either edit the original message or send a new one
-                if let Some(msg) = q.message {
-                    bot.edit_markdown_message_text(msg.chat().id, msg.id(), text)
-                        .await?;
-                } else if let Some(id) = q.inline_message_id {
-                    bot.edit_markdown_message_text_inline(&id, text).await?;
+                        let text = if messages.is_empty() {
+                            markdown_format!(
+                                "No messages saved for user {}",
+                                target_user_id.0.to_string()
+                            )
+                        } else {
+                            let list = messages
+                                .iter()
+                                .enumerate()
+                                .map(|(i, m)| format!("{}. {}", i + 1, m))
+                                .collect::<Vec<_>>()
+                                .join("\n");
+                            markdown_format!(
+                                "Saved messages for user {}:\n{}",
+                                target_user_id.0.to_string(),
+                                list
+                            )
+                        };
+
+                        if let Some(msg) = q.message {
+                            bot.edit_markdown_message_text(msg.chat().id, msg.id(), text)
+                                .await?;
+                        } else if let Some(id) = q.inline_message_id {
+                            bot.edit_markdown_message_text_inline(&id, text).await?;
+                        }
+                    }
+                } else {
+                    log::info!(
+                        "Received callback query from {:?}: action={}, value={}",
+                        q.from.id,
+                        data.action,
+                        data.value
+                    );
+                    let text =
+                        markdown_format!("You pressed: {} with value {}", data.action, data.value);
+
+                    // Send response - either edit the original message or send a new one
+                    if let Some(msg) = q.message {
+                        bot.edit_markdown_message_text(msg.chat().id, msg.id(), text)
+                            .await?;
+                    } else if let Some(id) = q.inline_message_id {
+                        bot.edit_markdown_message_text_inline(&id, text).await?;
+                    }
                 }
             }
         }
@@ -321,7 +370,7 @@ async fn make_keyboard(store: &dyn UserProxyTrait<MyCallbackData>) -> InlineKeyb
         PackedValue::pack(
             &MyCallbackData {
                 action: "opt1".to_string(),
-                value: 10,
+                value: "10".to_string(),
             },
             store,
         )
@@ -333,7 +382,7 @@ async fn make_keyboard(store: &dyn UserProxyTrait<MyCallbackData>) -> InlineKeyb
         PackedValue::pack(
             &MyCallbackData {
                 action: "opt2".to_string(),
-                value: 20,
+                value: "20".to_string(),
             },
             store,
         )
@@ -345,7 +394,7 @@ async fn make_keyboard(store: &dyn UserProxyTrait<MyCallbackData>) -> InlineKeyb
         PackedValue::pack(
             &MyCallbackData {
                 action: "opt3".to_string(),
-                value: 30,
+                value: "30".to_string(),
             },
             store,
         )
