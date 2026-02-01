@@ -341,10 +341,16 @@ async fn action_handler(
                 .await
                 .unwrap_or_default();
 
+            let user_name = user_registry
+                .get(&target_user_id)
+                .await
+                .map(|u| u.full_name())
+                .unwrap_or_else(|| target_user_id.0.to_string());
+
             let text = if messages.is_empty() {
                 markdown_format!(
                     "No messages saved for user {}",
-                    target_user_id.0.to_string()
+                    user_name
                 )
             } else {
                 let list = messages
@@ -355,7 +361,7 @@ async fn action_handler(
                     .join("\n");
                 markdown_format!(
                     "Saved messages for user {}:\n{}",
-                    target_user_id.0.to_string(),
+                    user_name,
                     list
                 )
             };

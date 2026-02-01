@@ -221,20 +221,15 @@ impl CallbackKey {
         let data = data.to_string();
 
         async move {
-            if data.starts_with(INLINE_PREFIX) {
-                // Inline data - decode from percent-encoding to get raw bytes
-                let encoded = &data[INLINE_PREFIX.len()..];
-                let decoded = percent_decode_bytes(encoded);
-                
-                // The first part is the prefix, skip it and get the actual bitcode data
-                if decoded.starts_with(INLINE_PREFIX.as_bytes()) {
-                    let bitcode_data = &decoded[INLINE_PREFIX.len()..];
-                    bitcode::decode(bitcode_data)
-                        .map_err(|e| UnpackError::DeserializeError(e.to_string()))
-                } else {
-                    Err(UnpackError::InvalidKey("Missing inline prefix in decoded data".to_string()))
-                }
-            } else if data.starts_with(STORAGE_PREFIX) {
+            // Decode from percent-encoding to get raw bytes
+            let decoded = percent_decode_bytes(&data);
+            
+            if decoded.starts_with(INLINE_PREFIX.as_bytes()) {
+                // Inline data - skip the prefix and decode the bitcode
+                let bitcode_data = &decoded[INLINE_PREFIX.len()..];
+                bitcode::decode(bitcode_data)
+                    .map_err(|e| UnpackError::DeserializeError(e.to_string()))
+            } else if decoded.starts_with(STORAGE_PREFIX.as_bytes()) {
                 // Storage-backed - look up
                 let key = Self::new(&data)?;
                 storage.get(&key).await.ok_or(UnpackError::NotFound)
