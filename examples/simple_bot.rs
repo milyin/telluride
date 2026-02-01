@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use telluride::{
     command::{InlineKeyboardButtonPackedExt, PackedValue},
-    data_store::{DataStoreTrait, InMemStore, UserProxy},
+    data_store::{InMemStore, UserDataStoreTrait, UserProxy},
     markdown::MarkdownStringMessage,
     markdown_format, markdown_string,
 };

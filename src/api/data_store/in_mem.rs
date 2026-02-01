@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use teloxide::types::UserId;
 use tokio::sync::Mutex;
 
-use crate::api::data_store::data_store_trait::DataStoreTrait;
+use crate::api::data_store::data_store_trait::UserDataStoreTrait;
 
 /// In-memory data store implementation using HashMap
 /// Organizes data per-chat with nested HashMaps
@@ -38,7 +38,7 @@ where
 }
 
 #[async_trait::async_trait]
-impl<V> DataStoreTrait<V> for InMemStore<V>
+impl<V> UserDataStoreTrait<V> for InMemStore<V>
 where
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
 {

@@ -6,7 +6,7 @@ use teloxide::types::UserId;
 /// Trait for key-value data storage with serializable values
 /// Storage is organized per-chat, with each chat having its own key-value namespace
 #[async_trait::async_trait]
-pub trait DataStoreTrait<V>: Send + Sync
+pub trait UserDataStoreTrait<V>: Send + Sync
 where
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
 {
@@ -28,7 +28,7 @@ where
 
 /// Trait for key-value data storage scoped to a specific user
 #[async_trait::async_trait]
-pub trait UserProxyTrait<V>: Send + Sync
+pub trait DataStoreTrait<V>: Send + Sync
 where
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
 {
@@ -43,7 +43,7 @@ pub struct UserProxy<V>
 where
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
 {
-    store: Arc<dyn DataStoreTrait<V>>,
+    store: Arc<dyn UserDataStoreTrait<V>>,
     user_id: UserId,
 }
 
@@ -51,13 +51,13 @@ impl<V> UserProxy<V>
 where
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
 {
-    pub fn new(store: Arc<dyn DataStoreTrait<V>>, user_id: UserId) -> Self {
+    pub fn new(store: Arc<dyn UserDataStoreTrait<V>>, user_id: UserId) -> Self {
         Self { store, user_id }
     }
 }
 
 #[async_trait::async_trait]
-impl<V> UserProxyTrait<V> for UserProxy<V>
+impl<V> DataStoreTrait<V> for UserProxy<V>
 where
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
 {

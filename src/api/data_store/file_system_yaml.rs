@@ -5,7 +5,7 @@ use teloxide::types::UserId;
 use tokio::{fs, sync::Mutex};
 
 use crate::api::data_store::{
-    data_store_trait::DataStoreTrait,
+    data_store_trait::UserDataStoreTrait,
     util::{decode_filename_to_key, encode_key_to_filename},
 };
 
@@ -116,7 +116,7 @@ where
 }
 
 #[async_trait::async_trait]
-impl<V> DataStoreTrait<V> for FilesystemYamlStore<V>
+impl<V> UserDataStoreTrait<V> for FilesystemYamlStore<V>
 where
     V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
 {

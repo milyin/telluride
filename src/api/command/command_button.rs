@@ -7,7 +7,7 @@ use std::{
 
 use teloxide::types::InlineKeyboardButton;
 
-use crate::api::data_store::data_store_trait::UserProxyTrait;
+use crate::api::data_store::data_store_trait::DataStoreTrait;
 
 use serde::{Deserialize, Serialize};
 
@@ -42,7 +42,7 @@ impl PackedValue {
     }
 
     /// Pack a value into a PackedValue by storing it in the given store and returning its hash-based reference
-    pub async fn pack<V>(value: &V, store: &dyn UserProxyTrait<V>) -> Self
+    pub async fn pack<V>(value: &V, store: &dyn DataStoreTrait<V>) -> Self
     where
         V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Hash,
     {
@@ -57,7 +57,7 @@ impl PackedValue {
     }
 
     /// Unpack the value from the store using this reference
-    pub async fn unpack<V>(&self, store: &dyn UserProxyTrait<V>) -> Option<V>
+    pub async fn unpack<V>(&self, store: &dyn DataStoreTrait<V>) -> Option<V>
     where
         V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
     {
@@ -104,7 +104,7 @@ impl InlineKeyboardButtonPackedExt for InlineKeyboardButton {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::data_store::data_store_trait::{UserProxy, UserProxyTrait};
+    use crate::api::data_store::data_store_trait::{DataStoreTrait, UserProxy};
     use crate::api::data_store::in_mem::InMemStore;
     use std::sync::Arc;
     use teloxide::types::UserId;
