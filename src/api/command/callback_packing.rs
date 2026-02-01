@@ -159,11 +159,11 @@ impl CallbackKey {
     /// # Example
     ///
     /// ```ignore
-    /// let key = CallbackKey::pack(&Action::ShowUser(123), &storage).await;
+    /// let key = CallbackKey::pack(Action::ShowUser(123), &storage).await;
     /// InlineKeyboardButton::callback("Show User", key.to_string())
     /// ```
     pub fn pack<V, S>(
-        value: &V,
+        value: V,
         storage: &S,
     ) -> impl std::future::Future<Output = Self> + Send
     where
@@ -171,8 +171,7 @@ impl CallbackKey {
         S: DataStoreTrait<CallbackKey, V> + ?Sized,
     {
         // Serialize the value
-        let serialized = bitcode::encode(value);
-        let value_clone = value.clone();
+        let serialized = bitcode::encode(&value);
 
         async move {
             // Combine prefix and serialized data as bytes
@@ -187,15 +186,15 @@ impl CallbackKey {
                     Ok(key) => key,
                     Err(_) => {
                         // Encoding made it too large - store instead
-                        let key = Self::from(&value_clone);
-                        storage.set(&key, value_clone).await;
+                        let key = Self::from(&value);
+                        storage.set(&key, value).await;
                         key
                     }
                 }
             } else {
                 // Too large - store and use hash key
-                let key = Self::from(&value_clone);
-                storage.set(&key, value_clone).await;
+                let key = Self::from(&value);
+                storage.set(&key, value).await;
                 key
             }
         }
