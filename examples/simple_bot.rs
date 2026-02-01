@@ -10,7 +10,6 @@ use teloxide::{
     types::{InlineKeyboardButton, InlineKeyboardMarkup, Me, User},
     utils::command::BotCommands,
 };
-use serde::{Deserialize, Serialize};
 
 #[derive(BotCommands, Clone, Debug)]
 #[command(rename_rule = "lowercase", description = "Supported commands:")]
@@ -25,7 +24,7 @@ enum Command {
 
 /// Application-specific Action enum for callback handling.
 /// Uses CallbackKey::pack/unpack for smart serialization.
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize, bitcode::Encode, bitcode::Decode)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, bitcode::Encode, bitcode::Decode)]
 enum Action {
     ShowUser(u64),
 }

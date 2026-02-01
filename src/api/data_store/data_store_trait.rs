@@ -1,7 +1,6 @@
 use std::hash::Hash;
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
 use teloxide::types::UserId;
 
 /// Trait for key-value data storage with serializable values
@@ -9,8 +8,8 @@ use teloxide::types::UserId;
 #[async_trait::async_trait]
 pub trait UserDataStoreTrait<K, V>: Send + Sync
 where
-    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash,
-    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
+    K: Send + Sync + Clone + Eq + Hash,
+    V: Send + Sync + Clone,
 {
     /// Get a value by key for a specific user
     async fn get(&self, user_id: UserId, key: &K) -> Option<V>;
@@ -32,8 +31,8 @@ where
 impl<K, V, T> UserDataStoreTrait<K, V> for Arc<T>
 where
     T: UserDataStoreTrait<K, V> + Send + Sync + ?Sized,
-    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash + 'static,
-    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
+    K: Send + Sync + Clone + Eq + Hash + 'static,
+    V: Send + Sync + Clone + 'static,
 {
     async fn get(&self, user_id: UserId, key: &K) -> Option<V> {
         (**self).get(user_id, key).await
@@ -60,8 +59,8 @@ where
 #[async_trait::async_trait]
 pub trait DataStoreTrait<K, V>: Send + Sync
 where
-    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash,
-    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
+    K: Send + Sync + Clone + Eq + Hash,
+    V: Send + Sync + Clone,
 {
     async fn get(&self, key: &K) -> Option<V>;
     async fn set(&self, key: &K, value: V);
@@ -85,8 +84,8 @@ impl<S> UserProxy<S> {
 #[async_trait::async_trait]
 impl<K, V, S> DataStoreTrait<K, V> for UserProxy<S>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash + 'static,
-    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
+    K: Send + Sync + Clone + Eq + Hash + 'static,
+    V: Send + Sync + Clone + 'static,
     S: UserDataStoreTrait<K, V>,
 {
     async fn get(&self, key: &K) -> Option<V> {
@@ -121,8 +120,8 @@ impl<S> CommonProxy<S> {
 #[async_trait::async_trait]
 impl<K, V, S> DataStoreTrait<K, V> for CommonProxy<S>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash + 'static,
-    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + 'static,
+    K: Send + Sync + Clone + Eq + Hash + 'static,
+    V: Send + Sync + Clone + 'static,
     S: UserDataStoreTrait<K, V>,
 {
     async fn get(&self, key: &K) -> Option<V> {

@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use teloxide::types::InlineKeyboardButton;
 
@@ -15,7 +14,7 @@ pub trait InlineKeyboardButtonPackedExt {
         storage: &dyn DataStoreTrait<CallbackKey, V>,
     ) -> InlineKeyboardButton
     where
-        V: Serialize + for<'de> Deserialize<'de> + bitcode::Encode + for<'a> bitcode::Decode<'a> + Send + Sync + Clone + std::hash::Hash;
+        V: bitcode::Encode + for<'a> bitcode::Decode<'a> + Send + Sync + Clone + std::hash::Hash;
 }
 
 #[async_trait::async_trait]
@@ -26,7 +25,7 @@ impl InlineKeyboardButtonPackedExt for InlineKeyboardButton {
         storage: &dyn DataStoreTrait<CallbackKey, V>,
     ) -> InlineKeyboardButton
     where
-        V: Serialize + for<'de> Deserialize<'de> + bitcode::Encode + for<'a> bitcode::Decode<'a> + Send + Sync + Clone + Hash,
+        V: bitcode::Encode + for<'a> bitcode::Decode<'a> + Send + Sync + Clone + Hash,
     {
         let key = CallbackKey::pack(value, storage).await;
         InlineKeyboardButton::callback(text, key.to_string())

@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use serde::{Deserialize, Serialize};
 use teloxide::types::UserId;
 use tokio::sync::Mutex;
 
@@ -11,8 +10,8 @@ use crate::api::data_store::data_store_trait::UserDataStoreTrait;
 /// Organizes data per-chat with nested HashMaps
 pub struct InMemStore<K, V>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash,
-    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
+    K: Send + Sync + Clone + Eq + Hash,
+    V: Send + Sync + Clone,
 {
     // Outer map: UserId -> Inner map: Key -> Value
     data: Mutex<HashMap<UserId, HashMap<K, V>>>,
@@ -20,8 +19,8 @@ where
 
 impl<K, V> InMemStore<K, V>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash,
-    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
+    K: Send + Sync + Clone + Eq + Hash,
+    V: Send + Sync + Clone,
 {
     pub fn new() -> Self {
         Self {
@@ -32,8 +31,8 @@ where
 
 impl<K, V> Default for InMemStore<K, V>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash,
-    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
+    K: Send + Sync + Clone + Eq + Hash,
+    V: Send + Sync + Clone,
 {
     fn default() -> Self {
         Self::new()
@@ -43,8 +42,8 @@ where
 #[async_trait::async_trait]
 impl<K, V> UserDataStoreTrait<K, V> for InMemStore<K, V>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + Eq + Hash,
-    V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
+    K: Send + Sync + Clone + Eq + Hash,
+    V: Send + Sync + Clone,
 {
     async fn get(&self, user_id: UserId, key: &K) -> Option<V> {
         let data_guard = self.data.lock().await;

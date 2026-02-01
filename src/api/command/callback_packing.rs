@@ -1,5 +1,4 @@
 use std::{fmt::Display, hash::{Hash, Hasher}, str::FromStr};
-use serde::{Deserialize, Serialize};
 use percent_encoding::{AsciiSet, CONTROLS};
 
 use crate::api::data_store::data_store_trait::DataStoreTrait;
@@ -168,7 +167,7 @@ impl CallbackKey {
         storage: &S,
     ) -> impl std::future::Future<Output = Self> + Send
     where
-        V: Serialize + for<'de> Deserialize<'de> + bitcode::Encode + for<'a> bitcode::Decode<'a> + Hash + Clone + Send + Sync,
+        V: bitcode::Encode + for<'a> bitcode::Decode<'a> + Hash + Clone + Send + Sync,
         S: DataStoreTrait<CallbackKey, V> + ?Sized,
     {
         // Serialize the value
@@ -217,7 +216,7 @@ impl CallbackKey {
         storage: &S,
     ) -> impl std::future::Future<Output = Result<V, UnpackError>> + Send
     where
-        V: Serialize + for<'de> Deserialize<'de> + for<'a> bitcode::Decode<'a> + Clone + Send + Sync,
+        V: for<'a> bitcode::Decode<'a> + Clone + Send + Sync,
         S: DataStoreTrait<CallbackKey, V> + ?Sized,
     {
         let data = data.to_string();
