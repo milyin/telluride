@@ -327,10 +327,10 @@ async fn callback_handler(
 
     if let Some(data_str) = &q.data {
         let user_id = q.from.id;
-        let user_store = UserProxy::new(callback_storage.clone(), user_id);
+        let callback_storage = UserProxy::new(callback_storage.clone(), user_id);
 
         if let Ok(packed) = CallbackKey::new(data_str) {
-            if let Some(data) = packed.unpack::<MyCallbackData>(&user_store).await {
+            if let Some(data) = callback_storage.get(&packed).await {
                 if data.action == "show_user" {
                     if let Ok(target_uid) = data.value.parse::<u64>() {
                         let target_user_id = UserId(target_uid);

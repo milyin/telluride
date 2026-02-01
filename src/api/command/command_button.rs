@@ -99,14 +99,6 @@ impl CallbackKey {
         let key_str = format!("cb:{}", hash);
         Self::new(&key_str).expect("Hash key should always fit in 64 bytes")
     }
-
-    /// Unpack the value from the store using this reference
-    pub async fn unpack<V>(&self, store: &dyn DataStoreTrait<Self, V>) -> Option<V>
-    where
-        V: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone,
-    {
-        store.get(self).await
-    }
 }
 
 impl Display for CallbackKey {
@@ -199,7 +191,7 @@ mod tests {
         assert!(callback_data.starts_with("cb:"));
 
         let packed = CallbackKey::new(&callback_data).unwrap();
-        let unpacked = packed.unpack::<String>(&user_store).await;
+        let unpacked = user_store.get(&packed).await;
         assert_eq!(unpacked, Some(value));
     }
 
