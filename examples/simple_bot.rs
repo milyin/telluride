@@ -208,9 +208,9 @@ async fn command_handler(
                 for uid in user_ids {
                     if let Some(u) = user_registry.get(&uid).await {
                         let label = format!("User {}", u.full_name());
-                        buttons.push(vec![InlineKeyboardButton::callback_key(
-                            label,
-                            CallbackKey::pack(
+                        buttons.push(vec![
+                            InlineKeyboardButton::callback_key(
+                                label,
                                 &MyCallbackData {
                                     action: "show_user".to_string(),
                                     value: uid.to_string(),
@@ -218,7 +218,7 @@ async fn command_handler(
                                 &user_proxy,
                             )
                             .await,
-                        )]);
+                        ]);
                     }
                 }
                 let keyboard = InlineKeyboardMarkup::new(buttons);
