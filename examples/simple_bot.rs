@@ -30,6 +30,9 @@ enum Action {
     Back,
 }
 
+// Just implement CallbackBitcode to get automatic bitcode encoding
+impl telluride::command::CallbackBitcode for Action {}
+
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();

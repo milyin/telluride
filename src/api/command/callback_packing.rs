@@ -4,6 +4,88 @@ use percent_encoding::{AsciiSet, CONTROLS};
 use crate::api::data_store::data_store_trait::DataStoreTrait;
 use super::callback_errors::UnpackError;
 
+/// Trait for types that can be encoded/decoded to/from CallbackKey.
+/// This trait abstracts the encoding mechanism used for callback data.
+/// 
+/// Most types should implement `CallbackBitcode` instead, which provides default
+/// bitcode-based encoding. Implement this trait directly only when you need
+/// completely custom encoding logic.
+pub trait CallbackEncode: Hash + Clone + Send + Sync {
+    /// Encode the value into bytes
+    fn encode_callback(&self) -> Vec<u8>;
+    
+    /// Decode the value from bytes
+    fn decode_callback(bytes: &[u8]) -> Result<Self, String>
+    where
+        Self: Sized;
+    
+    /// Returns true if encoding should be bypassed for this instance.
+    /// This is useful for large instances where inline encoding would be inefficient.
+    /// Default implementation returns false.
+    fn bypass_encoding(&self) -> bool {
+        false
+    }
+}
+
+/// Trait for types that want to use bitcode encoding with CallbackKey.
+/// Provides default implementations for encoding and decoding.
+/// 
+/// To use bitcode encoding for your type, simply implement this trait with an empty body:
+/// 
+/// ```ignore
+/// #[derive(Clone, Hash, bitcode::Encode, bitcode::Decode)]
+/// struct MyAction { ... }
+/// 
+/// impl CallbackBitcode for MyAction {}
+/// ```
+/// 
+/// This will automatically implement `CallbackEncode` using bitcode.
+/// You can override `encode_callback`, `decode_callback`, or `bypass_encoding` if needed.
+pub trait CallbackBitcode: bitcode::Encode + for<'a> bitcode::Decode<'a> + Hash + Clone + Send + Sync {
+    /// Encode the value using bitcode.
+    /// Override this method to customize encoding behavior.
+    fn encode_callback(&self) -> Vec<u8> {
+        bitcode::encode(self)
+    }
+    
+    /// Decode the value using bitcode.
+    /// Override this method to customize decoding behavior.
+    fn decode_callback(bytes: &[u8]) -> Result<Self, String>
+    where
+        Self: Sized,
+    {
+        bitcode::decode(bytes).map_err(|e| e.to_string())
+    }
+    
+    /// Returns true if encoding should be bypassed for this instance.
+    /// Override this method to implement custom bypass logic.
+    fn bypass_encoding(&self) -> bool {
+        false
+    }
+}
+
+/// Blanket implementation of CallbackEncode for types that implement CallbackBitcode.
+/// This allows types to opt-in to bitcode encoding by implementing CallbackBitcode.
+impl<T> CallbackEncode for T
+where
+    T: CallbackBitcode,
+{
+    fn encode_callback(&self) -> Vec<u8> {
+        <T as CallbackBitcode>::encode_callback(self)
+    }
+    
+    fn decode_callback(bytes: &[u8]) -> Result<Self, String>
+    where
+        Self: Sized,
+    {
+        <T as CallbackBitcode>::decode_callback(bytes)
+    }
+    
+    fn bypass_encoding(&self) -> bool {
+        <T as CallbackBitcode>::bypass_encoding(self)
+    }
+}
+
 // Minimal encoding set - only encode control characters and percent itself
 // This allows most UTF-8 characters to pass through unchanged for maximum compactness
 const MINIMAL_ENCODE: &AsciiSet = &CONTROLS.add(b'%');
@@ -156,6 +238,9 @@ impl CallbackKey {
     /// If the serialized value fits within 64 bytes (with prefix), it's embedded directly.
     /// Otherwise, it's stored in the provided storage and referenced by a hash key.
     ///
+    /// If the value's `bypass_encoding()` method returns true,
+    /// encoding is skipped and the value is stored directly.
+    ///
     /// # Example
     ///
     /// ```ignore
@@ -167,13 +252,23 @@ impl CallbackKey {
         storage: &S,
     ) -> impl std::future::Future<Output = Self> + Send
     where
-        V: bitcode::Encode + for<'a> bitcode::Decode<'a> + Hash + Clone + Send + Sync,
+        V: CallbackEncode,
         S: DataStoreTrait<CallbackKey, V> + ?Sized,
     {
+        // Check if encoding should be bypassed
+        let should_bypass = value.bypass_encoding();
+        
         // Serialize the value
-        let serialized = bitcode::encode(&value);
+        let serialized = value.encode_callback();
 
         async move {
+            // If bypass_encoding returns true, skip inline encoding and go straight to storage
+            if should_bypass {
+                let key = Self::from(&value);
+                storage.set(&key, value).await;
+                return key;
+            }
+            
             // Combine prefix and serialized data as bytes
             let mut inline_data = Vec::with_capacity(INLINE_PREFIX.len() + serialized.len());
             inline_data.extend_from_slice(INLINE_PREFIX.as_bytes());
@@ -215,7 +310,7 @@ impl CallbackKey {
         storage: &S,
     ) -> impl std::future::Future<Output = Result<V, UnpackError>> + Send
     where
-        V: for<'a> bitcode::Decode<'a> + Clone + Send + Sync,
+        V: CallbackEncode,
         S: DataStoreTrait<CallbackKey, V> + ?Sized,
     {
         let data = data.to_string();
@@ -225,10 +320,10 @@ impl CallbackKey {
             let decoded = percent_decode_bytes(&data);
             
             if decoded.starts_with(INLINE_PREFIX.as_bytes()) {
-                // Inline data - skip the prefix and decode the bitcode
-                let bitcode_data = &decoded[INLINE_PREFIX.len()..];
-                bitcode::decode(bitcode_data)
-                    .map_err(|e| UnpackError::DeserializeError(e.to_string()))
+                // Inline data - skip the prefix and decode using the trait
+                let encoded_data = &decoded[INLINE_PREFIX.len()..];
+                V::decode_callback(encoded_data)
+                    .map_err(|e| UnpackError::DeserializeError(e))
             } else if decoded.starts_with(STORAGE_PREFIX.as_bytes()) {
                 // Storage-backed - look up
                 let key = Self::new(&data)?;
@@ -251,5 +346,82 @@ where
         value.hash(&mut hasher);
         let hash = hasher.finish();
         Self::from_hash(hash)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::data_store::in_mem::InMemStore;
+    use crate::api::data_store::data_store_trait::UserProxy;
+    use std::sync::Arc;
+    use teloxide::types::UserId;
+
+    /// Test type that implements CallbackBitcode with custom encoding override
+    #[derive(Debug, Clone, Hash, PartialEq, bitcode::Encode, bitcode::Decode)]
+    struct CustomBitcodeType {
+        value: u32,
+    }
+
+    /// Custom implementation that overrides default methods
+    impl CallbackBitcode for CustomBitcodeType {
+        fn encode_callback(&self) -> Vec<u8> {
+            // Custom encoding: prefix with magic bytes
+            let mut encoded = vec![0xCA, 0xFE]; // Magic prefix
+            encoded.extend_from_slice(&bitcode::encode(self));
+            encoded
+        }
+
+        fn decode_callback(bytes: &[u8]) -> Result<Self, String> {
+            // Check for magic prefix
+            if bytes.len() < 2 || &bytes[0..2] != [0xCA, 0xFE] {
+                return Err("Missing magic prefix".to_string());
+            }
+            // Decode the rest with bitcode
+            bitcode::decode(&bytes[2..]).map_err(|e| e.to_string())
+        }
+
+        fn bypass_encoding(&self) -> bool {
+            // Custom bypass logic: bypass if value is large
+            self.value > 1000
+        }
+    }
+
+    #[tokio::test]
+    async fn test_custom_callback_encode_for_bitcode_type() {
+        let storage = Arc::new(InMemStore::new());
+        let user_id = UserId(123);
+        let user_store = UserProxy::new(storage, user_id);
+
+        // Small value - should be inlined with custom encoding
+        let small_value = CustomBitcodeType { value: 42 };
+        let key = CallbackKey::pack(small_value.clone(), &user_store).await;
+        
+        assert!(key.is_inline(), "Small value should be inlined");
+        
+        let unpacked = CallbackKey::unpack::<CustomBitcodeType, _>(key.as_str(), &user_store)
+            .await
+            .expect("Should unpack");
+        
+        assert_eq!(unpacked, small_value);
+    }
+
+    #[tokio::test]
+    async fn test_custom_bypass_encoding_for_bitcode_type() {
+        let storage = Arc::new(InMemStore::new());
+        let user_id = UserId(123);
+        let user_store = UserProxy::new(storage, user_id);
+
+        // Large value - should bypass encoding due to custom logic
+        let large_value = CustomBitcodeType { value: 2000 };
+        let key = CallbackKey::pack(large_value.clone(), &user_store).await;
+        
+        assert!(key.is_storage_backed(), "Large value should be stored, not inlined");
+        
+        let unpacked = CallbackKey::unpack::<CustomBitcodeType, _>(key.as_str(), &user_store)
+            .await
+            .expect("Should unpack");
+        
+        assert_eq!(unpacked, large_value);
     }
 }
