@@ -143,11 +143,11 @@ impl From<CallbackKey> for String {
 /// Extension trait for InlineKeyboardButton to support packed (stored) callback data
 pub trait InlineKeyboardButtonPackedExt {
     /// Create a callback button from a CallbackKey
-    fn callback_packed(text: impl Into<String>, packed: CallbackKey) -> InlineKeyboardButton;
+    fn callback_key(text: impl Into<String>, packed: CallbackKey) -> InlineKeyboardButton;
 }
 
 impl InlineKeyboardButtonPackedExt for InlineKeyboardButton {
-    fn callback_packed(text: impl Into<String>, packed: CallbackKey) -> InlineKeyboardButton {
+    fn callback_key(text: impl Into<String>, packed: CallbackKey) -> InlineKeyboardButton {
         InlineKeyboardButton::callback(text, packed.to_string())
     }
 }

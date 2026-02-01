@@ -208,7 +208,7 @@ async fn command_handler(
                 for uid in user_ids {
                     if let Some(u) = user_registry.get(&uid).await {
                         let label = format!("User {}", u.full_name());
-                        buttons.push(vec![InlineKeyboardButton::callback_packed(
+                        buttons.push(vec![InlineKeyboardButton::callback_key(
                             label,
                             CallbackKey::pack(
                                 &MyCallbackData {
