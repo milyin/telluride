@@ -1,9 +1,13 @@
 use std::{fmt::Display, hash::{Hash, Hasher}, str::FromStr};
 use serde::{Deserialize, Serialize};
-use percent_encoding::{utf8_percent_encode, percent_decode_str, NON_ALPHANUMERIC};
+use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode, percent_decode_str};
 
 use crate::api::data_store::data_store_trait::DataStoreTrait;
 use super::callback_errors::UnpackError;
+
+// Minimal encoding set - only encode control characters and percent itself
+// This allows most UTF-8 characters to pass through unchanged for maximum compactness
+const MINIMAL_ENCODE: &AsciiSet = &CONTROLS.add(b'%');
 
 /// Prefix used for inline (directly embedded) callback data
 const INLINE_PREFIX: &str = "i:";
@@ -162,17 +166,13 @@ impl CallbackKey {
         let value_clone = value.clone();
 
         async move {
-            let mut inline_data = Vec::with_capacity(INLINE_PREFIX.len() + serialized.len());
-            inline_data.extend_from_slice(INLINE_PREFIX.as_bytes());
-            inline_data.extend_from_slice(&serialized);
+            // Try to interpret bitcode as UTF-8 - most bytes will be valid
+            let as_utf8 = String::from_utf8_lossy(&serialized);
+            let with_prefix = format!("{}{}", INLINE_PREFIX, as_utf8);
             
-            if inline_data.len() <= MAX_CALLBACK_DATA_SIZE {
-                // Fits inline - embed directly with prefix
-                // Use percent-encoding for compactness (only encodes non-alphanumeric)
-                let encoded = utf8_percent_encode(
-                    std::str::from_utf8(&inline_data).unwrap_or(""),
-                    NON_ALPHANUMERIC
-                ).to_string();
+            if with_prefix.len() <= MAX_CALLBACK_DATA_SIZE {
+                // Fits inline - use minimal percent-encoding only for control chars
+                let encoded = utf8_percent_encode(&with_prefix, MINIMAL_ENCODE).to_string();
                 match Self::new(&encoded) {
                     Ok(key) => key,
                     Err(_) => {
