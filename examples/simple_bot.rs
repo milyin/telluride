@@ -116,7 +116,7 @@ async fn main() {
     // - Update::filter_chat_member()       - Other chat member status changes
     // - Update::filter_chat_join_request() - Join request updates
 
-    let storage = Arc::new(InMemStore::<String, Vec<String>>::new());
+    let message_storage = Arc::new(InMemStore::<String, Vec<String>>::new());
     // Use in-memory storage for global user registry
     // It will use UserId(0) as namespace in InMemStore
     let global_user_storage: Arc<dyn DataStoreTrait<UserId, User>> =
@@ -128,7 +128,7 @@ async fn main() {
     Dispatcher::builder(bot, handler)
         .dependencies(dptree::deps![
             me,
-            storage,
+            message_storage,
             callback_storage,
             global_user_storage
         ])
@@ -200,13 +200,12 @@ async fn command_handler(
                 )
                 .await?;
             } else {
-                let user_proxy = UserProxy::new(callback_storage.clone(), user_id);
+                let callback_storage = UserProxy::new(callback_storage.clone(), user_id);
                 let mut buttons = Vec::new();
                 for uid in user_ids {
                     if let Some(u) = user_registry.get(&uid).await {
                         let label = format!("User {}", u.full_name());
-                        // Use CallbackKey::pack for smart inline/storage routing
-                        let key = CallbackKey::pack(&Action::ShowUser(uid.0), &user_proxy).await;
+                        let key = CallbackKey::pack(&Action::ShowUser(uid.0), &callback_storage).await;
                         buttons.push(vec![
                             InlineKeyboardButton::callback(label, key.to_string()),
                         ]);
