@@ -7,7 +7,7 @@ use telluride::{
 };
 use teloxide::{
     prelude::*,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup, Me, User},
+    types::{InlineKeyboardButton, InlineKeyboardMarkup, Me, MessageId, User},
     utils::command::BotCommands,
 };
 
@@ -27,6 +27,7 @@ enum Command {
 #[derive(Clone, Debug, Hash, PartialEq, Eq, bitcode::Encode, bitcode::Decode)]
 enum Action {
     ShowUser(u64),
+    Back,
 }
 
 #[tokio::main]
@@ -192,32 +193,59 @@ async fn command_handler(
             .await?;
         }
         Command::Messages => {
-            let user_ids = user_registry.keys().await;
-            if user_ids.is_empty() {
-                bot.send_markdown_message(
-                    msg.chat.id,
-                    markdown_string!("No users have registered yet\\."),
-                )
-                .await?;
-            } else {
-                let callback_storage = UserProxy::new(callback_storage.clone(), user_id);
-                let mut buttons = Vec::new();
-                for uid in user_ids {
-                    if let Some(u) = user_registry.get(&uid).await {
-                        let label = format!("User {}", u.full_name());
-                        let key = CallbackKey::pack(Action::ShowUser(uid.0), &callback_storage).await;
-                        let button = InlineKeyboardButton::callback_key(label, &key);
-                        buttons.push(vec![button]);
-                    }
-                }
-                let keyboard = InlineKeyboardMarkup::new(buttons);
-                bot.send_markdown_message(
-                    msg.chat.id,
-                    markdown_string!("Select a user to see their messages:"),
-                )
+            show_user_selection(
+                &bot,
+                msg.chat.id,
+                None,
+                user_id,
+                callback_storage.clone(),
+                user_registry.clone(),
+            )
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+/// Show user selection menu with inline keyboard
+async fn show_user_selection(
+    bot: &Bot,
+    chat_id: ChatId,
+    message_id: Option<MessageId>,
+    user_id: UserId,
+    callback_storage: Arc<InMemStore<CallbackKey, Action>>,
+    user_registry: Arc<dyn DataStoreTrait<UserId, User>>,
+) -> ResponseResult<()> {
+    let user_ids = user_registry.keys().await;
+    if user_ids.is_empty() {
+        let text = markdown_string!("No users have registered yet\\.");
+        if let Some(msg_id) = message_id {
+            bot.edit_markdown_message_text(chat_id, msg_id, text).await?;
+        } else {
+            bot.send_markdown_message(chat_id, text).await?;
+        }
+    } else {
+        let callback_storage = UserProxy::new(callback_storage.clone(), user_id);
+        let mut buttons = Vec::new();
+        for uid in user_ids {
+            if let Some(u) = user_registry.get(&uid).await {
+                let label = format!("User {}", u.full_name());
+                let key = CallbackKey::pack(Action::ShowUser(uid.0), &callback_storage).await;
+                let button = InlineKeyboardButton::callback_key(label, &key);
+                buttons.push(vec![button]);
+            }
+        }
+        let keyboard = InlineKeyboardMarkup::new(buttons);
+        let text = markdown_string!("Select a user to see their messages:");
+        
+        if let Some(msg_id) = message_id {
+            bot.edit_markdown_message_text(chat_id, msg_id, text)
                 .reply_markup(keyboard)
                 .await?;
-            }
+        } else {
+            bot.send_markdown_message(chat_id, text)
+                .reply_markup(keyboard)
+                .await?;
         }
     }
     Ok(())
@@ -366,11 +394,32 @@ async fn action_handler(
                 )
             };
 
+            // Add back button
+            let user_proxy = UserProxy::new(callback_storage.clone(), q.from.id);
+            let back_key = CallbackKey::pack(Action::Back, &user_proxy).await;
+            let back_button = InlineKeyboardButton::callback_key("← Back", &back_key);
+            let keyboard = InlineKeyboardMarkup::new(vec![vec![back_button]]);
+
             if let Some(msg) = q.message {
                 bot.edit_markdown_message_text(msg.chat().id, msg.id(), text)
+                    .reply_markup(keyboard)
                     .await?;
             } else if let Some(id) = q.inline_message_id {
                 bot.edit_markdown_message_text_inline(&id, text).await?;
+            }
+        }
+        Action::Back => {
+            // Return to user selection
+            if let Some(msg) = q.message {
+                show_user_selection(
+                    &bot,
+                    msg.chat().id,
+                    Some(msg.id()),
+                    q.from.id,
+                    callback_storage.clone(),
+                    user_registry.clone(),
+                )
+                .await?;
             }
         }
     }
