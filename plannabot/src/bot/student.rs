@@ -1,4 +1,4 @@
-use super::Command;
+use super::CommonCommand;
 use crate::models::Student;
 use crate::state::BotState;
 use anyhow::Result;
@@ -11,12 +11,12 @@ use teloxide::prelude::*;
 pub async fn handle_command(
     bot: &Bot,
     msg: &Message,
-    cmd: &Command,
+    cmd: &CommonCommand,
     student: &Student,
     state: &Arc<BotState>,
 ) -> Result<()> {
     match cmd {
-        Command::Start => {
+        CommonCommand::Start => {
             let mut text = markdown_string!("👋 *Welcome to Plannabot\\!*\n\n");
             let greeting = markdown_format!(
                 "Hello, {}\\! Use /help to see available commands\\.",
@@ -26,7 +26,7 @@ pub async fn handle_command(
             bot.send_markdown_message(msg.chat.id, text).await?;
         }
 
-        Command::Help => {
+        CommonCommand::Help => {
             let text = markdown_string!(
                 "*Available Commands:*\n\n\
                 /start \\- Start the bot\n\
@@ -36,7 +36,7 @@ pub async fn handle_command(
             bot.send_markdown_message(msg.chat.id, text).await?;
         }
 
-        Command::Schedule => {
+        CommonCommand::Schedule => {
             let entries = state
                 .sheets
                 .get_student_schedule(&student.telegram_name)
@@ -67,11 +67,6 @@ pub async fn handle_command(
                 }
                 bot.send_markdown_message(msg.chat.id, text).await?;
             }
-        }
-
-        Command::Impersonate(_) | Command::Quit => {
-            bot.send_message(msg.chat.id, "This command is only available to teachers.")
-                .await?;
         }
     }
 

@@ -42,11 +42,17 @@ async fn main() {
     let bot = Bot::from_env();
 
     let handler = dptree::entry()
-        // Bot commands (/start, /help, /schedule)
+        // Common commands (/start, /help, /schedule) — available to all users.
         .branch(
             Update::filter_message()
-                .filter_command::<bot::Command>()
-                .endpoint(bot::command_handler),
+                .filter_command::<bot::CommonCommand>()
+                .endpoint(bot::common_command_handler),
+        )
+        // Teacher-only commands (/impersonate, /quit).
+        .branch(
+            Update::filter_message()
+                .filter_command::<bot::TeacherCommand>()
+                .endpoint(bot::teacher_command_handler),
         )
         // Plain text messages (non-command)
         .branch(

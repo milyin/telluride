@@ -1,5 +1,5 @@
-use super::Command;
-use crate::models::Teacher;
+use super::{CommonCommand, TeacherCommand};
+use crate::models::{Teacher, UserRole};
 use crate::state::BotState;
 use anyhow::Result;
 use chrono_tz::Tz;
@@ -11,12 +11,12 @@ use teloxide::prelude::*;
 pub async fn handle_command(
     bot: &Bot,
     msg: &Message,
-    cmd: &Command,
+    cmd: &CommonCommand,
     teacher: &Teacher,
     state: &Arc<BotState>,
 ) -> Result<()> {
     match cmd {
-        Command::Start => {
+        CommonCommand::Start => {
             let mut text = markdown_string!("👋 *Welcome to Plannabot\\!*\n\n");
             let greeting = markdown_format!(
                 "Hello, @{}\\! Use /help to see available commands\\.",
@@ -26,18 +26,19 @@ pub async fn handle_command(
             bot.send_markdown_message(msg.chat.id, text).await?;
         }
 
-        Command::Help => {
+        CommonCommand::Help => {
             let text = markdown_string!(
                 "*Available Commands \\(Teacher Mode\\):*\n\n\
                 /start \\- Start the bot\n\
                 /help \\- Display this help message\n\
                 /schedule \\- Show your planned lessons\n\
-                /impersonate <username> \\- View the bot as a student"
+                /impersonate <username> \\- View the bot as a student\n\
+                /quit \\- Exit impersonation mode"
             );
             bot.send_markdown_message(msg.chat.id, text).await?;
         }
 
-        Command::Schedule => {
+        CommonCommand::Schedule => {
             let entries = state
                 .sheets
                 .get_teacher_schedule(&teacher.telegram_name)
@@ -69,10 +70,20 @@ pub async fn handle_command(
                 bot.send_markdown_message(msg.chat.id, text).await?;
             }
         }
+    }
 
-        Command::Impersonate(username) => {
-            // Already impersonating — reject (the router forwards /impersonate
-            // to this handler only when impersonation is already active).
+    Ok(())
+}
+
+pub async fn handle_teacher_command(
+    bot: &Bot,
+    msg: &Message,
+    cmd: &TeacherCommand,
+    teacher: &Teacher,
+    state: &Arc<BotState>,
+) -> Result<()> {
+    match cmd {
+        TeacherCommand::Impersonate(username) => {
             if state.get_impersonation(msg.chat.id).await.is_some() {
                 bot.send_message(
                     msg.chat.id,
@@ -89,14 +100,14 @@ pub async fn handle_command(
                 return Ok(());
             }
 
-            use crate::models::UserRole;
             match state.get_role(&normalised).await {
                 Some(UserRole::Student(_)) => {
                     state.impersonate(msg.chat.id, normalised.clone()).await;
                     bot.send_message(
                         msg.chat.id,
                         format!(
-                            "Now impersonating @{}. All commands will behave as if you were that student. Use /quit to return to teacher mode.",
+                            "Now impersonating @{}. All commands will behave as if you were that student. \
+                             Use /quit to return to teacher mode.",
                             normalised
                         ),
                     )
@@ -119,10 +130,21 @@ pub async fn handle_command(
             }
         }
 
-        Command::Quit => {
-            // /quit in normal teacher mode (not impersonating).
-            bot.send_message(msg.chat.id, "You are not in impersonation mode.")
+        TeacherCommand::Quit => {
+            if state.get_impersonation(msg.chat.id).await.is_some() {
+                state.clear_impersonation(msg.chat.id).await;
+                bot.send_message(
+                    msg.chat.id,
+                    format!(
+                        "Exited impersonation mode. You are back as @{} (teacher).",
+                        teacher.telegram_name
+                    ),
+                )
                 .await?;
+            } else {
+                bot.send_message(msg.chat.id, "You are not in impersonation mode.")
+                    .await?;
+            }
         }
     }
 

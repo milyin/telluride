@@ -7,18 +7,25 @@ use std::sync::Arc;
 use teloxide::prelude::*;
 use teloxide::utils::command::BotCommands;
 
+/// Commands available to all authorised users.
 #[derive(BotCommands, Clone, Debug)]
 #[command(rename_rule = "lowercase", description = "Supported commands:")]
-pub enum Command {
+pub enum CommonCommand {
     #[command(description = "start the bot")]
     Start,
     #[command(description = "display help")]
     Help,
     #[command(description = "show your scheduled lessons")]
     Schedule,
-    #[command(description = "impersonate a student (teachers only)")]
+}
+
+/// Commands available to teachers only.
+#[derive(BotCommands, Clone, Debug)]
+#[command(rename_rule = "lowercase", description = "Teacher commands:")]
+pub enum TeacherCommand {
+    #[command(description = "view the bot as a student")]
     Impersonate(String),
-    #[command(description = "exit impersonation mode (teachers only)")]
+    #[command(description = "exit impersonation mode")]
     Quit,
 }
 
@@ -33,9 +40,9 @@ pub fn get_username(msg: &Message) -> Option<String> {
 
 /// Formats a lesson duration in minutes to a human-readable string.
 ///
-/// - `90` → `"1h 30m"`
+/// - `90`  → `"1h 30m"`
 /// - `120` → `"2h"`
-/// - `45` → `"45m"`
+/// - `45`  → `"45m"`
 pub fn format_duration(minutes: i64) -> String {
     let hours = minutes / 60;
     let mins = minutes % 60;
@@ -46,15 +53,18 @@ pub fn format_duration(minutes: i64) -> String {
     }
 }
 
-/// Teloxide endpoint handler for bot commands.
+/// Teloxide endpoint handler for common bot commands (Start, Help, Schedule).
 ///
 /// Before resolving the user's role, calls [`BotState::refresh_if_needed`] so
 /// that any spreadsheet edits made since the last check are picked up
 /// automatically (subject to the 15-second throttle).
-pub async fn command_handler(
+///
+/// When a teacher is in impersonation mode, every common command is forwarded
+/// to the student handler for the impersonated student.
+pub async fn common_command_handler(
     bot: Bot,
     msg: Message,
-    cmd: Command,
+    cmd: CommonCommand,
     state: Arc<BotState>,
 ) -> ResponseResult<()> {
     // --- Refresh cache if the spreadsheet was modified ----------------------
@@ -87,46 +97,25 @@ pub async fn command_handler(
         }
         UserRole::Teacher(ref teacher) => {
             match state.get_impersonation(msg.chat.id).await {
-                // ---- Impersonation mode ------------------------------------
-                Some(ref student_name) => match cmd {
-                    // /quit exits impersonation mode
-                    Command::Quit => {
+                // ---- Impersonation mode: act as the impersonated student ----
+                Some(ref student_name) => match state.get_role(student_name).await {
+                    Some(UserRole::Student(ref student)) => {
+                        student::handle_command(&bot, &msg, &cmd, student, &state).await
+                    }
+                    _ => {
+                        // Student was removed from the spreadsheet.
                         state.clear_impersonation(msg.chat.id).await;
                         bot.send_message(
                             msg.chat.id,
                             format!(
-                                "Exited impersonation mode. You are back as @{} (teacher).",
-                                teacher.telegram_name
+                                "Student @{} was not found in the spreadsheet. \
+                                 Impersonation mode has been deactivated.",
+                                student_name
                             ),
                         )
                         .await?;
                         return Ok(());
                     }
-                    // /impersonate while already impersonating: let the teacher
-                    // module handle it (it will report an error).
-                    Command::Impersonate(_) => {
-                        teacher::handle_command(&bot, &msg, &cmd, teacher, &state).await
-                    }
-                    // All other commands: act as the impersonated student.
-                    _ => match state.get_role(student_name).await {
-                        Some(UserRole::Student(ref student)) => {
-                            student::handle_command(&bot, &msg, &cmd, student, &state).await
-                        }
-                        _ => {
-                            // Student was removed from the spreadsheet.
-                            state.clear_impersonation(msg.chat.id).await;
-                            bot.send_message(
-                                msg.chat.id,
-                                format!(
-                                    "Student @{} was not found in the spreadsheet. \
-                                     Impersonation mode has been deactivated.",
-                                    student_name
-                                ),
-                            )
-                            .await?;
-                            return Ok(());
-                        }
-                    },
                 },
                 // ---- Normal teacher mode ------------------------------------
                 None => teacher::handle_command(&bot, &msg, &cmd, teacher, &state).await,
@@ -145,10 +134,61 @@ pub async fn command_handler(
     Ok(())
 }
 
+/// Teloxide endpoint handler for teacher-only commands (Impersonate, Quit).
+///
+/// Rejects the command silently (no response) if the sender is not a teacher.
+pub async fn teacher_command_handler(
+    bot: Bot,
+    msg: Message,
+    cmd: TeacherCommand,
+    state: Arc<BotState>,
+) -> ResponseResult<()> {
+    // --- Refresh cache if the spreadsheet was modified ----------------------
+    state.refresh_if_needed().await;
+
+    // --- Gate: require a Telegram username ----------------------------------
+    let Some(username) = get_username(&msg) else {
+        bot.send_message(
+            msg.chat.id,
+            "Please set a Telegram username to use this bot.",
+        )
+        .await?;
+        return Ok(());
+    };
+
+    // --- Gate: require a teacher role ---------------------------------------
+    let role = state.get_role(&username).await;
+    let teacher = match role {
+        Some(UserRole::Teacher(ref t)) => t.clone(),
+        _ => {
+            // Students (or unknown users) cannot use teacher commands.
+            return Ok(());
+        }
+    };
+
+    // --- Dispatch -----------------------------------------------------------
+    let result = teacher::handle_teacher_command(&bot, &msg, &cmd, &teacher, &state).await;
+
+    result.map_err(|e| {
+        log::error!(
+            "Error handling teacher command {:?} for @{}: {}",
+            cmd,
+            username,
+            e
+        );
+        teloxide::RequestError::Io(Arc::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            e.to_string(),
+        )))
+    })?;
+
+    Ok(())
+}
+
 /// Teloxide endpoint handler for plain (non-command) text messages.
 ///
-/// Refreshes the cache (same throttled check as [`command_handler`]) and
-/// nudges authorised users toward the command interface.
+/// Refreshes the cache (same throttled check as [`common_command_handler`])
+/// and nudges authorised users toward the command interface.
 pub async fn message_handler(bot: Bot, msg: Message, state: Arc<BotState>) -> ResponseResult<()> {
     // --- Refresh cache if the spreadsheet was modified ----------------------
     state.refresh_if_needed().await;
