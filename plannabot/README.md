@@ -12,6 +12,7 @@ Data is stored in a Google Spreadsheet (editable by humans, read-synced by the b
 - **Google Sheets backend** — all data lives in a human-editable spreadsheet
 - **Auto-schema** — missing sheet tabs or columns are created automatically at startup
 - **`/schedule`** — students see their upcoming lessons; teachers see their full list
+- **Live data** — on every command the bot checks whether the spreadsheet was modified (via Google Drive API) and reloads data only when needed, with a 15-second throttle
 - **Safe MarkdownV2** — all messages use the `telluride` library for compile-time-validated formatting
 - **Graceful Ctrl+C shutdown**
 
@@ -43,26 +44,59 @@ Extra columns beyond the required ones are preserved as custom properties.
 2. Send `/newbot` and follow the prompts
 3. Copy the bot token
 
-### 2. Set up Google Sheets access
+### 2. Set up Google Cloud project
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a project (or use an existing one)
-3. Enable the **Google Sheets API**
-4. Create a **Service Account** (IAM & Admin → Service Accounts)
-5. Download the JSON key file for the service account
-6. Create a new Google Spreadsheet (or use an existing one)
-7. **Share the spreadsheet** with the service account email (Editor access)
-8. Copy the Spreadsheet ID from the URL:
+Go to the [Google Cloud Console](https://console.cloud.google.com/) and create or select a project.
+
+You need to enable **two APIs** and create a service account:
+
+#### 2a. Enable the Google Sheets API
+
+`APIs & Services → Library → search "Google Sheets API" → Enable`
+
+Or visit directly:
+`https://console.developers.google.com/apis/api/sheets.googleapis.com/overview?project=<YOUR_PROJECT_ID>`
+
+#### 2b. Enable the Google Drive API
+
+`APIs & Services → Library → search "Google Drive API" → Enable`
+
+Or visit directly:
+`https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=<YOUR_PROJECT_ID>`
+
+> **Why Drive API?** The bot calls `drive.files.get` with the `drive.metadata.readonly` scope
+> to read only the spreadsheet's last-modification timestamp — no file content is ever accessed
+> through Drive. This lets the bot detect when someone edits the spreadsheet and reload the
+> data automatically, without re-fetching everything on every command.
+
+#### 2c. Create a Service Account and download credentials
+
+1. Go to `IAM & Admin → Service Accounts → Create Service Account`
+2. Give it any name (e.g. `plannabot`)
+3. Skip the optional role and user access steps
+4. Open the created service account → **Keys** tab → **Add Key → Create new key → JSON**
+5. Save the downloaded `.json` file (e.g. as `credentials.json` next to the binary)
+
+#### 2d. Share the spreadsheet with the service account
+
+1. Create a new Google Spreadsheet (or use an existing one)
+2. Click **Share** and add the service account email  
+   (looks like `plannabot@<project>.iam.gserviceaccount.com`) with **Editor** access
+3. Copy the Spreadsheet ID from the URL:  
    `https://docs.google.com/spreadsheets/d/<SPREADSHEET_ID>/edit`
 
 ### 3. Configure environment
 
 ```bash
 cp .env.example .env
-# Edit .env and fill in:
-#   TELOXIDE_TOKEN
-#   GOOGLE_CREDENTIALS_PATH   (path to the downloaded JSON key)
-#   SPREADSHEET_ID
+```
+
+Edit `.env` and fill in the three required values:
+
+```
+TELOXIDE_TOKEN=<token from BotFather>
+GOOGLE_CREDENTIALS_PATH=credentials.json   # path to the JSON key file
+SPREADSHEET_ID=<the long ID from the spreadsheet URL>
 ```
 
 ### 4. Build and run
@@ -97,29 +131,9 @@ Users without a Telegram username are asked to set one first.
 
 ---
 
-## Project structure
+## Further reading
 
-```
-plannabot/
-├── src/
-│   ├── main.rs          # Entry point: init, schema setup, dispatcher
-│   ├── config.rs        # Environment-based configuration
-│   ├── models.rs        # Data types: Student, Teacher, ScheduleEntry, Payment, UserRole
-│   ├── state.rs         # BotState: Arc-wrapped cache + refresh logic
-│   ├── sheets/
-│   │   ├── mod.rs       # SheetsClient + SheetSchema + schema management
-│   │   ├── students.rs  # get_students()
-│   │   ├── teachers.rs  # get_teachers()
-│   │   ├── schedule.rs  # get_schedule(), get_student/teacher_schedule()
-│   │   └── payments.rs  # get_payments() (stub, future use)
-│   └── bot/
-│       ├── mod.rs       # Command enum + dispatcher + shared utilities
-│       ├── student.rs   # Student command handlers
-│       └── teacher.rs   # Teacher command handlers
-├── .env.example         # Environment variable template
-├── Cargo.toml
-└── README.md
-```
+For file layout, module responsibilities, data refresh logic, and Telegram routing see **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 ---
 
