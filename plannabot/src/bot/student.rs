@@ -68,6 +68,11 @@ pub async fn handle_command(
                 bot.send_markdown_message(msg.chat.id, text).await?;
             }
         }
+
+        Command::Impersonate(_) | Command::Quit => {
+            bot.send_message(msg.chat.id, "This command is only available to teachers.")
+                .await?;
+        }
     }
 
     Ok(())

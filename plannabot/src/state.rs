@@ -7,6 +7,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+use teloxide::types::ChatId;
 use tokio::sync::RwLock;
 
 /// Minimum time between consecutive Drive API modification-time checks.
@@ -29,6 +30,12 @@ pub struct BotState {
     /// Starts at `Instant::now() - CHECK_INTERVAL` so the very first command
     /// triggers an immediate check.
     last_checked: Mutex<Instant>,
+
+    // --- Impersonation -------------------------------------------------------
+    /// Maps a teacher's ChatId to the telegram name of the student they are
+    /// currently impersonating.  Entries are inserted by `/impersonate` and
+    /// removed by `/quit`.
+    impersonations: RwLock<HashMap<ChatId, String>>,
 }
 
 impl BotState {
@@ -40,6 +47,7 @@ impl BotState {
             last_modified: Mutex::new(None),
             // Subtract CHECK_INTERVAL so the very first command fires a check.
             last_checked: Mutex::new(Instant::now() - CHECK_INTERVAL),
+            impersonations: RwLock::new(HashMap::new()),
         }
     }
 
@@ -137,6 +145,31 @@ impl BotState {
         }
 
         None
+    }
+
+    // -----------------------------------------------------------------------
+    // Impersonation API
+    // -----------------------------------------------------------------------
+
+    /// Records that the teacher chatting in `chat_id` is now impersonating
+    /// `student_name` (without '@', lowercase).
+    pub async fn impersonate(&self, chat_id: ChatId, student_name: String) {
+        self.impersonations
+            .write()
+            .await
+            .insert(chat_id, student_name);
+    }
+
+    /// Returns the telegram name of the student being impersonated in this
+    /// chat, or `None` if the chat is not in impersonation mode.
+    pub async fn get_impersonation(&self, chat_id: ChatId) -> Option<String> {
+        self.impersonations.read().await.get(&chat_id).cloned()
+    }
+
+    /// Removes the impersonation entry for `chat_id`, returning the teacher to
+    /// normal mode.
+    pub async fn clear_impersonation(&self, chat_id: ChatId) {
+        self.impersonations.write().await.remove(&chat_id);
     }
 
     // -----------------------------------------------------------------------

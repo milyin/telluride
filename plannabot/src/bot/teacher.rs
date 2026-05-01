@@ -31,7 +31,8 @@ pub async fn handle_command(
                 "*Available Commands \\(Teacher Mode\\):*\n\n\
                 /start \\- Start the bot\n\
                 /help \\- Display this help message\n\
-                /schedule \\- Show your planned lessons"
+                /schedule \\- Show your planned lessons\n\
+                /impersonate <username> \\- View the bot as a student"
             );
             bot.send_markdown_message(msg.chat.id, text).await?;
         }
@@ -67,6 +68,61 @@ pub async fn handle_command(
                 }
                 bot.send_markdown_message(msg.chat.id, text).await?;
             }
+        }
+
+        Command::Impersonate(username) => {
+            // Already impersonating — reject (the router forwards /impersonate
+            // to this handler only when impersonation is already active).
+            if state.get_impersonation(msg.chat.id).await.is_some() {
+                bot.send_message(
+                    msg.chat.id,
+                    "You are already in impersonation mode. Use /quit first.",
+                )
+                .await?;
+                return Ok(());
+            }
+
+            let normalised = username.trim_start_matches('@').to_lowercase();
+            if normalised.is_empty() {
+                bot.send_message(msg.chat.id, "Usage: /impersonate <student_username>")
+                    .await?;
+                return Ok(());
+            }
+
+            use crate::models::UserRole;
+            match state.get_role(&normalised).await {
+                Some(UserRole::Student(_)) => {
+                    state.impersonate(msg.chat.id, normalised.clone()).await;
+                    bot.send_message(
+                        msg.chat.id,
+                        format!(
+                            "Now impersonating @{}. All commands will behave as if you were that student. Use /quit to return to teacher mode.",
+                            normalised
+                        ),
+                    )
+                    .await?;
+                }
+                Some(UserRole::Teacher(_)) => {
+                    bot.send_message(
+                        msg.chat.id,
+                        format!("@{} is a teacher, not a student.", normalised),
+                    )
+                    .await?;
+                }
+                None => {
+                    bot.send_message(
+                        msg.chat.id,
+                        format!("Student @{} was not found in the spreadsheet.", normalised),
+                    )
+                    .await?;
+                }
+            }
+        }
+
+        Command::Quit => {
+            // /quit in normal teacher mode (not impersonating).
+            bot.send_message(msg.chat.id, "You are not in impersonation mode.")
+                .await?;
         }
     }
 

@@ -16,6 +16,10 @@ pub enum Command {
     Help,
     #[command(description = "show your scheduled lessons")]
     Schedule,
+    #[command(description = "impersonate a student (teachers only)")]
+    Impersonate(String),
+    #[command(description = "exit impersonation mode (teachers only)")]
+    Quit,
 }
 
 /// Extracts the Telegram username from a message sender.
@@ -82,7 +86,51 @@ pub async fn command_handler(
             student::handle_command(&bot, &msg, &cmd, student, &state).await
         }
         UserRole::Teacher(ref teacher) => {
-            teacher::handle_command(&bot, &msg, &cmd, teacher, &state).await
+            match state.get_impersonation(msg.chat.id).await {
+                // ---- Impersonation mode ------------------------------------
+                Some(ref student_name) => match cmd {
+                    // /quit exits impersonation mode
+                    Command::Quit => {
+                        state.clear_impersonation(msg.chat.id).await;
+                        bot.send_message(
+                            msg.chat.id,
+                            format!(
+                                "Exited impersonation mode. You are back as @{} (teacher).",
+                                teacher.telegram_name
+                            ),
+                        )
+                        .await?;
+                        return Ok(());
+                    }
+                    // /impersonate while already impersonating: let the teacher
+                    // module handle it (it will report an error).
+                    Command::Impersonate(_) => {
+                        teacher::handle_command(&bot, &msg, &cmd, teacher, &state).await
+                    }
+                    // All other commands: act as the impersonated student.
+                    _ => match state.get_role(student_name).await {
+                        Some(UserRole::Student(ref student)) => {
+                            student::handle_command(&bot, &msg, &cmd, student, &state).await
+                        }
+                        _ => {
+                            // Student was removed from the spreadsheet.
+                            state.clear_impersonation(msg.chat.id).await;
+                            bot.send_message(
+                                msg.chat.id,
+                                format!(
+                                    "Student @{} was not found in the spreadsheet. \
+                                     Impersonation mode has been deactivated.",
+                                    student_name
+                                ),
+                            )
+                            .await?;
+                            return Ok(());
+                        }
+                    },
+                },
+                // ---- Normal teacher mode ------------------------------------
+                None => teacher::handle_command(&bot, &msg, &cmd, teacher, &state).await,
+            }
         }
     };
 
