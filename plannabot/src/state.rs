@@ -108,10 +108,7 @@ impl BotState {
             current_modified
         );
         match self.do_reload().await {
-            Ok(()) => {
-                *self.last_modified.lock().unwrap() = Some(current_modified);
-                true
-            }
+            Ok(()) => true,
             Err(e) => {
                 log::error!("Failed to reload data from spreadsheet: {}", e);
                 false
@@ -147,12 +144,15 @@ impl BotState {
     // -----------------------------------------------------------------------
 
     /// Reads both tables from Google Sheets and atomically replaces the caches.
+    /// Also fetches and caches the current modification time.
     async fn do_reload(&self) -> Result<()> {
         let students = self.sheets.get_students().await?;
         let teachers = self.sheets.get_teachers().await?;
+        let modified_time = self.sheets.get_spreadsheet_modified_time().await?;
         let (ns, nt) = (students.len(), teachers.len());
         *self.students.write().await = students;
         *self.teachers.write().await = teachers;
+        *self.last_modified.lock().unwrap() = Some(modified_time);
         log::info!("Data reloaded: {ns} students, {nt} teachers.");
         Ok(())
     }
