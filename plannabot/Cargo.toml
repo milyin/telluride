@@ -14,6 +14,12 @@ async-trait = "0.1"
 # Google Sheets API (re-exports hyper, hyper_rustls, oauth2)
 google-sheets4 = "5"
 
+# HTTP client for Drive API metadata calls (already a transitive dep via teloxide)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Serialization (already a transitive dep)
+serde = { version = "1.0", features = ["derive"] }
+
 # Date/time
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.9"

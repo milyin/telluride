@@ -44,15 +44,19 @@ pub fn format_duration(minutes: i64) -> String {
 
 /// Teloxide endpoint handler for bot commands.
 ///
-/// Resolves the sender's role from cached state and delegates to the
-/// appropriate role-specific handler. Unauthorized users are rejected
-/// before any role-specific logic is reached.
+/// Before resolving the user's role, calls [`BotState::refresh_if_needed`] so
+/// that any spreadsheet edits made since the last check are picked up
+/// automatically (subject to the 15-second throttle).
 pub async fn command_handler(
     bot: Bot,
     msg: Message,
     cmd: Command,
     state: Arc<BotState>,
 ) -> ResponseResult<()> {
+    // --- Refresh cache if the spreadsheet was modified ----------------------
+    state.refresh_if_needed().await;
+
+    // --- Gate: require a Telegram username ----------------------------------
     let Some(username) = get_username(&msg) else {
         bot.send_message(
             msg.chat.id,
@@ -62,6 +66,7 @@ pub async fn command_handler(
         return Ok(());
     };
 
+    // --- Gate: require authorisation ----------------------------------------
     let Some(role) = state.get_role(&username).await else {
         bot.send_message(
             msg.chat.id,
@@ -71,6 +76,7 @@ pub async fn command_handler(
         return Ok(());
     };
 
+    // --- Dispatch to role-specific handler ----------------------------------
     let result = match role {
         UserRole::Student(ref student) => {
             student::handle_command(&bot, &msg, &cmd, student, &state).await
@@ -93,8 +99,13 @@ pub async fn command_handler(
 
 /// Teloxide endpoint handler for plain (non-command) text messages.
 ///
-/// Checks authorization and nudges the user toward the command interface.
+/// Refreshes the cache (same throttled check as [`command_handler`]) and
+/// nudges authorised users toward the command interface.
 pub async fn message_handler(bot: Bot, msg: Message, state: Arc<BotState>) -> ResponseResult<()> {
+    // --- Refresh cache if the spreadsheet was modified ----------------------
+    state.refresh_if_needed().await;
+
+    // --- Gate: require a Telegram username ----------------------------------
     let Some(username) = get_username(&msg) else {
         bot.send_message(
             msg.chat.id,
@@ -104,6 +115,7 @@ pub async fn message_handler(bot: Bot, msg: Message, state: Arc<BotState>) -> Re
         return Ok(());
     };
 
+    // --- Gate: require authorisation ----------------------------------------
     if state.get_role(&username).await.is_none() {
         bot.send_message(
             msg.chat.id,

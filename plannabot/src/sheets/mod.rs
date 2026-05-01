@@ -2,11 +2,18 @@
 //!
 //! Provides [`SheetsClient`] for reading and writing data to a Google Spreadsheet,
 //! along with [`SheetSchema`] for column-name–to–index mapping.
+//!
+//! The client also exposes [`SheetsClient::get_spreadsheet_modified_time`] which
+//! calls the Google Drive API to retrieve the last modification timestamp of the
+//! spreadsheet file.  This is used by [`crate::state::BotState`] to decide
+//! whether cached data needs to be reloaded.
 
 use std::collections::HashMap;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
+use chrono::{DateTime, Utc};
 use google_sheets4::{api, hyper, hyper_rustls, oauth2, Sheets};
+use serde::Deserialize;
 
 pub mod payments;
 pub mod schedule;
@@ -54,12 +61,7 @@ pub const PAYMENTS_COLS: &[&str] = &["student_telegram", "date", "sum"];
 
 /// Converts a zero-based column index to an A1-notation column letter string.
 ///
-/// ```
-/// assert_eq!(col_index_to_letter(0),  "A");
-/// assert_eq!(col_index_to_letter(25), "Z");
-/// assert_eq!(col_index_to_letter(26), "AA");
-/// assert_eq!(col_index_to_letter(27), "AB");
-/// ```
+/// 0 → "A", 25 → "Z", 26 → "AA", 27 → "AB", …
 pub fn col_index_to_letter(index: usize) -> String {
     let mut result = String::new();
     let mut n = index;
@@ -157,24 +159,57 @@ impl SheetSchema {
 }
 
 // ---------------------------------------------------------------------------
-// Hub type alias
+// Hub + auth type aliases
 // ---------------------------------------------------------------------------
 
 type SheetsHub = Sheets<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>>;
+
+/// The concrete authenticator type produced by `ServiceAccountAuthenticator::builder`
+/// when the `hyper-rustls` feature is active (i.e. `DefaultAuthenticator`).
+/// Stored separately so we can request Drive API tokens independently of the
+/// Sheets hub.
+type DriveAuth = oauth2::authenticator::Authenticator<
+    hyper_rustls::HttpsConnector<hyper::client::HttpConnector>,
+>;
+
+// ---------------------------------------------------------------------------
+// Drive API response shape
+// ---------------------------------------------------------------------------
+
+/// Minimal shape of the `files.get` Drive API response that we care about.
+#[derive(Deserialize)]
+struct DriveFileInfo {
+    #[serde(rename = "modifiedTime")]
+    modified_time: DateTime<Utc>,
+}
 
 // ---------------------------------------------------------------------------
 // SheetsClient
 // ---------------------------------------------------------------------------
 
 /// Thin async wrapper around the Google Sheets API hub.
+///
+/// Also holds a cloned authenticator and a lightweight [`reqwest::Client`] for
+/// calling the Google Drive REST API to determine the spreadsheet's last
+/// modification time.
 pub struct SheetsClient {
     hub: SheetsHub,
+    /// Cloned from the same authenticator that the Sheets hub uses; token
+    /// cache is shared via the `Arc` inside `Authenticator`.
+    drive_auth: DriveAuth,
+    /// Plain HTTPS client used for Drive API metadata requests.
+    http_client: reqwest::Client,
     spreadsheet_id: String,
 }
 
 impl SheetsClient {
     /// Creates a new client, authenticating with the service-account key at
     /// `credentials_path`.
+    ///
+    /// The key is read once; a single `Authenticator` is built and then
+    /// **cloned** – one copy goes into the Sheets hub, the other is kept for
+    /// Drive API requests.  Because `Authenticator` wraps its state in an
+    /// `Arc`, both copies share the same token cache.
     pub async fn new(credentials_path: &str, spreadsheet_id: String) -> Result<Self> {
         let key = oauth2::read_service_account_key(credentials_path)
             .await
@@ -185,26 +220,84 @@ impl SheetsClient {
             .await
             .context("Failed to build service account authenticator")?;
 
-        let hub = Sheets::new(
-            hyper::Client::builder().build(
-                hyper_rustls::HttpsConnectorBuilder::new()
-                    .with_native_roots()
-                    .unwrap()
-                    .https_or_http()
-                    .enable_http1()
-                    .build(),
-            ),
-            auth,
-        );
+        // Clone *before* moving into the hub so we can use it for Drive calls.
+        let drive_auth = auth.clone();
+
+        let connector = hyper_rustls::HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .unwrap()
+            .https_or_http()
+            .enable_http1()
+            .build();
+
+        let hub = Sheets::new(hyper::Client::builder().build(connector), auth);
+
+        let http_client = reqwest::Client::builder()
+            .build()
+            .context("Failed to build HTTP client for Drive API")?;
 
         Ok(SheetsClient {
             hub,
+            drive_auth,
+            http_client,
             spreadsheet_id,
         })
     }
 
     // -----------------------------------------------------------------------
-    // Low-level primitives
+    // Drive API: modification time
+    // -----------------------------------------------------------------------
+
+    /// Fetches the last modification timestamp of the spreadsheet from the
+    /// Google Drive API (`files.get?fields=modifiedTime`).
+    ///
+    /// Uses the `drive.metadata.readonly` scope.  The Google Cloud project
+    /// must have the Drive API enabled, and the service account must be
+    /// granted read access to the spreadsheet.
+    ///
+    /// Returns the `modifiedTime` as a UTC [`DateTime`].
+    pub async fn get_spreadsheet_modified_time(&self) -> Result<DateTime<Utc>> {
+        // Request a bearer token with Drive metadata read access.
+        let scopes = ["https://www.googleapis.com/auth/drive.metadata.readonly"];
+        let token = self
+            .drive_auth
+            .token(&scopes)
+            .await
+            .context("Failed to obtain Drive API token")?;
+
+        let bearer = token
+            .token()
+            .ok_or_else(|| anyhow!("Drive API token is empty"))?;
+
+        let url = format!(
+            "https://www.googleapis.com/drive/v3/files/{}?fields=modifiedTime",
+            self.spreadsheet_id
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(bearer)
+            .send()
+            .await
+            .context("Drive API request failed")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(anyhow!("Drive API returned HTTP {}: {}", status, body));
+        }
+
+        let file_info: DriveFileInfo = response
+            .json()
+            .await
+            .context("Failed to parse Drive API response")?;
+
+        Ok(file_info.modified_time)
+    }
+
+    // -----------------------------------------------------------------------
+    // Low-level Sheets primitives
     // -----------------------------------------------------------------------
 
     /// Reads all cells in `range` (e.g. `"Students!A:Z"`) and returns them as
@@ -278,7 +371,7 @@ impl SheetsClient {
     /// * If the sheet **does** exist but is missing some columns, the missing
     ///   columns are appended to the header row.
     ///
-    /// Returns the final [`SheetSchema`] reflecting the actual on-disk headers.
+    /// Always reads before writing (creates/appends only what is missing).
     pub async fn ensure_sheet(
         &self,
         sheet_name: &str,
@@ -331,7 +424,7 @@ impl SheetsClient {
         }
 
         // --------------------------------------------------------------------
-        // Sheet already exists — read its current headers
+        // Sheet already exists — read its current headers first
         // --------------------------------------------------------------------
         let header_range = format!("{sheet_name}!1:1");
         let rows = self
@@ -342,7 +435,7 @@ impl SheetsClient {
         let existing_headers: Vec<String> = rows.into_iter().next().unwrap_or_default();
         let mut schema = SheetSchema::new(sheet_name.to_string(), existing_headers);
 
-        // Append any missing required columns
+        // Append any missing required columns (read → decide → write only if needed)
         let mut added = false;
         for &col in required_cols {
             if !schema.has_column(col) {
@@ -384,8 +477,6 @@ impl SheetsClient {
 // ---------------------------------------------------------------------------
 
 /// Converts a `serde_json::Value` cell to a plain `String`.
-/// The Sheets API returns formatted values as JSON strings by default, but we
-/// also handle numbers and booleans defensively.
 fn json_value_to_string(v: serde_json::Value) -> String {
     match v {
         serde_json::Value::String(s) => s,
