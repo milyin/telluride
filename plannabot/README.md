@@ -1,168 +1,128 @@
 # Plannabot
 
-A Telegram bot built with Rust using the `telluride` and `teloxide` libraries.
+A Telegram bot for managing student-teacher scheduling, lessons, and payments.
+Built with Rust using [`teloxide`](https://github.com/teloxide/teloxide) and [`telluride`](https://github.com/milyin/telluride).
+Data is stored in a Google Spreadsheet (editable by humans, read-synced by the bot).
+
+---
 
 ## Features
 
-- ✅ Responds to `/help` command with available commands
-- ✅ Responds to `/start` command with a greeting
-- ✅ Responds to any message with "Hello!"
-- ✅ Uses `telluride` library for compile-time safe MarkdownV2 formatting
-- ✅ Built on `teloxide` framework with modern async/await
-- ✅ Graceful shutdown with Ctrl+C handler
+- **Role-based access** — students and teachers see different commands and data
+- **Google Sheets backend** — all data lives in a human-editable spreadsheet
+- **Auto-schema** — missing sheet tabs or columns are created automatically at startup
+- **`/schedule`** — students see their upcoming lessons; teachers see their full list
+- **Safe MarkdownV2** — all messages use the `telluride` library for compile-time-validated formatting
+- **Graceful Ctrl+C shutdown**
 
-## Prerequisites
+---
 
-- Rust 1.56 or later (install from [rustup.rs](https://rustup.rs/))
-- A Telegram Bot Token (obtain from [@BotFather](https://t.me/botfather) on Telegram)
+## Data Model
 
-## Getting Started
+All tables live in separate tabs of the same Google Spreadsheet.
+Extra columns beyond the required ones are preserved as custom properties.
 
-### 1. Create Your Bot
+| Tab | Key columns |
+|-----|-------------|
+| **Students** | `telegram_name`, `name`, `timezone`, `currency`, `zoom_url`, `board_url` |
+| **Teachers** | `telegram_name`, `timezone` |
+| **Schedule** | `student_telegram`, `teacher_telegram`, `datetime`, `duration_minutes`, `cost`, `status` |
+| **Payments** | `student_telegram`, `date`, `sum` |
 
-1. Open Telegram and chat with [@BotFather](https://t.me/botfather)
-2. Use `/newbot` command to create a new bot
-3. Follow the prompts and you'll receive your bot token
+`status` in Schedule: empty = planned, `done` = completed, `cancelled` = cancelled.
 
-### 2. Set Up Environment
+`datetime` formats accepted: `2024-01-15T10:00:00+03:00`, `2024-01-15 10:00`, `2024-01-15 10:00:00`, `15/01/2024 10:00`.
 
-Copy the example environment file and add your bot token:
+---
+
+## Setup
+
+### 1. Create a Telegram bot
+
+1. Open [@BotFather](https://t.me/botfather) in Telegram
+2. Send `/newbot` and follow the prompts
+3. Copy the bot token
+
+### 2. Set up Google Sheets access
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a project (or use an existing one)
+3. Enable the **Google Sheets API**
+4. Create a **Service Account** (IAM & Admin → Service Accounts)
+5. Download the JSON key file for the service account
+6. Create a new Google Spreadsheet (or use an existing one)
+7. **Share the spreadsheet** with the service account email (Editor access)
+8. Copy the Spreadsheet ID from the URL:
+   `https://docs.google.com/spreadsheets/d/<SPREADSHEET_ID>/edit`
+
+### 3. Configure environment
 
 ```bash
 cp .env.example .env
-# Then edit .env and add your TELOXIDE_TOKEN
+# Edit .env and fill in:
+#   TELOXIDE_TOKEN
+#   GOOGLE_CREDENTIALS_PATH   (path to the downloaded JSON key)
+#   SPREADSHEET_ID
 ```
 
-Or set the environment variable directly:
-
-```bash
-export TELOXIDE_TOKEN="your_actual_token_here"
-```
-
-### 3. Build and Run
-
-Build the project:
+### 4. Build and run
 
 ```bash
 cargo build --release
+cargo run --release
 ```
 
-Run the bot:
+On first startup the bot will create the four required sheet tabs
+(`Students`, `Teachers`, `Schedule`, `Payments`) if they don't exist yet.
 
-```bash
-cargo run
-```
-
-For development with auto-reload, install and use `cargo-watch`:
-
-```bash
-cargo install cargo-watch
-cargo watch -x run
-```
+---
 
 ## Commands
 
-The bot supports the following commands:
+| Command | Student | Teacher |
+|---------|---------|---------|
+| `/start` | Greeting with student name | Greeting with Telegram handle |
+| `/help` | List of available commands | Same (labelled "Teacher Mode") |
+| `/schedule` | Upcoming planned lessons (with teacher) | Upcoming planned lessons (with students) |
 
-- `/start` - Start the bot and receive a greeting
-- `/help` - Display help information and available commands
+Lesson times are shown in each user's own timezone (from the spreadsheet).
 
-Any regular message will receive a "Hello!" response.
+---
 
-## Project Structure
+## Access control
+
+Only users whose Telegram username appears in the **Students** or **Teachers** tab
+are allowed to interact with the bot. Everyone else receives an "unauthorized" message.
+Users without a Telegram username are asked to set one first.
+
+---
+
+## Project structure
 
 ```
 plannabot/
 ├── src/
-│   └── main.rs          # Main bot implementation
-├── Cargo.toml           # Project dependencies
-├── .env.example         # Environment configuration template
-├── .gitignore           # Git ignore rules
-└── README.md            # This file
+│   ├── main.rs          # Entry point: init, schema setup, dispatcher
+│   ├── config.rs        # Environment-based configuration
+│   ├── models.rs        # Data types: Student, Teacher, ScheduleEntry, Payment, UserRole
+│   ├── state.rs         # BotState: Arc-wrapped cache + refresh logic
+│   ├── sheets/
+│   │   ├── mod.rs       # SheetsClient + SheetSchema + schema management
+│   │   ├── students.rs  # get_students()
+│   │   ├── teachers.rs  # get_teachers()
+│   │   ├── schedule.rs  # get_schedule(), get_student/teacher_schedule()
+│   │   └── payments.rs  # get_payments() (stub, future use)
+│   └── bot/
+│       ├── mod.rs       # Command enum + dispatcher + shared utilities
+│       ├── student.rs   # Student command handlers
+│       └── teacher.rs   # Teacher command handlers
+├── .env.example         # Environment variable template
+├── Cargo.toml
+└── README.md
 ```
 
-## Implementation Details
-
-The bot uses the following key components:
-
-### Teloxide Framework
-- Modern async Rust framework for Telegram Bot API
-- Provides high-level abstractions for handling updates
-- Built on `tokio` for efficient concurrent processing
-
-### Telluride Library Extension
-The project leverages the `telluride` library which extends `teloxide` with:
-- **MarkdownString**: Compile-time validated MarkdownV2 formatting
-- **markdown_string!**: Macro for creating safe markdown strings with validation
-- **MarkdownStringMessage**: Extended `Bot` methods for sending markdown messages
-
-### Dispatcher Architecture
-The bot uses a handler chain architecture:
-1. Command handler - processes `/start` and `/help` commands
-2. Text handler - processes regular text messages
-3. Fallback handler - logs unhandled update types
-
-## Example Usage
-
-```bash
-# Start the bot
-cargo run
-
-# In Telegram, message the bot:
-# - Send: /start
-#   Bot responds: "Hello! 👋 Welcome to Plannabot!"
-# 
-# - Send: /help
-#   Bot responds with available commands
-#
-# - Send: "Hi there"
-#   Bot responds: "Hello!"
-```
-
-## Logging
-
-The bot uses the `log` crate with `pretty_env_logger` for formatted output.
-
-Control log level with the `RUST_LOG` environment variable:
-
-```bash
-RUST_LOG=debug cargo run    # Show debug messages
-RUST_LOG=info cargo run     # Show info messages (default)
-RUST_LOG=warn cargo run     # Show warnings only
-```
-
-## Extending the Bot
-
-To add new commands:
-
-1. Add a new variant to the `Command` enum:
-
-```rust
-#[derive(BotCommands, Clone, Debug)]
-enum Command {
-    #[command(description = "existing command")]
-    Start,
-    #[command(description = "my new command")]
-    MyNewCommand,
-}
-```
-
-2. Handle it in `command_handler`:
-
-```rust
-Command::MyNewCommand => {
-    let text = markdown_string!("My response");
-    bot.send_markdown_message(msg.chat.id, text).await?;
-}
-```
+---
 
 ## License
 
 MIT OR Apache-2.0
-
-## Resources
-
-- [Teloxide Documentation](https://docs.rs/teloxide/)
-- [Telluride GitHub](https://github.com/milyin/telluride)
-- [Telegram Bot API](https://core.telegram.org/bots/api)
-- [MarkdownV2 Format](https://core.telegram.org/bots/api#markdownv2-style)
