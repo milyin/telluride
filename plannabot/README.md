@@ -135,6 +135,10 @@ Users without a Telegram username are asked to set one first.
 
 For file layout, module responsibilities, data refresh logic, and Telegram routing see **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
+For message formatting with telluride see **[TELLURIDE.md](TELLURIDE.md)**.
+
+For development checklist and contribution guidelines see **[CLAUDE.md](CLAUDE.md)**.
+
 ---
 
 ## License

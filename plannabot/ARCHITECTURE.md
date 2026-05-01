@@ -45,6 +45,19 @@ plannabot/
 
 ---
 
+## Telegram Message Formatting
+
+All messages sent to Telegram **must** use the `telluride` library for compile-time-safe MarkdownV2 formatting. For complete details on macros, escaping rules, imports, examples, and testing, see **[TELLURIDE.md](TELLURIDE.md)**.
+
+### Code Organization
+
+Messages should be kept close to where they're used:
+- **`bot/student.rs`** — all student-facing messages
+- **`bot/teacher.rs`** — all teacher-facing messages
+- **`bot/mod.rs`** — only error/authorization messages that apply to both roles
+
+---
+
 ## Module responsibilities
 
 ### `config.rs`
