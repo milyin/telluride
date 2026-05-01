@@ -165,6 +165,15 @@ impl BotState {
         is_teacher && is_student
     }
 
+    /// Gets a student by telegram name directly, bypassing the role-based lookup.
+    /// This is useful for impersonating dual-role users.
+    /// Returns the student if they are registered, regardless of whether they're also a teacher.
+    pub async fn get_student(&self, telegram_name: &str) -> Option<crate::models::Student> {
+        let normalised = telegram_name.trim_start_matches('@').to_lowercase();
+        let students = self.students.read().await;
+        students.get(&normalised).cloned()
+    }
+
     // -----------------------------------------------------------------------
     // Impersonation API
     // -----------------------------------------------------------------------

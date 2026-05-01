@@ -98,11 +98,11 @@ pub async fn common_command_handler(
         UserRole::Teacher(ref teacher) => {
             match state.get_impersonation(msg.chat.id).await {
                 // ---- Impersonation mode: act as the impersonated student ----
-                Some(ref student_name) => match state.get_role(student_name).await {
-                    Some(UserRole::Student(ref student)) => {
+                Some(ref student_name) => match state.get_student(student_name).await {
+                    Some(ref student) => {
                         student::handle_command(&bot, &msg, &cmd, student, &state).await
                     }
-                    _ => {
+                    None => {
                         // Student was removed from the spreadsheet.
                         state.clear_impersonation(msg.chat.id).await;
                         bot.send_message(

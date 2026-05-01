@@ -126,11 +126,25 @@ pub async fn handle_teacher_command(
                     .await?;
                 }
                 Some(UserRole::Teacher(_)) => {
-                    bot.send_message(
-                        msg.chat.id,
-                        format!("@{} is a teacher, not a student.", normalised),
-                    )
-                    .await?;
+                    // Check if this teacher is also a student (dual role)
+                    if state.is_both_teacher_and_student(&normalised).await {
+                        state.impersonate(msg.chat.id, normalised.clone()).await;
+                        bot.send_message(
+                            msg.chat.id,
+                            format!(
+                                "Now impersonating @{} (who is also a teacher). All commands will behave as if you were that student. \
+                                 Use /quit to return to teacher mode.",
+                                normalised
+                            ),
+                        )
+                        .await?;
+                    } else {
+                        bot.send_message(
+                            msg.chat.id,
+                            format!("@{} is a teacher, not a student.", normalised),
+                        )
+                        .await?;
+                    }
                 }
                 None => {
                     bot.send_message(
