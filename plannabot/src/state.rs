@@ -126,16 +126,9 @@ impl BotState {
 
     /// Looks up a user by Telegram name (normalised: no `'@'`, lowercase).
     ///
-    /// Students are checked before teachers.
+    /// If a user is both a teacher and a student, they are treated as a teacher.
     pub async fn get_role(&self, telegram_name: &str) -> Option<UserRole> {
         let normalised = telegram_name.trim_start_matches('@').to_lowercase();
-
-        {
-            let students = self.students.read().await;
-            if let Some(student) = students.get(&normalised) {
-                return Some(UserRole::Student(student.clone()));
-            }
-        }
 
         {
             let teachers = self.teachers.read().await;
@@ -144,7 +137,32 @@ impl BotState {
             }
         }
 
+        {
+            let students = self.students.read().await;
+            if let Some(student) = students.get(&normalised) {
+                return Some(UserRole::Student(student.clone()));
+            }
+        }
+
         None
+    }
+
+    /// Checks if a user is both a teacher and a student.
+    /// Both must be present in the respective tables.
+    pub async fn is_both_teacher_and_student(&self, telegram_name: &str) -> bool {
+        let normalised = telegram_name.trim_start_matches('@').to_lowercase();
+
+        let is_teacher = {
+            let teachers = self.teachers.read().await;
+            teachers.contains_key(&normalised)
+        };
+
+        let is_student = {
+            let students = self.students.read().await;
+            students.contains_key(&normalised)
+        };
+
+        is_teacher && is_student
     }
 
     // -----------------------------------------------------------------------

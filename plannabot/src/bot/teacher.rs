@@ -23,6 +23,18 @@ pub async fn handle_command(
                 teacher.telegram_name.as_str()
             );
             text.push(&greeting);
+
+            // Check if this user is also a student
+            if state
+                .is_both_teacher_and_student(&teacher.telegram_name)
+                .await
+            {
+                let info = markdown_string!(
+                    "\n\n📌 *Note:* You are registered as both a teacher and a student\\."
+                );
+                text.push(&info);
+            }
+
             bot.send_markdown_message(msg.chat.id, text).await?;
         }
 
