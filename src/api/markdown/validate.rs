@@ -3,8 +3,8 @@
 /// This function validates that a format string follows the [Telegram MarkdownV2 specification](https://core.telegram.org/bots/api#markdownv2-style).
 /// It performs compile-time validation to ensure:
 ///
-/// - Balanced formatting characters: \*, \_, \~, \|, \`, \[, \]
-/// - Properly escaped reserved characters: \!, \., \-, \+, \=, \>, \#, \{, \}
+/// - Balanced formatting characters: \*, \_, \~, `||`, \`, \[, \]
+/// - Properly escaped reserved characters: \!, \., \-, \+, \=, \>, \#, \{, \}, \|
 /// - Correct nesting of code blocks and formatting
 /// - Valid link syntax with matching parentheses
 ///
@@ -27,7 +27,7 @@ pub const fn validate_markdownv2_format(format_str: &str) {
     let mut square_bracket_count = 0u8;
     let mut paren_count = 0u8;
     let mut tilde_count = 0u8;
-    let mut pipe_count = 0u8;
+    let mut spoiler_delimiter_count = 0u8;
 
     // Track nesting state for validation
     let mut in_code = false;
@@ -48,7 +48,16 @@ pub const fn validate_markdownv2_format(format_str: &str) {
                 b'*' => asterisk_count = asterisk_count.wrapping_add(1),
                 b'_' => underscore_count = underscore_count.wrapping_add(1),
                 b'~' => tilde_count = tilde_count.wrapping_add(1),
-                b'|' => pipe_count = pipe_count.wrapping_add(1),
+                b'|' => {
+                    if !in_code && !in_pre {
+                        if i + 1 < format_str_bytes.len() && format_str_bytes[i + 1] == b'|' {
+                            spoiler_delimiter_count = spoiler_delimiter_count.wrapping_add(1);
+                            i += 1;
+                        } else {
+                            panic!("Unescaped '|' in MarkdownV2 format string. Use \\| to escape it or ||spoiler|| for spoiler formatting.");
+                        }
+                    }
+                }
 
                 // Code formatting validation
                 b'`' => {
@@ -167,8 +176,8 @@ pub const fn validate_markdownv2_format(format_str: &str) {
         "Unmatched tildes (~) in MarkdownV2 format string - strikethrough formatting must be balanced"
     );
     assert!(
-        pipe_count.is_multiple_of(2),
-        "Unmatched pipes (|) in MarkdownV2 format string - spoiler formatting must be balanced"
+        spoiler_delimiter_count.is_multiple_of(2),
+        "Unmatched spoiler delimiters (||) in MarkdownV2 format string - spoiler formatting must be balanced"
     );
     assert!(
         square_bracket_count == 0,
@@ -233,6 +242,7 @@ mod tests {
             "Escaped \\+ plus",
             "Escaped \\= equals",
             "Format placeholder: {}",
+            "Escaped \\| pipe",
         ];
 
         // Test the enhanced validation logic for each pattern
@@ -245,7 +255,7 @@ mod tests {
             let mut square_bracket_count = 0u8;
             let mut paren_count = 0u8;
             let mut tilde_count = 0u8;
-            let mut pipe_count = 0u8;
+            let mut spoiler_delimiter_count = 0u8;
             let mut prev_char = 0u8;
 
             while i < format_str_bytes.len() {
@@ -257,7 +267,14 @@ mod tests {
                         b'*' => asterisk_count = asterisk_count.wrapping_add(1),
                         b'_' => underscore_count = underscore_count.wrapping_add(1),
                         b'~' => tilde_count = tilde_count.wrapping_add(1),
-                        b'|' => pipe_count = pipe_count.wrapping_add(1),
+                        b'|' => {
+                            if i + 1 < format_str_bytes.len() && format_str_bytes[i + 1] == b'|' {
+                                spoiler_delimiter_count = spoiler_delimiter_count.wrapping_add(1);
+                                i += 1;
+                            } else {
+                                panic!("Pattern '{}' has unescaped pipe", pattern);
+                            }
+                        }
                         b'`' => backtick_count = backtick_count.wrapping_add(1),
                         b'[' => square_bracket_count = square_bracket_count.wrapping_add(1),
                         b']' => {
@@ -305,8 +322,8 @@ mod tests {
                 pattern
             );
             assert!(
-                pipe_count.is_multiple_of(2),
-                "Pattern '{}' has unmatched pipes",
+                spoiler_delimiter_count.is_multiple_of(2),
+                "Pattern '{}' has unmatched spoiler delimiters",
                 pattern
             );
             assert!(
@@ -320,6 +337,25 @@ mod tests {
                 pattern
             );
         }
+    }
+
+
+    #[test]
+    fn test_pipe_validation_accepts_spoilers_and_escaped_pipes() {
+        super::validate_markdownv2_format("With ||spoiler|| text");
+        super::validate_markdownv2_format("Escaped \\| separator");
+    }
+
+    #[test]
+    #[should_panic(expected = "Unescaped '|' in MarkdownV2 format string")]
+    fn test_pipe_validation_rejects_unescaped_separator() {
+        super::validate_markdownv2_format("left | middle | right");
+    }
+
+    #[test]
+    #[should_panic(expected = "Unmatched spoiler delimiters")]
+    fn test_pipe_validation_rejects_unclosed_spoiler() {
+        super::validate_markdownv2_format("||unmatched spoiler");
     }
 
     // Note: These patterns would cause compile errors if used with the markdown_string! macro:

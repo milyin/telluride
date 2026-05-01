@@ -57,7 +57,7 @@ pub async fn handle_command(
                     let time_str = local_time.format("%H:%M").to_string();
                     let duration_str = super::format_duration(entry.duration_minutes);
                     let line = markdown_format!(
-                        "📚 {} | {} | {} — Student: @{}\n",
+                        "📚 {} \\| {} \\| {} — Student: @{}\n",
                         date_str,
                         time_str,
                         duration_str,
