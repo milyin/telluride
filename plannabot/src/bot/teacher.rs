@@ -32,7 +32,7 @@ pub async fn handle_command(
                 /start \\- Start the bot\n\
                 /help \\- Display this help message\n\
                 /schedule \\- Show your planned lessons\n\
-                /impersonate <username> \\- View the bot as a student\n\
+                /impersonate \\<username\\> \\- View the bot as a student\n\
                 /quit \\- Exit impersonation mode"
             );
             bot.send_markdown_message(msg.chat.id, text).await?;
