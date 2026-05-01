@@ -93,14 +93,14 @@ pub async fn common_command_handler(
     // --- Dispatch to role-specific handler ----------------------------------
     let result = match role {
         UserRole::Student(ref student) => {
-            student::handle_command(&bot, &msg, &cmd, student, &state).await
+            student::handle_command(&bot, &msg, &cmd, student, &state, false).await
         }
         UserRole::Teacher(ref teacher) => {
             match state.get_impersonation(msg.chat.id).await {
                 // ---- Impersonation mode: act as the impersonated student ----
                 Some(ref student_name) => match state.get_student(student_name).await {
                     Some(ref student) => {
-                        student::handle_command(&bot, &msg, &cmd, student, &state).await
+                        student::handle_command(&bot, &msg, &cmd, student, &state, true).await
                     }
                     None => {
                         // Student was removed from the spreadsheet.

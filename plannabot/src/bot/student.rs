@@ -14,6 +14,7 @@ pub async fn handle_command(
     cmd: &CommonCommand,
     student: &Student,
     state: &Arc<BotState>,
+    is_impersonating: bool,
 ) -> Result<()> {
     match cmd {
         CommonCommand::Start => {
@@ -27,12 +28,16 @@ pub async fn handle_command(
         }
 
         CommonCommand::Help => {
-            let text = markdown_string!(
+            let mut text = markdown_string!(
                 "*Available Commands:*\n\n\
                 /start \\- Start the bot\n\
                 /help \\- Display this help message\n\
                 /schedule \\- Show your planned lessons"
             );
+            if is_impersonating {
+                let quit_cmd = markdown_string!("\n/quit \\- Exit impersonation mode");
+                text.push(&quit_cmd);
+            }
             bot.send_markdown_message(msg.chat.id, text).await?;
         }
 
