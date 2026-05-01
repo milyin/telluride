@@ -81,8 +81,9 @@ Because `Authenticator<C>` wraps its token cache in `Arc<Mutex<…>>`, cloning i
 1. Fetch the list of existing tab names.
 2. If a tab is missing → create it with the full header row.
 3. If a tab exists → read its header row, append only the columns that are absent.
+4. Apply inferred column formats for known column names (e.g. `date`, `time`, `datetime`, `cost`, `sum`, `currency`, `duration_minutes`).
 
-This makes startup idempotent: running the bot against an already-configured spreadsheet is a no-op write-wise.
+This makes startup idempotent: running the bot against an already-configured spreadsheet is safe and keeps schema/formatting aligned with the bot expectations.
 
 ### `state.rs` — `BotState`
 

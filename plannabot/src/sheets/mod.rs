@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
-use google_sheets4::{api, hyper, hyper_rustls, oauth2, Sheets};
+use google_sheets4::{api, hyper, hyper_rustls, oauth2, FieldMask, Sheets};
 use serde::Deserialize;
 
 pub mod payments;
@@ -74,6 +74,27 @@ pub fn col_index_to_letter(index: usize) -> String {
         n = n / 26 - 1;
     }
     result
+}
+
+/// Infers a Google Sheets number format for a column name.
+///
+/// The matching is case-insensitive and based on common schema conventions.
+fn infer_number_format(column_name: &str) -> Option<api::NumberFormat> {
+    let name = column_name.trim().to_lowercase();
+
+    let (type_, pattern) = match name.as_str() {
+        "date" | "lesson_date" | "payment_date" => ("DATE", "yyyy-mm-dd"),
+        "time" | "lesson_time" => ("TIME", "hh:mm"),
+        "datetime" | "lesson_datetime" => ("DATE_TIME", "yyyy-mm-dd hh:mm"),
+        "cost" | "sum" | "currency" | "price" | "amount" => ("CURRENCY", "#,##0.00"),
+        "duration_minutes" | "duration" => ("NUMBER", "0"),
+        _ => return None,
+    };
+
+    Some(api::NumberFormat {
+        type_: Some(type_.to_string()),
+        pattern: Some(pattern.to_string()),
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -361,6 +382,86 @@ impl SheetsClient {
         Ok(names)
     }
 
+    /// Returns the numeric `sheetId` for `sheet_name`.
+    pub async fn get_sheet_id(&self, sheet_name: &str) -> Result<i32> {
+        let (_, spreadsheet) = self
+            .hub
+            .spreadsheets()
+            .get(&self.spreadsheet_id)
+            .doit()
+            .await
+            .context("Failed to get spreadsheet metadata")?;
+
+        let sheet_id = spreadsheet
+            .sheets
+            .unwrap_or_default()
+            .into_iter()
+            .find_map(|s| {
+                s.properties.and_then(|p| {
+                    if p.title.as_deref() == Some(sheet_name) {
+                        p.sheet_id
+                    } else {
+                        None
+                    }
+                })
+            })
+            .ok_or_else(|| anyhow!("Sheet '{}' not found", sheet_name))?;
+
+        Ok(sheet_id)
+    }
+
+    /// Applies number/date/time/currency formatting to known columns.
+    async fn apply_column_formats(&self, sheet_name: &str, schema: &SheetSchema) -> Result<()> {
+        let sheet_id = self.get_sheet_id(sheet_name).await?;
+
+        let mut requests: Vec<api::Request> = Vec::new();
+        for (idx, column_name) in schema.headers.iter().enumerate() {
+            let Some(number_format) = infer_number_format(column_name) else {
+                continue;
+            };
+
+            requests.push(api::Request {
+                repeat_cell: Some(api::RepeatCellRequest {
+                    range: Some(api::GridRange {
+                        sheet_id: Some(sheet_id),
+                        start_row_index: Some(1),
+                        end_row_index: None,
+                        start_column_index: Some(idx as i32),
+                        end_column_index: Some(idx as i32 + 1),
+                    }),
+                    cell: Some(api::CellData {
+                        user_entered_format: Some(api::CellFormat {
+                            number_format: Some(number_format),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    fields: Some(FieldMask::new(&["userEnteredFormat.numberFormat"])),
+                }),
+                ..Default::default()
+            });
+        }
+
+        if requests.is_empty() {
+            return Ok(());
+        }
+
+        self.hub
+            .spreadsheets()
+            .batch_update(
+                api::BatchUpdateSpreadsheetRequest {
+                    requests: Some(requests),
+                    ..Default::default()
+                },
+                &self.spreadsheet_id,
+            )
+            .doit()
+            .await
+            .with_context(|| format!("Failed to apply column formats for sheet '{sheet_name}'"))?;
+
+        Ok(())
+    }
+
     // -----------------------------------------------------------------------
     // Schema management
     // -----------------------------------------------------------------------
@@ -414,14 +515,18 @@ impl SheetsClient {
                 .await
                 .with_context(|| format!("Failed to write headers for sheet '{sheet_name}'"))?;
 
+            let schema = SheetSchema::new(
+                sheet_name.to_string(),
+                required_cols.iter().map(|s| s.to_string()).collect(),
+            );
+
+            self.apply_column_formats(sheet_name, &schema).await?;
+
             log::info!(
                 "Created sheet '{sheet_name}' with {} columns.",
                 required_cols.len()
             );
-            return Ok(SheetSchema::new(
-                sheet_name.to_string(),
-                required_cols.iter().map(|s| s.to_string()).collect(),
-            ));
+            return Ok(schema);
         }
 
         // --------------------------------------------------------------------
@@ -458,6 +563,8 @@ impl SheetsClient {
                 .await
                 .with_context(|| format!("Failed to update headers for sheet '{sheet_name}'"))?;
         }
+
+        self.apply_column_formats(sheet_name, &schema).await?;
 
         Ok(schema)
     }

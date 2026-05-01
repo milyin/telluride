@@ -11,6 +11,7 @@ Data is stored in a Google Spreadsheet (editable by humans, read-synced by the b
 - **Role-based access** — students and teachers see different commands and data
 - **Google Sheets backend** — all data lives in a human-editable spreadsheet
 - **Auto-schema** — missing sheet tabs or columns are created automatically at startup
+- **Auto-formatting** — known columns are automatically formatted (`date`, `time`, `datetime`, currency-like fields, duration)
 - **`/schedule`** — students see their upcoming lessons; teachers see their full list
 - **Live data** — on every command the bot checks whether the spreadsheet was modified (via Google Drive API) and reloads data only when needed, with a 15-second throttle
 - **Safe MarkdownV2** — all messages use the `telluride` library for compile-time-validated formatting
