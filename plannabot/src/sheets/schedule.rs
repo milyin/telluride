@@ -45,6 +45,48 @@ fn parse_datetime(s: &str) -> Option<DateTime<Utc>> {
     None
 }
 
+/// Tries to combine separate date and time strings into a DateTime.
+///
+/// Date formats attempted (in order):
+/// 1. `YYYY-MM-DD`
+/// 2. `DD/MM/YYYY`
+///
+/// Time format: `HH:MM` or `HH:MM:SS`
+///
+/// Returns `None` if date or time cannot be parsed.
+fn parse_date_time(date_str: &str, time_str: &str) -> Option<DateTime<Utc>> {
+    let date_str = date_str.trim();
+    let time_str = time_str.trim();
+
+    // Try to parse date in YYYY-MM-DD format
+    if let Ok(ndt) =
+        NaiveDateTime::parse_from_str(&format!("{} {}", date_str, time_str), "%Y-%m-%d %H:%M:%S")
+    {
+        return Some(ndt.and_utc());
+    }
+
+    if let Ok(ndt) =
+        NaiveDateTime::parse_from_str(&format!("{} {}", date_str, time_str), "%Y-%m-%d %H:%M")
+    {
+        return Some(ndt.and_utc());
+    }
+
+    // Try to parse date in DD/MM/YYYY format
+    if let Ok(ndt) =
+        NaiveDateTime::parse_from_str(&format!("{} {}", date_str, time_str), "%d/%m/%Y %H:%M:%S")
+    {
+        return Some(ndt.and_utc());
+    }
+
+    if let Ok(ndt) =
+        NaiveDateTime::parse_from_str(&format!("{} {}", date_str, time_str), "%d/%m/%Y %H:%M")
+    {
+        return Some(ndt.and_utc());
+    }
+
+    None
+}
+
 // ---------------------------------------------------------------------------
 // Schedule readers
 // ---------------------------------------------------------------------------
@@ -53,7 +95,7 @@ impl SheetsClient {
     /// Reads **all** rows from the `Schedule` sheet and returns them as a
     /// `Vec<ScheduleEntry>`.
     ///
-    /// Rows with an unparseable `datetime` value are skipped with a warning.
+    /// Rows with an unparseable `date` or `time` value are skipped with a warning.
     /// Telegram names are normalised (strip `'@'`, lowercase).
     /// Cost values accept either `.` or `,` as the decimal separator.
     /// `duration_minutes` defaults to `60` when the cell is empty or
@@ -81,16 +123,36 @@ impl SheetsClient {
             }
 
             // --- datetime -------------------------------------------------------
-            let datetime_str = schema.get_str(row, "datetime");
-            let datetime = match parse_datetime(datetime_str) {
-                Some(dt) => dt,
-                None => {
-                    log::warn!(
-                        "Schedule row {} — skipping: cannot parse datetime '{}'",
-                        row_idx + 1,
-                        datetime_str
-                    );
-                    continue;
+            // Try to parse separate date and time columns first
+            let date_str = schema.get_str(row, "date");
+            let time_str = schema.get_str(row, "time");
+
+            let datetime = if !date_str.is_empty() && !time_str.is_empty() {
+                match parse_date_time(date_str, time_str) {
+                    Some(dt) => dt,
+                    None => {
+                        log::warn!(
+                            "Schedule row {} — skipping: cannot parse date '{}' and time '{}'",
+                            row_idx + 1,
+                            date_str,
+                            time_str
+                        );
+                        continue;
+                    }
+                }
+            } else {
+                // Fall back to parsing a combined datetime column if it exists
+                let datetime_str = schema.get_str(row, "datetime");
+                match parse_datetime(datetime_str) {
+                    Some(dt) => dt,
+                    None => {
+                        log::warn!(
+                            "Schedule row {} — skipping: cannot parse datetime '{}'",
+                            row_idx + 1,
+                            datetime_str
+                        );
+                        continue;
+                    }
                 }
             };
 

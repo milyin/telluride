@@ -53,11 +53,13 @@ pub async fn handle_command(
                 let mut text = markdown_string!("📅 *Your planned lessons:*\n\n");
                 for entry in &planned {
                     let local_time = entry.datetime.with_timezone(&tz);
-                    let date_str = local_time.format("%Y-%m-%d %H:%M").to_string();
+                    let date_str = local_time.format("%Y-%m-%d").to_string();
+                    let time_str = local_time.format("%H:%M").to_string();
                     let duration_str = super::format_duration(entry.duration_minutes);
                     let line = markdown_format!(
-                        "📚 {} \\({}\\) — Student: @{}\n",
+                        "📚 {} | {} | {} — Student: @{}\n",
                         date_str,
+                        time_str,
                         duration_str,
                         entry.student_telegram.as_str()
                     );

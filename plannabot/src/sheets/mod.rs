@@ -47,7 +47,8 @@ pub const TEACHERS_COLS: &[&str] = &["telegram_name", "timezone"];
 pub const SCHEDULE_COLS: &[&str] = &[
     "student_telegram",
     "teacher_telegram",
-    "datetime",
+    "date",
+    "time",
     "duration_minutes",
     "cost",
     "status",
