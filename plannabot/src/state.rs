@@ -1,4 +1,4 @@
-use crate::models::{Student, Teacher, UserRole};
+use crate::models::{Student, Teacher, TeacherStudentAssignment, UserRole};
 use crate::sheets::SheetsClient;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -20,6 +20,7 @@ pub struct BotState {
     // --- Cached sheet data ---------------------------------------------------
     students: Arc<RwLock<HashMap<String, Student>>>,
     teachers: Arc<RwLock<HashMap<String, Teacher>>>,
+    assignments: Arc<RwLock<Vec<TeacherStudentAssignment>>>,
 
     // --- Staleness tracking --------------------------------------------------
     /// The `modifiedTime` value returned by the Drive API the last time we
@@ -44,6 +45,7 @@ impl BotState {
             sheets,
             students: Arc::new(RwLock::new(HashMap::new())),
             teachers: Arc::new(RwLock::new(HashMap::new())),
+            assignments: Arc::new(RwLock::new(Vec::new())),
             last_modified: Mutex::new(None),
             // Subtract CHECK_INTERVAL so the very first command fires a check.
             last_checked: Mutex::new(Instant::now() - CHECK_INTERVAL),
@@ -182,6 +184,34 @@ impl BotState {
         students.get(&normalised).cloned()
     }
 
+    /// Returns all assignments where the given teacher is the teacher.
+    pub async fn get_assignments_for_teacher(
+        &self,
+        telegram_name: &str,
+    ) -> Vec<TeacherStudentAssignment> {
+        let normalised = telegram_name.trim_start_matches('@').to_lowercase();
+        let assignments = self.assignments.read().await;
+        assignments
+            .iter()
+            .filter(|a| a.teacher_telegram == normalised)
+            .cloned()
+            .collect()
+    }
+
+    /// Returns all assignments where the given student is the student.
+    pub async fn get_assignments_for_student(
+        &self,
+        telegram_name: &str,
+    ) -> Vec<TeacherStudentAssignment> {
+        let normalised = telegram_name.trim_start_matches('@').to_lowercase();
+        let assignments = self.assignments.read().await;
+        assignments
+            .iter()
+            .filter(|a| a.student_telegram == normalised)
+            .cloned()
+            .collect()
+    }
+
     // -----------------------------------------------------------------------
     // Impersonation API
     // -----------------------------------------------------------------------
@@ -211,17 +241,19 @@ impl BotState {
     // Internal helpers
     // -----------------------------------------------------------------------
 
-    /// Reads both tables from Google Sheets and atomically replaces the caches.
+    /// Reads all three tables from Google Sheets and atomically replaces the caches.
     /// Also fetches and caches the current modification time.
     async fn do_reload(&self) -> Result<()> {
         let students = self.sheets.get_students().await?;
         let teachers = self.sheets.get_teachers().await?;
+        let assignments = self.sheets.get_assignments().await?;
         let modified_time = self.sheets.get_spreadsheet_modified_time().await?;
-        let (ns, nt) = (students.len(), teachers.len());
+        let (ns, nt, na) = (students.len(), teachers.len(), assignments.len());
         *self.students.write().await = students;
         *self.teachers.write().await = teachers;
+        *self.assignments.write().await = assignments;
         *self.last_modified.lock().unwrap() = Some(modified_time);
-        log::info!("Data reloaded: {ns} students, {nt} teachers.");
+        log::info!("Data reloaded: {ns} students, {nt} teachers, {na} assignments.");
         Ok(())
     }
 }

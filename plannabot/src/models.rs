@@ -73,6 +73,15 @@ pub struct Payment {
     pub custom: HashMap<String, String>,
 }
 
+/// A teacher ↔ student assignment row.
+/// Both telegram names are stored without '@', in lowercase.
+/// Multiple students can be assigned to a single teacher.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TeacherStudentAssignment {
+    pub teacher_telegram: String,
+    pub student_telegram: String,
+}
+
 /// The role of a Telegram user in the system.
 #[derive(Debug, Clone)]
 pub enum UserRole {

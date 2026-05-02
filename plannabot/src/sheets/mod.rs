@@ -15,6 +15,7 @@ use chrono::{DateTime, Utc};
 use google_sheets4::{api, hyper, hyper_rustls, oauth2, FieldMask, Sheets};
 use serde::Deserialize;
 
+pub mod assignments;
 pub mod payments;
 pub mod schedule;
 pub mod students;
@@ -28,6 +29,7 @@ pub const SHEET_STUDENTS: &str = "Students";
 pub const SHEET_TEACHERS: &str = "Teachers";
 pub const SHEET_SCHEDULE: &str = "Schedule";
 pub const SHEET_PAYMENTS: &str = "Payments";
+pub const SHEET_ASSIGNMENTS: &str = "Assignments";
 
 // ---------------------------------------------------------------------------
 // Required column names for each sheet
@@ -55,6 +57,8 @@ pub const SCHEDULE_COLS: &[&str] = &[
 ];
 
 pub const PAYMENTS_COLS: &[&str] = &["student_telegram", "date", "sum"];
+
+pub const ASSIGNMENTS_COLS: &[&str] = &["teacher_telegram", "student_telegram"];
 
 // ---------------------------------------------------------------------------
 // Helper: column index → A1-notation letter(s)
@@ -574,13 +578,14 @@ impl SheetsClient {
         Ok(schema)
     }
 
-    /// Ensures all four standard sheets (`Students`, `Teachers`, `Schedule`,
-    /// `Payments`) exist with their required columns.
+    /// Ensures all five standard sheets (`Students`, `Teachers`, `Schedule`,
+    /// `Payments`, `Assignments`) exist with their required columns.
     pub async fn ensure_all_sheets(&self) -> Result<()> {
         self.ensure_sheet(SHEET_STUDENTS, STUDENTS_COLS).await?;
         self.ensure_sheet(SHEET_TEACHERS, TEACHERS_COLS).await?;
         self.ensure_sheet(SHEET_SCHEDULE, SCHEDULE_COLS).await?;
         self.ensure_sheet(SHEET_PAYMENTS, PAYMENTS_COLS).await?;
+        self.ensure_sheet(SHEET_ASSIGNMENTS, ASSIGNMENTS_COLS).await?;
         Ok(())
     }
 }
