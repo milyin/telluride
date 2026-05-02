@@ -266,6 +266,11 @@ impl SheetsClient {
         })
     }
 
+    /// Returns the spreadsheet ID.
+    pub fn get_spreadsheet_id(&self) -> &str {
+        &self.spreadsheet_id
+    }
+
     // -----------------------------------------------------------------------
     // Drive API: modification time
     // -----------------------------------------------------------------------

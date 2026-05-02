@@ -7,7 +7,7 @@ use crate::state::BotState;
 use anyhow::Result;
 use chrono_tz::Tz;
 use std::sync::Arc;
-use telluride::markdown::MarkdownStringMessage;
+use telluride::markdown::{MarkdownString, MarkdownStringMessage};
 use telluride::{markdown_format, markdown_string};
 use teloxide::prelude::*;
 
@@ -41,16 +41,27 @@ pub async fn start(
 }
 
 /// Handle the /help command for a teacher.
-pub async fn help(bot: &Bot, chat_id: ChatId) -> Result<()> {
-    let text = markdown_string!(
+pub async fn help(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Result<()> {
+    let spreadsheet_id = state.sheets.get_spreadsheet_id();
+    let sheets_url = format!(
+        "https://docs.google.com/spreadsheets/d/{}/edit",
+        spreadsheet_id
+    );
+    
+    // Use the proper markdown_format! macro with escaped URL
+    let url_markdown = MarkdownString::escape(sheets_url);
+    let formatted = markdown_format!(
         "*Available Commands \\(Teacher Mode\\):*\n\n\
         /start \\- Start the bot\n\
         /help \\- Display this help message\n\
         /schedule \\- Show your planned lessons\n\
         /impersonate \\- Choose a student to impersonate from a button list\n\
-        /quit \\- Exit impersonation mode"
+        /quit \\- Exit impersonation mode\n\n\
+        📊 *Master Schedule:* [View on Google Sheets]({})",
+        @raw url_markdown
     );
-    bot.send_markdown_message(chat_id, text).await?;
+    
+    bot.send_markdown_message(chat_id, formatted).await?;
     Ok(())
 }
 

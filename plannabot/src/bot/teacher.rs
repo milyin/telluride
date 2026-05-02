@@ -19,7 +19,7 @@ pub async fn handle_command(
 ) -> Result<()> {
     match cmd {
         CommonCommand::Start => api::teacher::start(bot, msg.chat.id, teacher, state).await,
-        CommonCommand::Help => api::teacher::help(bot, msg.chat.id).await,
+        CommonCommand::Help => api::teacher::help(bot, msg.chat.id, state).await,
         CommonCommand::Schedule => api::teacher::schedule(bot, msg.chat.id, teacher, state).await,
     }
 }
