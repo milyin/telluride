@@ -1,4 +1,8 @@
-use crate::models::{Teacher, UserRole};
+pub mod impersonate;
+
+pub use impersonate::impersonate;
+
+use crate::models::Teacher;
 use crate::state::BotState;
 use anyhow::Result;
 use chrono_tz::Tz;
@@ -86,75 +90,6 @@ pub async fn schedule(
             text.push(&line);
         }
         bot.send_markdown_message(chat_id, text).await?;
-    }
-
-    Ok(())
-}
-
-/// Handle the /impersonate command for a teacher.
-pub async fn impersonate(
-    bot: &Bot,
-    chat_id: ChatId,
-    username: &str,
-    state: &Arc<BotState>,
-) -> Result<()> {
-    if state.get_impersonation(chat_id).await.is_some() {
-        bot.send_message(
-            chat_id,
-            "You are already in impersonation mode. Use /quit first.",
-        )
-        .await?;
-        return Ok(());
-    }
-
-    let normalised = username.trim_start_matches('@').to_lowercase();
-    if normalised.is_empty() {
-        bot.send_message(chat_id, "Usage: /impersonate <student_username>")
-            .await?;
-        return Ok(());
-    }
-
-    match state.get_role(&normalised).await {
-        Some(UserRole::Student(_)) => {
-            state.impersonate(chat_id, normalised.clone()).await;
-            bot.send_message(
-                chat_id,
-                format!(
-                    "Now impersonating @{}. All commands will behave as if you were that student. \
-                     Use /quit to return to teacher mode.",
-                    normalised
-                ),
-            )
-            .await?;
-        }
-        Some(UserRole::Teacher(_)) => {
-            // Check if this teacher is also a student (dual role)
-            if state.is_both_teacher_and_student(&normalised).await {
-                state.impersonate(chat_id, normalised.clone()).await;
-                bot.send_message(
-                    chat_id,
-                    format!(
-                        "Now impersonating @{} (who is also a teacher). All commands will behave as if you were that student. \
-                         Use /quit to return to teacher mode.",
-                        normalised
-                    ),
-                )
-                .await?;
-            } else {
-                bot.send_message(
-                    chat_id,
-                    format!("@{} is a teacher, not a student.", normalised),
-                )
-                .await?;
-            }
-        }
-        None => {
-            bot.send_message(
-                chat_id,
-                format!("Student @{} was not found in the spreadsheet.", normalised),
-            )
-            .await?;
-        }
     }
 
     Ok(())

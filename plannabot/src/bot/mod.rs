@@ -27,8 +27,10 @@ pub enum CommonCommand {
 #[derive(BotCommands, Clone, Debug)]
 #[command(rename_rule = "lowercase", description = "Teacher commands:")]
 pub enum TeacherCommand {
-    #[command(description = "view the bot as a student (shows student list)")]
-    Impersonate,
+    #[command(
+        description = "view the bot as a student (shows student list or impersonates if username provided)"
+    )]
+    Impersonate(String),
     #[command(description = "exit impersonation mode")]
     Quit,
 }
@@ -216,7 +218,7 @@ pub async fn callback_action_handler(
     };
 
     // Unpack the stored action for this user.
-    let user_proxy = UserProxy::new(callback_storage, q.from.id);
+    let user_proxy = UserProxy::new(callback_storage.clone(), q.from.id);
     let action = match CallbackKey::unpack::<Action, _>(data, &user_proxy).await {
         Ok(a) => a,
         Err(e) => {
@@ -250,20 +252,27 @@ pub async fn callback_action_handler(
 
     match action {
         Action::ImpersonateStudent(student_name) => {
-            api::teacher::impersonate(&bot, chat_id, &student_name, &state)
-                .await
-                .map_err(|e| {
-                    log::error!(
-                        "Error impersonating @{} for @{}: {}",
-                        student_name,
-                        username,
-                        e
-                    );
-                    teloxide::RequestError::Io(Arc::new(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        e.to_string(),
-                    )))
-                })?;
+            api::teacher::impersonate(
+                &bot,
+                chat_id,
+                Some(&student_name),
+                &state,
+                q.from.id,
+                callback_storage,
+            )
+            .await
+            .map_err(|e| {
+                log::error!(
+                    "Error impersonating @{} for @{}: {}",
+                    student_name,
+                    username,
+                    e
+                );
+                teloxide::RequestError::Io(Arc::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e.to_string(),
+                )))
+            })?;
         }
     }
 

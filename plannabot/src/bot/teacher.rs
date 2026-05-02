@@ -4,10 +4,10 @@ use crate::models::Teacher;
 use crate::state::BotState;
 use anyhow::Result;
 use std::sync::Arc;
-use telluride::command::{CallbackKey, InlineKeyboardButtonPackedExt};
-use telluride::data_store::{InMemStore, UserProxy};
+use telluride::command::CallbackKey;
+use telluride::data_store::InMemStore;
 use teloxide::prelude::*;
-use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, UserId};
+use teloxide::types::UserId;
 
 /// Route common commands for a teacher to the appropriate API functions.
 pub async fn handle_command(
@@ -39,53 +39,21 @@ pub async fn handle_teacher_command(
     callback_storage: Arc<InMemStore<CallbackKey, Action>>,
 ) -> Result<()> {
     match cmd {
-        TeacherCommand::Impersonate => {
-            show_student_selection(bot, msg.chat.id, user_id, callback_storage, state).await
+        TeacherCommand::Impersonate(student_param) => {
+            api::teacher::impersonate(
+                bot,
+                msg.chat.id,
+                if student_param.is_empty() {
+                    None
+                } else {
+                    Some(student_param.as_str())
+                },
+                state,
+                user_id,
+                callback_storage,
+            )
+            .await
         }
         TeacherCommand::Quit => api::teacher::quit(bot, msg.chat.id, teacher, state).await,
     }
-}
-
-/// Send an inline keyboard listing every registered student.
-///
-/// Each button is labelled `@<telegram_name>` and carries a packed
-/// [`Action::ImpersonateStudent`] callback.  When the teacher presses a
-/// button, [`crate::bot::callback_action_handler`] unpacks the action and
-/// calls [`crate::api::teacher::impersonate`] with the chosen student name.
-async fn show_student_selection(
-    bot: &Bot,
-    chat_id: ChatId,
-    user_id: UserId,
-    callback_storage: Arc<InMemStore<CallbackKey, Action>>,
-    state: &Arc<BotState>,
-) -> Result<()> {
-    let student_names = state.get_student_names().await;
-
-    if student_names.is_empty() {
-        bot.send_message(
-            chat_id,
-            "No students are registered in the spreadsheet yet.",
-        )
-        .await?;
-        return Ok(());
-    }
-
-    // Each callback key is scoped to this teacher's user_id so that multiple
-    // teachers using the bot simultaneously don't share each other's keys.
-    let user_proxy = UserProxy::new(callback_storage, user_id);
-
-    let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
-    for name in student_names {
-        let label = format!("@{}", name);
-        let key = CallbackKey::pack(Action::ImpersonateStudent(name), &user_proxy).await;
-        let button = InlineKeyboardButton::callback_key(label, &key);
-        buttons.push(vec![button]);
-    }
-
-    let keyboard = InlineKeyboardMarkup::new(buttons);
-    bot.send_message(chat_id, "Select the student you want to impersonate:")
-        .reply_markup(keyboard)
-        .await?;
-
-    Ok(())
 }
