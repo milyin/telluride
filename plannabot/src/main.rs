@@ -6,8 +6,11 @@ mod sheets;
 mod state;
 
 use std::sync::Arc;
+use telluride::command::CallbackKey;
+use telluride::data_store::InMemStore;
 use teloxide::prelude::*;
 
+use bot::Action;
 use config::Config;
 use sheets::SheetsClient;
 use state::BotState;
@@ -42,6 +45,9 @@ async fn main() {
 
     let bot = Bot::from_env();
 
+    // Per-user callback action storage for inline keyboard buttons.
+    let callback_storage = Arc::new(InMemStore::<CallbackKey, Action>::new());
+
     let handler = dptree::entry()
         // Common commands (/start, /help, /schedule) — available to all users.
         .branch(
@@ -54,6 +60,16 @@ async fn main() {
             Update::filter_message()
                 .filter_command::<bot::TeacherCommand>()
                 .endpoint(bot::teacher_command_handler),
+        )
+        // Inline keyboard button presses (student selection for /impersonate).
+        .branch(
+            Update::filter_callback_query()
+                .filter(|q: CallbackQuery| {
+                    q.data
+                        .as_ref()
+                        .map_or(false, |data| CallbackKey::is_packed_data(data))
+                })
+                .endpoint(bot::callback_action_handler),
         )
         // Plain text messages (non-command)
         .branch(
@@ -68,7 +84,7 @@ async fn main() {
         });
 
     Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![state])
+        .dependencies(dptree::deps![state, callback_storage])
         .enable_ctrlc_handler()
         .build()
         .dispatch()

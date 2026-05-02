@@ -43,7 +43,7 @@ pub async fn help(bot: &Bot, chat_id: ChatId) -> Result<()> {
         /start \\- Start the bot\n\
         /help \\- Display this help message\n\
         /schedule \\- Show your planned lessons\n\
-        /impersonate \\<username\\> \\- View the bot as a student\n\
+        /impersonate \\- Choose a student to impersonate from a button list\n\
         /quit \\- Exit impersonation mode"
     );
     bot.send_markdown_message(chat_id, text).await?;

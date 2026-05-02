@@ -1,10 +1,14 @@
 pub mod student;
 pub mod teacher;
 
+use crate::api;
 use crate::models::UserRole;
 use crate::state::BotState;
 use std::sync::Arc;
+use telluride::command::CallbackKey;
+use telluride::data_store::{InMemStore, UserProxy};
 use teloxide::prelude::*;
+use teloxide::types::UserId;
 use teloxide::utils::command::BotCommands;
 
 /// Commands available to all authorised users.
@@ -23,11 +27,20 @@ pub enum CommonCommand {
 #[derive(BotCommands, Clone, Debug)]
 #[command(rename_rule = "lowercase", description = "Teacher commands:")]
 pub enum TeacherCommand {
-    #[command(description = "view the bot as a student")]
-    Impersonate(String),
+    #[command(description = "view the bot as a student (shows student list)")]
+    Impersonate,
     #[command(description = "exit impersonation mode")]
     Quit,
 }
+
+/// Callback actions triggered by inline keyboard buttons.
+#[derive(Clone, Debug, Hash, PartialEq, Eq, bitcode::Encode, bitcode::Decode)]
+pub enum Action {
+    /// Impersonate the student with the given telegram name (without '@', lowercase).
+    ImpersonateStudent(String),
+}
+
+impl telluride::command::CallbackBitcode for Action {}
 
 /// Extracts the Telegram username from a message sender.
 /// Returns the username without '@', converted to lowercase.
@@ -127,6 +140,7 @@ pub async fn teacher_command_handler(
     msg: Message,
     cmd: TeacherCommand,
     state: Arc<BotState>,
+    callback_storage: Arc<InMemStore<CallbackKey, Action>>,
 ) -> ResponseResult<()> {
     // --- Refresh cache if the spreadsheet was modified ----------------------
     state.refresh_if_needed().await;
@@ -151,8 +165,20 @@ pub async fn teacher_command_handler(
         }
     };
 
+    // Retrieve the UserId for scoping callback storage (safe: get_username already confirmed msg.from is Some)
+    let user_id: UserId = msg.from.as_ref().unwrap().id;
+
     // --- Dispatch -----------------------------------------------------------
-    let result = teacher::handle_teacher_command(&bot, &msg, &cmd, &teacher, &state).await;
+    let result = teacher::handle_teacher_command(
+        &bot,
+        &msg,
+        &cmd,
+        &teacher,
+        &state,
+        user_id,
+        callback_storage,
+    )
+    .await;
 
     result.map_err(|e| {
         log::error!(
@@ -166,6 +192,80 @@ pub async fn teacher_command_handler(
             e.to_string(),
         )))
     })?;
+
+    Ok(())
+}
+
+/// Teloxide endpoint handler for inline keyboard callback queries.
+///
+/// Unpacks the action from the callback data using [`CallbackKey::unpack`] and
+/// dispatches to the appropriate API function. Only teachers are permitted to
+/// trigger impersonation callbacks.
+pub async fn callback_action_handler(
+    bot: Bot,
+    q: CallbackQuery,
+    callback_storage: Arc<InMemStore<CallbackKey, Action>>,
+    state: Arc<BotState>,
+) -> ResponseResult<()> {
+    // Acknowledge the button press immediately to remove the loading indicator.
+    bot.answer_callback_query(q.id.clone()).await?;
+
+    let data = match &q.data {
+        Some(d) => d,
+        None => return Ok(()),
+    };
+
+    // Unpack the stored action for this user.
+    let user_proxy = UserProxy::new(callback_storage, q.from.id);
+    let action = match CallbackKey::unpack::<Action, _>(data, &user_proxy).await {
+        Ok(a) => a,
+        Err(e) => {
+            log::warn!("Failed to unpack callback action: {}", e);
+            return Ok(());
+        }
+    };
+
+    // --- Security gate: only teachers may trigger impersonation -------------
+    let username = q
+        .from
+        .username
+        .as_deref()
+        .map(|u| u.trim_start_matches('@').to_lowercase());
+    let Some(username) = username else {
+        return Ok(());
+    };
+    if !matches!(state.get_role(&username).await, Some(UserRole::Teacher(_))) {
+        log::warn!(
+            "Non-teacher @{} attempted to trigger an impersonation callback — ignored.",
+            username
+        );
+        return Ok(());
+    }
+
+    // Resolve the chat to reply in.
+    let chat_id = match q.message.as_ref().map(|m| m.chat().id) {
+        Some(id) => id,
+        None => return Ok(()),
+    };
+
+    match action {
+        Action::ImpersonateStudent(student_name) => {
+            api::teacher::impersonate(&bot, chat_id, &student_name, &state)
+                .await
+                .map_err(|e| {
+                    log::error!(
+                        "Error impersonating @{} for @{}: {}",
+                        student_name,
+                        username,
+                        e
+                    );
+                    teloxide::RequestError::Io(Arc::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        e.to_string(),
+                    )))
+                })?;
+        }
+    }
 
     Ok(())
 }
