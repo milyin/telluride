@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, NaiveDateTime, Utc};
 
 use super::{SheetSchema, SheetsClient, SCHEDULE_COLS, SHEET_SCHEDULE};
-use crate::models::{LessonStatus, ScheduleEntry};
+use crate::models::{LessonStatus, ScheduleEntry, TelegramName};
 
 // ---------------------------------------------------------------------------
 // Datetime parsing
@@ -157,15 +157,23 @@ impl SheetsClient {
             };
 
             // --- telegram names -------------------------------------------------
-            let student_telegram = schema
-                .get_str(row, "student_telegram")
-                .trim_start_matches('@')
-                .to_lowercase();
+            let raw_student = schema.get_str(row, "student_telegram");
+            let student_telegram = match TelegramName::try_from(raw_student) {
+                Ok(n) => n,
+                Err(e) => {
+                    log::warn!("Schedule row {} — skipping: invalid student_telegram {:?}: {}", row_idx + 1, raw_student, e);
+                    continue;
+                }
+            };
 
-            let teacher_telegram = schema
-                .get_str(row, "teacher_telegram")
-                .trim_start_matches('@')
-                .to_lowercase();
+            let raw_teacher = schema.get_str(row, "teacher_telegram");
+            let teacher_telegram = match TelegramName::try_from(raw_teacher) {
+                Ok(n) => n,
+                Err(e) => {
+                    log::warn!("Schedule row {} — skipping: invalid teacher_telegram {:?}: {}", row_idx + 1, raw_teacher, e);
+                    continue;
+                }
+            };
 
             // --- numeric fields -------------------------------------------------
             let cost_str = schema.get_str(row, "cost").replace(',', ".");
@@ -197,9 +205,12 @@ impl SheetsClient {
 
     /// Returns only the schedule entries for the given student.
     ///
-    /// `telegram_name` is normalised before filtering.
+    /// `telegram_name` is normalised and validated; an empty list is returned
+    /// for invalid names.
     pub async fn get_student_schedule(&self, telegram_name: &str) -> Result<Vec<ScheduleEntry>> {
-        let normalised = telegram_name.trim_start_matches('@').to_lowercase();
+        let Ok(normalised) = TelegramName::try_from(telegram_name) else {
+            return Ok(vec![]);
+        };
 
         let all = self.get_schedule().await?;
         Ok(all
@@ -210,9 +221,12 @@ impl SheetsClient {
 
     /// Returns only the schedule entries for the given teacher.
     ///
-    /// `telegram_name` is normalised before filtering.
+    /// `telegram_name` is normalised and validated; an empty list is returned
+    /// for invalid names.
     pub async fn get_teacher_schedule(&self, telegram_name: &str) -> Result<Vec<ScheduleEntry>> {
-        let normalised = telegram_name.trim_start_matches('@').to_lowercase();
+        let Ok(normalised) = TelegramName::try_from(telegram_name) else {
+            return Ok(vec![]);
+        };
 
         let all = self.get_schedule().await?;
         Ok(all

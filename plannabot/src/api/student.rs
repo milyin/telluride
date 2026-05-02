@@ -44,7 +44,7 @@ pub async fn schedule(
 ) -> Result<()> {
     let entries = state
         .sheets
-        .get_student_schedule(&student.telegram_name)
+        .get_student_schedule(student.telegram_name.as_str())
         .await?;
 
     let mut planned: Vec<_> = entries.into_iter().filter(|e| e.is_planned()).collect();
@@ -62,11 +62,11 @@ pub async fn schedule(
             let time_str = local_time.format("%H:%M").to_string();
             let duration_str = format_duration(entry.duration_minutes);
             let line = markdown_format!(
-                "📚 {} \\| {} \\| {} — Teacher: @{}\n",
+                "📚 {} \\| {} \\| {} — Teacher: {}\n",
                 date_str,
                 time_str,
                 duration_str,
-                entry.teacher_telegram.as_str()
+                entry.teacher_telegram.to_string()
             );
             text.push(&line);
         }

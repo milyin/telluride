@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 
 use super::{SheetSchema, SheetsClient, SHEET_TEACHERS, TEACHERS_COLS};
-use crate::models::Teacher;
+use crate::models::{Teacher, TelegramName};
 
 impl SheetsClient {
     /// Reads all rows from the `Teachers` sheet and returns a map from
@@ -36,14 +36,16 @@ impl SheetsClient {
                 continue;
             }
 
-            let telegram_name = schema
-                .get_str(row, "telegram_name")
-                .trim_start_matches('@')
-                .to_lowercase();
-
-            if telegram_name.is_empty() {
-                continue;
-            }
+            let raw = schema.get_str(row, "telegram_name");
+            let telegram_name = match TelegramName::try_from(raw) {
+                Ok(n) => n,
+                Err(e) => {
+                    if !raw.trim().is_empty() {
+                        log::warn!("Teachers sheet — skipping row with invalid telegram_name {:?}: {}", raw, e);
+                    }
+                    continue;
+                }
+            };
 
             let teacher = Teacher {
                 telegram_name: telegram_name.clone(),
@@ -51,7 +53,7 @@ impl SheetsClient {
                 custom: schema.get_custom(row, TEACHERS_COLS),
             };
 
-            teachers.insert(telegram_name, teacher);
+            teachers.insert(telegram_name.as_str().to_string(), teacher);
         }
 
         Ok(teachers)

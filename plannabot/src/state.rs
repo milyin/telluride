@@ -1,4 +1,4 @@
-use crate::models::{Student, Teacher, TeacherStudentAssignment, UserRole};
+use crate::models::{Student, Teacher, TeacherStudentAssignment, TelegramName, UserRole};
 use crate::sheets::SheetsClient;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -126,22 +126,23 @@ impl BotState {
         }
     }
 
-    /// Looks up a user by Telegram name (normalised: no `'@'`, lowercase).
+    /// Looks up a user by Telegram name (normalised via [`TelegramName`]).
     ///
     /// If a user is both a teacher and a student, they are treated as a teacher.
     pub async fn get_role(&self, telegram_name: &str) -> Option<UserRole> {
-        let normalised = telegram_name.trim_start_matches('@').to_lowercase();
+        let normalised = TelegramName::try_from(telegram_name).ok()?;
+        let key = normalised.as_str();
 
         {
             let teachers = self.teachers.read().await;
-            if let Some(teacher) = teachers.get(&normalised) {
+            if let Some(teacher) = teachers.get(key) {
                 return Some(UserRole::Teacher(teacher.clone()));
             }
         }
 
         {
             let students = self.students.read().await;
-            if let Some(student) = students.get(&normalised) {
+            if let Some(student) = students.get(key) {
                 return Some(UserRole::Student(student.clone()));
             }
         }
@@ -152,16 +153,19 @@ impl BotState {
     /// Checks if a user is both a teacher and a student.
     /// Both must be present in the respective tables.
     pub async fn is_both_teacher_and_student(&self, telegram_name: &str) -> bool {
-        let normalised = telegram_name.trim_start_matches('@').to_lowercase();
+        let Ok(normalised) = TelegramName::try_from(telegram_name) else {
+            return false;
+        };
+        let key = normalised.as_str();
 
         let is_teacher = {
             let teachers = self.teachers.read().await;
-            teachers.contains_key(&normalised)
+            teachers.contains_key(key)
         };
 
         let is_student = {
             let students = self.students.read().await;
-            students.contains_key(&normalised)
+            students.contains_key(key)
         };
 
         is_teacher && is_student
@@ -179,9 +183,9 @@ impl BotState {
     /// This is useful for impersonating dual-role users.
     /// Returns the student if they are registered, regardless of whether they're also a teacher.
     pub async fn get_student(&self, telegram_name: &str) -> Option<crate::models::Student> {
-        let normalised = telegram_name.trim_start_matches('@').to_lowercase();
+        let normalised = TelegramName::try_from(telegram_name).ok()?;
         let students = self.students.read().await;
-        students.get(&normalised).cloned()
+        students.get(normalised.as_str()).cloned()
     }
 
     /// Returns all assignments where the given teacher is the teacher.
@@ -189,7 +193,9 @@ impl BotState {
         &self,
         telegram_name: &str,
     ) -> Vec<TeacherStudentAssignment> {
-        let normalised = telegram_name.trim_start_matches('@').to_lowercase();
+        let Ok(normalised) = TelegramName::try_from(telegram_name) else {
+            return vec![];
+        };
         let assignments = self.assignments.read().await;
         assignments
             .iter()
@@ -203,7 +209,9 @@ impl BotState {
         &self,
         telegram_name: &str,
     ) -> Vec<TeacherStudentAssignment> {
-        let normalised = telegram_name.trim_start_matches('@').to_lowercase();
+        let Ok(normalised) = TelegramName::try_from(telegram_name) else {
+            return vec![];
+        };
         let assignments = self.assignments.read().await;
         assignments
             .iter()

@@ -1,12 +1,92 @@
 use std::collections::HashMap;
+use std::fmt;
 
+use anyhow::bail;
 use chrono::{DateTime, Utc};
 
+/// A normalised Telegram username.
+///
+/// Stored without `'@'`, in lowercase.  Constructed via [`TryFrom<&str>`],
+/// which strips a leading `'@'`, lower-cases the result, and then enforces
+/// the following Telegram username rules:
+///
+/// * 5–32 characters long.
+/// * Only ASCII letters (`a-z`), digits (`0-9`), and underscores (`_`).
+/// * Must start with a letter (not a digit or underscore).
+/// * Cannot end with an underscore.
+/// * No consecutive underscores.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct TelegramName(String);
+
+impl TryFrom<&str> for TelegramName {
+    type Error = anyhow::Error;
+
+    fn try_from(raw: &str) -> Result<Self, Self::Error> {
+        // Normalise: strip leading '@' and lowercase.
+        let s = raw.trim_start_matches('@').to_lowercase();
+
+        // --- Length ---
+        if s.len() < 5 || s.len() > 32 {
+            bail!(
+                "Telegram username {:?} must be 5–32 characters long (got {})",
+                s,
+                s.len()
+            );
+        }
+
+        // --- Character set ---
+        if !s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            bail!(
+                "Telegram username {:?} contains invalid characters \
+                 (only a-z, 0-9, _ allowed)",
+                s
+            );
+        }
+
+        // --- Must start with a letter ---
+        let first = s.chars().next().unwrap();
+        if !first.is_ascii_alphabetic() {
+            bail!(
+                "Telegram username {:?} must start with a letter, not {:?}",
+                s,
+                first
+            );
+        }
+
+        // --- Must not end with an underscore ---
+        if s.ends_with('_') {
+            bail!("Telegram username {:?} must not end with an underscore", s);
+        }
+
+        // --- No consecutive underscores ---
+        if s.contains("__") {
+            bail!(
+                "Telegram username {:?} must not contain consecutive underscores",
+                s
+            );
+        }
+
+        Ok(TelegramName(s))
+    }
+}
+
+impl fmt::Display for TelegramName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "@{}", self.0)
+    }
+}
+
+impl TelegramName {
+    /// Returns the inner username string (without `'@'`, in lowercase).
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// A student registered in the system.
-/// `telegram_name` is stored without '@', in lowercase.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Student {
-    pub telegram_name: String,
+    pub telegram_name: TelegramName,
     pub name: String,
     pub timezone: String,
     pub currency: String,
@@ -16,10 +96,9 @@ pub struct Student {
 }
 
 /// A teacher registered in the system.
-/// `telegram_name` is stored without '@', in lowercase.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Teacher {
-    pub telegram_name: String,
+    pub telegram_name: TelegramName,
     pub timezone: String,
     pub custom: HashMap<String, String>,
 }
@@ -43,12 +122,11 @@ impl LessonStatus {
 }
 
 /// A single entry in the schedule.
-/// `student_telegram` and `teacher_telegram` are stored without '@', in lowercase.
 /// `status = None` means the lesson is planned (not yet done or cancelled).
 #[derive(Debug, Clone)]
 pub struct ScheduleEntry {
-    pub student_telegram: String,
-    pub teacher_telegram: String,
+    pub student_telegram: TelegramName,
+    pub teacher_telegram: TelegramName,
     pub datetime: DateTime<Utc>,
     pub duration_minutes: i64,
     pub cost: f64,
@@ -64,22 +142,20 @@ impl ScheduleEntry {
 }
 
 /// A payment record for a student.
-/// `student_telegram` is stored without '@', in lowercase.
 #[derive(Debug, Clone)]
 pub struct Payment {
-    pub student_telegram: String,
+    pub student_telegram: TelegramName,
     pub date: DateTime<Utc>,
     pub sum: f64,
     pub custom: HashMap<String, String>,
 }
 
 /// A teacher ↔ student assignment row.
-/// Both telegram names are stored without '@', in lowercase.
 /// Multiple students can be assigned to a single teacher.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TeacherStudentAssignment {
-    pub teacher_telegram: String,
-    pub student_telegram: String,
+    pub teacher_telegram: TelegramName,
+    pub student_telegram: TelegramName,
 }
 
 /// The role of a Telegram user in the system.

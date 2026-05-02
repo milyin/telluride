@@ -20,14 +20,14 @@ pub async fn start(
 ) -> Result<()> {
     let mut text = markdown_string!("👋 *Welcome to Plannabot\\!*\n\n");
     let greeting = markdown_format!(
-        "Hello, @{}\\! Use /help to see available commands\\.",
-        teacher.telegram_name.as_str()
+        "Hello, {}\\! Use /help to see available commands\\.",
+        teacher.telegram_name.to_string()
     );
     text.push(&greeting);
 
     // Check if this user is also a student
     if state
-        .is_both_teacher_and_student(&teacher.telegram_name)
+        .is_both_teacher_and_student(teacher.telegram_name.as_str())
         .await
     {
         let info = markdown_string!(
@@ -74,7 +74,7 @@ pub async fn schedule(
 ) -> Result<()> {
     let entries = state
         .sheets
-        .get_teacher_schedule(&teacher.telegram_name)
+        .get_teacher_schedule(teacher.telegram_name.as_str())
         .await?;
 
     let mut planned: Vec<_> = entries.into_iter().filter(|e| e.is_planned()).collect();
@@ -92,11 +92,11 @@ pub async fn schedule(
             let time_str = local_time.format("%H:%M").to_string();
             let duration_str = format_duration(entry.duration_minutes);
             let line = markdown_format!(
-                "📚 {} \\| {} \\| {} — Student: @{}\n",
+                "📚 {} \\| {} \\| {} — Student: {}\n",
                 date_str,
                 time_str,
                 duration_str,
-                entry.student_telegram.as_str()
+                entry.student_telegram.to_string()
             );
             text.push(&line);
         }
@@ -118,7 +118,7 @@ pub async fn quit(
         bot.send_message(
             chat_id,
             format!(
-                "Exited impersonation mode. You are back as @{} (teacher).",
+                "Exited impersonation mode. You are back as {} (teacher).",
                 teacher.telegram_name
             ),
         )
