@@ -38,21 +38,6 @@ pub fn get_username(msg: &Message) -> Option<String> {
         .map(|username| username.trim_start_matches('@').to_lowercase())
 }
 
-/// Formats a lesson duration in minutes to a human-readable string.
-///
-/// - `90`  → `"1h 30m"`
-/// - `120` → `"2h"`
-/// - `45`  → `"45m"`
-pub fn format_duration(minutes: i64) -> String {
-    let hours = minutes / 60;
-    let mins = minutes % 60;
-    match (hours, mins) {
-        (0, m) => format!("{}m", m),
-        (h, 0) => format!("{}h", h),
-        (h, m) => format!("{}h {}m", h, m),
-    }
-}
-
 /// Teloxide endpoint handler for common bot commands (Start, Help, Schedule).
 ///
 /// Before resolving the user's role, calls [`BotState::refresh_if_needed`] so

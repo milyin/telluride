@@ -1,3 +1,4 @@
+mod api;
 mod bot;
 mod config;
 mod models;
