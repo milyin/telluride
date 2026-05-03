@@ -1,7 +1,7 @@
 use std::fmt;
 
 use anyhow::bail;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, NaiveTime, Utc, Weekday};
 use chrono_tz::Tz;
 
 /// A normalised Telegram username.
@@ -196,6 +196,20 @@ sheet_struct! {
     pub struct TeacherStudentAssignment {
         pub teacher_telegram: TelegramName,
         pub student_telegram: TelegramName,
+    }
+}
+
+sheet_struct! {
+    /// A teacher's working time window for a specific day-of-week or calendar date.
+    ///
+    /// Rows with `date` set override rows with `day_of_week` for that specific date.
+    #[derive(Debug, Clone)]
+    pub struct Worktime {
+        pub teacher_telegram: TelegramName,
+        pub day_of_week: Option<Weekday>,
+        pub date: Option<NaiveDate>,
+        pub start_time: NaiveTime,
+        pub end_time: NaiveTime,
     }
 }
 

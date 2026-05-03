@@ -324,10 +324,12 @@ impl BotState {
         errors.extend(teacher_errors);
         errors.extend(assignment_errors);
 
-        // Also reload the schedule to surface its errors (the cached data itself
-        // is read on demand, but we still want to report parse failures).
+        // Also reload schedule and worktime to surface parse errors (data is read
+        // on demand, but we still want to report failures at reload time).
         let (_, schedule_errors) = self.sheets.get_schedule().await?;
         errors.extend(schedule_errors);
+        let (_, worktime_errors) = self.sheets.get_worktime().await?;
+        errors.extend(worktime_errors);
 
         let (ns, nt, na) = (students.len(), teachers.len(), assignments.len());
         *self.students.write().await = students;

@@ -23,6 +23,7 @@ pub mod payments;
 pub mod schedule;
 pub mod students;
 pub mod teachers;
+pub mod worktime;
 
 
 // ---------------------------------------------------------------------------
@@ -34,6 +35,7 @@ pub const SHEET_TEACHERS: &str = "Teachers";
 pub const SHEET_SCHEDULE: &str = "Schedule";
 pub const SHEET_PAYMENTS: &str = "Payments";
 pub const SHEET_ASSIGNMENTS: &str = "Assignments";
+pub const SHEET_WORKTIME: &str = "Worktime";
 
 // ---------------------------------------------------------------------------
 // Required column names for each sheet
@@ -48,6 +50,8 @@ pub const SCHEDULE_COLS: &[&str] = crate::models::ScheduleEntry::SHEET_COLS;
 pub const PAYMENTS_COLS: &[&str] = crate::models::Payment::SHEET_COLS;
 
 pub const ASSIGNMENTS_COLS: &[&str] = crate::models::TeacherStudentAssignment::SHEET_COLS;
+
+pub const WORKTIME_COLS: &[&str] = crate::models::Worktime::SHEET_COLS;
 
 // ---------------------------------------------------------------------------
 // Helper: column index → A1-notation letter(s)
@@ -78,7 +82,7 @@ fn infer_number_format(column_name: &str) -> Option<api::NumberFormat> {
 
     let (type_, pattern) = match name.as_str() {
         "date" | "lesson_date" | "payment_date" => ("DATE", "yyyy-mm-dd"),
-        "time" | "lesson_time" => ("TIME", "hh:mm"),
+        "time" | "lesson_time" | "start_time" | "end_time" => ("TIME", "hh:mm"),
         "datetime" | "lesson_datetime" => ("DATE_TIME", "yyyy-mm-dd hh:mm"),
         "cost" | "sum" | "currency" | "price" | "amount" => ("CURRENCY", "#,##0.00"),
         "duration_minutes" | "duration" => ("NUMBER", "0"),
@@ -580,14 +584,14 @@ impl SheetsClient {
         Ok(schema)
     }
 
-    /// Ensures all five standard sheets (`Students`, `Teachers`, `Schedule`,
-    /// `Payments`, `Assignments`) exist with their required columns.
+    /// Ensures all standard sheets exist with their required columns.
     pub async fn ensure_all_sheets(&self) -> Result<()> {
         self.ensure_sheet(SHEET_STUDENTS, STUDENTS_COLS).await?;
         self.ensure_sheet(SHEET_TEACHERS, TEACHERS_COLS).await?;
         self.ensure_sheet(SHEET_SCHEDULE, SCHEDULE_COLS).await?;
         self.ensure_sheet(SHEET_PAYMENTS, PAYMENTS_COLS).await?;
         self.ensure_sheet(SHEET_ASSIGNMENTS, ASSIGNMENTS_COLS).await?;
+        self.ensure_sheet(SHEET_WORKTIME, WORKTIME_COLS).await?;
         Ok(())
     }
 }

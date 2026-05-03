@@ -9,7 +9,7 @@
 
 use std::str::FromStr;
 
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc, Weekday};
 use chrono_tz::Tz;
 
 use crate::models::{LessonStatus, SheetParseError, TelegramName};
@@ -101,6 +101,51 @@ impl FromSheetValue for Tz {
             std::cmp::Ordering::Less => format!("Etc/GMT+{}", -h),
         };
         Tz::from_str(&name).map_err(|_| format!("cannot resolve offset {h}h to an Etc/GMT zone"))
+    }
+}
+
+impl FromSheetValue for NaiveTime {
+    fn from_sheet_value(s: &str) -> Result<Self, String> {
+        let s = s.trim();
+        if s.is_empty() {
+            return Err("empty time".to_string());
+        }
+        for fmt in ["%H:%M:%S", "%H:%M"] {
+            if let Ok(t) = NaiveTime::parse_from_str(s, fmt) {
+                return Ok(t);
+            }
+        }
+        Err(format!("cannot parse time '{s}'"))
+    }
+}
+
+impl FromSheetValue for NaiveDate {
+    fn from_sheet_value(s: &str) -> Result<Self, String> {
+        let s = s.trim();
+        if s.is_empty() {
+            return Err("empty date".to_string());
+        }
+        for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y"] {
+            if let Ok(d) = NaiveDate::parse_from_str(s, fmt) {
+                return Ok(d);
+            }
+        }
+        Err(format!("cannot parse date '{s}'"))
+    }
+}
+
+impl FromSheetValue for Weekday {
+    fn from_sheet_value(s: &str) -> Result<Self, String> {
+        match s.trim().to_lowercase().as_str() {
+            "monday" | "mon" | "1" => Ok(Weekday::Mon),
+            "tuesday" | "tue" | "2" => Ok(Weekday::Tue),
+            "wednesday" | "wed" | "3" => Ok(Weekday::Wed),
+            "thursday" | "thu" | "4" => Ok(Weekday::Thu),
+            "friday" | "fri" | "5" => Ok(Weekday::Fri),
+            "saturday" | "sat" | "6" => Ok(Weekday::Sat),
+            "sunday" | "sun" | "7" | "0" => Ok(Weekday::Sun),
+            other => Err(format!("cannot parse weekday '{other}'")),
+        }
     }
 }
 
@@ -256,6 +301,54 @@ impl FromSheet for Option<DateTime<Utc>> {
             Err(msg) => {
                 push_error(schema, row_num, col_name, msg, errors);
                 None
+            }
+        }
+    }
+}
+
+/// Empty cell → `None` (silent).  Non-empty but unparseable → `None` + error logged.
+impl FromSheet for Option<NaiveDate> {
+    fn from_sheet(schema: &SheetSchema, row: &[String], row_num: usize, col_name: &str, errors: &mut Vec<SheetParseError>) -> Self {
+        let raw = schema.get_str(row, col_name);
+        if raw.is_empty() {
+            return None;
+        }
+        match NaiveDate::from_sheet_value(raw) {
+            Ok(d) => Some(d),
+            Err(msg) => {
+                push_error(schema, row_num, col_name, msg, errors);
+                None
+            }
+        }
+    }
+}
+
+/// Empty cell → `None` (silent).  Non-empty but unparseable → `None` + error logged.
+impl FromSheet for Option<Weekday> {
+    fn from_sheet(schema: &SheetSchema, row: &[String], row_num: usize, col_name: &str, errors: &mut Vec<SheetParseError>) -> Self {
+        let raw = schema.get_str(row, col_name);
+        if raw.is_empty() {
+            return None;
+        }
+        match Weekday::from_sheet_value(raw) {
+            Ok(d) => Some(d),
+            Err(msg) => {
+                push_error(schema, row_num, col_name, msg, errors);
+                None
+            }
+        }
+    }
+}
+
+/// Missing or unparseable cell logs an error and falls back to midnight.
+impl FromSheet for NaiveTime {
+    fn from_sheet(schema: &SheetSchema, row: &[String], row_num: usize, col_name: &str, errors: &mut Vec<SheetParseError>) -> Self {
+        let raw = schema.get_str(row, col_name);
+        match NaiveTime::from_sheet_value(raw) {
+            Ok(t) => t,
+            Err(msg) => {
+                push_error(schema, row_num, col_name, format!("{msg}; using midnight"), errors);
+                NaiveTime::from_hms_opt(0, 0, 0).unwrap()
             }
         }
     }
