@@ -3,15 +3,19 @@
 use anyhow::{Context, Result};
 
 use super::{SheetSchema, SheetsClient, SHEET_ASSIGNMENTS};
-use crate::models::{TeacherStudentAssignment, TelegramName};
+use crate::models::{SheetParseError, TeacherStudentAssignment, TelegramName};
 
 impl SheetsClient {
     /// Reads all rows from the `Assignments` sheet and returns them as a
-    /// `Vec<TeacherStudentAssignment>`.
+    /// `Vec<TeacherStudentAssignment>`, together with any [`SheetParseError`]s
+    /// encountered while parsing rows.
     ///
-    /// Rows where either `teacher_telegram` or `student_telegram` is empty or
-    /// invalid are silently skipped.
-    pub async fn get_assignments(&self) -> Result<Vec<TeacherStudentAssignment>> {
+    /// Rows where either `teacher_telegram` or `student_telegram` is empty are
+    /// silently skipped.  Rows with a non-empty but invalid value are logged at
+    /// `ERROR` level and collected as errors.
+    pub async fn get_assignments(
+        &self,
+    ) -> Result<(Vec<TeacherStudentAssignment>, Vec<SheetParseError>)> {
         let range = format!("{SHEET_ASSIGNMENTS}!A:Z");
         let rows = self
             .get_values(&range)
@@ -19,15 +23,16 @@ impl SheetsClient {
             .context("Failed to get Assignments sheet data")?;
 
         if rows.is_empty() {
-            return Ok(vec![]);
+            return Ok((vec![], vec![]));
         }
 
         // First row is always the header.
         let schema = SheetSchema::new(SHEET_ASSIGNMENTS.to_string(), rows[0].clone());
 
         let mut assignments: Vec<TeacherStudentAssignment> = Vec::new();
+        let mut errors: Vec<SheetParseError> = Vec::new();
 
-        for row in rows.iter().skip(1) {
+        for (row_idx, row) in rows.iter().enumerate().skip(1) {
             // Skip empty rows.
             if row.is_empty() || row.iter().all(|c| c.is_empty()) {
                 continue;
@@ -38,7 +43,14 @@ impl SheetsClient {
                 Ok(n) => n,
                 Err(e) => {
                     if !raw_teacher.trim().is_empty() {
-                        log::warn!("Assignments sheet — invalid teacher_telegram {:?}: {}", raw_teacher, e);
+                        let err = SheetParseError {
+                            sheet: SHEET_ASSIGNMENTS.to_string(),
+                            row: row_idx + 1,
+                            column: "teacher_telegram".to_string(),
+                            message: e.to_string(),
+                        };
+                        log::error!("{err}");
+                        errors.push(err);
                     }
                     continue;
                 }
@@ -49,7 +61,14 @@ impl SheetsClient {
                 Ok(n) => n,
                 Err(e) => {
                     if !raw_student.trim().is_empty() {
-                        log::warn!("Assignments sheet — invalid student_telegram {:?}: {}", raw_student, e);
+                        let err = SheetParseError {
+                            sheet: SHEET_ASSIGNMENTS.to_string(),
+                            row: row_idx + 1,
+                            column: "student_telegram".to_string(),
+                            message: e.to_string(),
+                        };
+                        log::error!("{err}");
+                        errors.push(err);
                     }
                     continue;
                 }
@@ -61,7 +80,7 @@ impl SheetsClient {
             });
         }
 
-        Ok(assignments)
+        Ok((assignments, errors))
     }
 
     /// Returns all students assigned to the given teacher.
@@ -75,7 +94,7 @@ impl SheetsClient {
         let Ok(normalised) = TelegramName::try_from(telegram_name) else {
             return Ok(vec![]);
         };
-        let all = self.get_assignments().await?;
+        let (all, _) = self.get_assignments().await?;
         Ok(all
             .into_iter()
             .filter(|a| a.teacher_telegram == normalised)
@@ -96,7 +115,7 @@ impl SheetsClient {
         let Ok(normalised) = TelegramName::try_from(telegram_name) else {
             return Ok(vec![]);
         };
-        let all = self.get_assignments().await?;
+        let (all, _) = self.get_assignments().await?;
         Ok(all
             .into_iter()
             .filter(|a| a.student_telegram == normalised)

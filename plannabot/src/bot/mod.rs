@@ -68,7 +68,7 @@ pub async fn common_command_handler(
     state: Arc<BotState>,
 ) -> ResponseResult<()> {
     // --- Refresh cache if the spreadsheet was modified ----------------------
-    state.refresh_if_needed().await;
+    let reloaded = state.refresh_if_needed().await;
 
     // --- Gate: require a Telegram username ----------------------------------
     let Some(username) = get_username(&msg) else {
@@ -89,6 +89,21 @@ pub async fn common_command_handler(
         .await?;
         return Ok(());
     };
+
+    // --- Register teacher chat & report errors ------------------------------
+    if let UserRole::Teacher(ref teacher) = role {
+        let is_new = !state.is_teacher_chat_known(&teacher.telegram_name).await;
+        state
+            .register_teacher_chat(msg.chat.id, &teacher.telegram_name)
+            .await;
+        // If there were fresh errors from this refresh, broadcast to all known teachers.
+        if reloaded {
+            state.report_parse_errors(&bot).await;
+        } else if is_new {
+            // Teacher appeared for the first time — deliver any pending errors.
+            state.deliver_pending_to(&bot, msg.chat.id).await;
+        }
+    }
 
     // --- Dispatch to role-specific handler ----------------------------------
     let result = match role {
@@ -145,7 +160,7 @@ pub async fn teacher_command_handler(
     callback_storage: Arc<InMemStore<CallbackKey, Action>>,
 ) -> ResponseResult<()> {
     // --- Refresh cache if the spreadsheet was modified ----------------------
-    state.refresh_if_needed().await;
+    let reloaded = state.refresh_if_needed().await;
 
     // --- Gate: require a Telegram username ----------------------------------
     let Some(username) = get_username(&msg) else {
@@ -166,6 +181,17 @@ pub async fn teacher_command_handler(
             return Ok(());
         }
     };
+
+    // --- Register teacher chat & report errors ------------------------------
+    let is_new = !state.is_teacher_chat_known(&teacher.telegram_name).await;
+    state
+        .register_teacher_chat(msg.chat.id, &teacher.telegram_name)
+        .await;
+    if reloaded {
+        state.report_parse_errors(&bot).await;
+    } else if is_new {
+        state.deliver_pending_to(&bot, msg.chat.id).await;
+    }
 
     // Retrieve the UserId for scoping callback storage (safe: get_username already confirmed msg.from is Some)
     let user_id: UserId = msg.from.as_ref().unwrap().id;
@@ -285,7 +311,7 @@ pub async fn callback_action_handler(
 /// and nudges authorised users toward the command interface.
 pub async fn message_handler(bot: Bot, msg: Message, state: Arc<BotState>) -> ResponseResult<()> {
     // --- Refresh cache if the spreadsheet was modified ----------------------
-    state.refresh_if_needed().await;
+    let reloaded = state.refresh_if_needed().await;
 
     // --- Gate: require a Telegram username ----------------------------------
     let Some(username) = get_username(&msg) else {
@@ -298,13 +324,26 @@ pub async fn message_handler(bot: Bot, msg: Message, state: Arc<BotState>) -> Re
     };
 
     // --- Gate: require authorisation ----------------------------------------
-    if state.get_role(&username).await.is_none() {
+    let Some(role) = state.get_role(&username).await else {
         bot.send_message(
             msg.chat.id,
             "You are not authorized to use this bot. Please contact your teacher.",
         )
         .await?;
         return Ok(());
+    };
+
+    // --- Register teacher chat & report errors ------------------------------
+    if let UserRole::Teacher(ref teacher) = role {
+        let is_new = !state.is_teacher_chat_known(&teacher.telegram_name).await;
+        state
+            .register_teacher_chat(msg.chat.id, &teacher.telegram_name)
+            .await;
+        if reloaded {
+            state.report_parse_errors(&bot).await;
+        } else if is_new {
+            state.deliver_pending_to(&bot, msg.chat.id).await;
+        }
     }
 
     bot.send_message(msg.chat.id, "Use /help to see available commands.")

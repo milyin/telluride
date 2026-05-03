@@ -5,16 +5,19 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 
 use super::{SheetSchema, SheetsClient, SHEET_STUDENTS, STUDENTS_COLS};
-use crate::models::{Student, TelegramName};
+use crate::models::{SheetParseError, Student, TelegramName};
 
 impl SheetsClient {
     /// Reads all rows from the `Students` sheet and returns a map from
-    /// (normalised) Telegram username → [`Student`].
+    /// (normalised) Telegram username → [`Student`], together with any
+    /// [`SheetParseError`]s encountered while parsing rows.
     ///
     /// Rows whose `telegram_name` cell is empty or contains an invalid username
-    /// are silently skipped.
+    /// are skipped; the error is logged at `ERROR` level and collected.
     /// Any column not in [`STUDENTS_COLS`] is collected into [`Student::custom`].
-    pub async fn get_students(&self) -> Result<HashMap<String, Student>> {
+    pub async fn get_students(
+        &self,
+    ) -> Result<(HashMap<String, Student>, Vec<SheetParseError>)> {
         let range = format!("{SHEET_STUDENTS}!A:Z");
         let rows = self
             .get_values(&range)
@@ -22,15 +25,16 @@ impl SheetsClient {
             .context("Failed to get Students sheet data")?;
 
         if rows.is_empty() {
-            return Ok(HashMap::new());
+            return Ok((HashMap::new(), vec![]));
         }
 
         // First row is always the header.
         let schema = SheetSchema::new(SHEET_STUDENTS.to_string(), rows[0].clone());
 
         let mut students: HashMap<String, Student> = HashMap::new();
+        let mut errors: Vec<SheetParseError> = Vec::new();
 
-        for row in rows.iter().skip(1) {
+        for (row_idx, row) in rows.iter().enumerate().skip(1) {
             // Skip empty rows.
             if row.is_empty() || row.iter().all(|c| c.is_empty()) {
                 continue;
@@ -41,7 +45,14 @@ impl SheetsClient {
                 Ok(n) => n,
                 Err(e) => {
                     if !raw.trim().is_empty() {
-                        log::warn!("Students sheet — skipping row with invalid telegram_name {:?}: {}", raw, e);
+                        let err = SheetParseError {
+                            sheet: SHEET_STUDENTS.to_string(),
+                            row: row_idx + 1,
+                            column: "telegram_name".to_string(),
+                            message: e.to_string(),
+                        };
+                        log::error!("{err}");
+                        errors.push(err);
                     }
                     continue;
                 }
@@ -60,6 +71,7 @@ impl SheetsClient {
             students.insert(telegram_name.as_str().to_string(), student);
         }
 
-        Ok(students)
+        Ok((students, errors))
     }
 }
+

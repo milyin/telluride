@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, NaiveDateTime, Utc};
 
 use super::{SheetSchema, SheetsClient, SCHEDULE_COLS, SHEET_SCHEDULE};
-use crate::models::{LessonStatus, ScheduleEntry, TelegramName};
+use crate::models::{LessonStatus, ScheduleEntry, SheetParseError, TelegramName};
 
 // ---------------------------------------------------------------------------
 // Datetime parsing
@@ -93,14 +93,17 @@ fn parse_date_time(date_str: &str, time_str: &str) -> Option<DateTime<Utc>> {
 
 impl SheetsClient {
     /// Reads **all** rows from the `Schedule` sheet and returns them as a
-    /// `Vec<ScheduleEntry>`.
+    /// `Vec<ScheduleEntry>`, together with any [`SheetParseError`]s encountered
+    /// while parsing rows.
     ///
-    /// Rows with an unparseable `date` or `time` value are skipped with a warning.
-    /// Telegram names are normalised (strip `'@'`, lowercase).
+    /// Rows with an unparseable `date` or `time` value are skipped with an
+    /// error.  Telegram names are normalised (strip `'@'`, lowercase).
     /// Cost values accept either `.` or `,` as the decimal separator.
     /// `duration_minutes` defaults to `60` when the cell is empty or
     /// unparseable.
-    pub async fn get_schedule(&self) -> Result<Vec<ScheduleEntry>> {
+    pub async fn get_schedule(
+        &self,
+    ) -> Result<(Vec<ScheduleEntry>, Vec<SheetParseError>)> {
         let range = format!("{SHEET_SCHEDULE}!A:Z");
         let rows = self
             .get_values(&range)
@@ -108,13 +111,14 @@ impl SheetsClient {
             .context("Failed to get Schedule sheet data")?;
 
         if rows.is_empty() {
-            return Ok(vec![]);
+            return Ok((vec![], vec![]));
         }
 
         // First row is always the header.
         let schema = SheetSchema::new(SHEET_SCHEDULE.to_string(), rows[0].clone());
 
         let mut entries: Vec<ScheduleEntry> = Vec::new();
+        let mut errors: Vec<SheetParseError> = Vec::new();
 
         for (row_idx, row) in rows.iter().enumerate().skip(1) {
             // Skip empty rows (1-based sheet row number = row_idx + 1).
@@ -131,12 +135,17 @@ impl SheetsClient {
                 match parse_date_time(date_str, time_str) {
                     Some(dt) => dt,
                     None => {
-                        log::warn!(
-                            "Schedule row {} — skipping: cannot parse date '{}' and time '{}'",
-                            row_idx + 1,
-                            date_str,
-                            time_str
-                        );
+                        let err = SheetParseError {
+                            sheet: SHEET_SCHEDULE.to_string(),
+                            row: row_idx + 1,
+                            column: "date/time".to_string(),
+                            message: format!(
+                                "cannot parse date '{}' and time '{}'",
+                                date_str, time_str
+                            ),
+                        };
+                        log::error!("{err}");
+                        errors.push(err);
                         continue;
                     }
                 }
@@ -146,11 +155,14 @@ impl SheetsClient {
                 match parse_datetime(datetime_str) {
                     Some(dt) => dt,
                     None => {
-                        log::warn!(
-                            "Schedule row {} — skipping: cannot parse datetime '{}'",
-                            row_idx + 1,
-                            datetime_str
-                        );
+                        let err = SheetParseError {
+                            sheet: SHEET_SCHEDULE.to_string(),
+                            row: row_idx + 1,
+                            column: "datetime".to_string(),
+                            message: format!("cannot parse datetime '{}'", datetime_str),
+                        };
+                        log::error!("{err}");
+                        errors.push(err);
                         continue;
                     }
                 }
@@ -161,7 +173,14 @@ impl SheetsClient {
             let student_telegram = match TelegramName::try_from(raw_student) {
                 Ok(n) => n,
                 Err(e) => {
-                    log::warn!("Schedule row {} — skipping: invalid student_telegram {:?}: {}", row_idx + 1, raw_student, e);
+                    let err = SheetParseError {
+                        sheet: SHEET_SCHEDULE.to_string(),
+                        row: row_idx + 1,
+                        column: "student_telegram".to_string(),
+                        message: e.to_string(),
+                    };
+                    log::error!("{err}");
+                    errors.push(err);
                     continue;
                 }
             };
@@ -170,7 +189,14 @@ impl SheetsClient {
             let teacher_telegram = match TelegramName::try_from(raw_teacher) {
                 Ok(n) => n,
                 Err(e) => {
-                    log::warn!("Schedule row {} — skipping: invalid teacher_telegram {:?}: {}", row_idx + 1, raw_teacher, e);
+                    let err = SheetParseError {
+                        sheet: SHEET_SCHEDULE.to_string(),
+                        row: row_idx + 1,
+                        column: "teacher_telegram".to_string(),
+                        message: e.to_string(),
+                    };
+                    log::error!("{err}");
+                    errors.push(err);
                     continue;
                 }
             };
@@ -200,7 +226,7 @@ impl SheetsClient {
             });
         }
 
-        Ok(entries)
+        Ok((entries, errors))
     }
 
     /// Returns only the schedule entries for the given student.
@@ -212,7 +238,7 @@ impl SheetsClient {
             return Ok(vec![]);
         };
 
-        let all = self.get_schedule().await?;
+        let (all, _) = self.get_schedule().await?;
         Ok(all
             .into_iter()
             .filter(|e| e.student_telegram == normalised)
@@ -228,7 +254,7 @@ impl SheetsClient {
             return Ok(vec![]);
         };
 
-        let all = self.get_schedule().await?;
+        let (all, _) = self.get_schedule().await?;
         Ok(all
             .into_iter()
             .filter(|e| e.teacher_telegram == normalised)

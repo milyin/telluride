@@ -1,4 +1,4 @@
-use crate::models::{Student, Teacher, TeacherStudentAssignment, TelegramName, UserRole};
+use crate::models::{SheetParseError, Student, Teacher, TeacherStudentAssignment, TelegramName, UserRole};
 use crate::sheets::SheetsClient;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -7,6 +7,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+use teloxide::prelude::*;
 use teloxide::types::ChatId;
 use tokio::sync::RwLock;
 
@@ -37,6 +38,23 @@ pub struct BotState {
     /// currently impersonating.  Entries are inserted by `/impersonate` and
     /// removed by `/quit`.
     impersonations: RwLock<HashMap<ChatId, String>>,
+
+    // --- Teacher chat registration -------------------------------------------
+    /// Maps a teacher's normalised TelegramName to their ChatId.
+    ///
+    /// Populated whenever a known teacher sends any message.  Used to send and
+    /// pin parse-error reports after a spreadsheet refresh.  Teachers who have
+    /// never messaged the bot are deferred: once they do appear their pending
+    /// errors are sent at that point.
+    teacher_chat_ids: RwLock<HashMap<TelegramName, ChatId>>,
+
+    /// Parse errors collected during the most recent reload that have not yet
+    /// been sent to all teachers.  Keyed by teacher TelegramName so that when
+    /// a previously-unknown teacher appears we can deliver their report.
+    ///
+    /// Errors are cleared once every teacher has been notified (or the next
+    /// reload overwrites them).
+    pending_errors: RwLock<Vec<SheetParseError>>,
 }
 
 impl BotState {
@@ -50,6 +68,8 @@ impl BotState {
             // Subtract CHECK_INTERVAL so the very first command fires a check.
             last_checked: Mutex::new(Instant::now() - CHECK_INTERVAL),
             impersonations: RwLock::new(HashMap::new()),
+            teacher_chat_ids: RwLock::new(HashMap::new()),
+            pending_errors: RwLock::new(Vec::new()),
         }
     }
 
@@ -57,11 +77,12 @@ impl BotState {
     // Public API
     // -----------------------------------------------------------------------
 
-    /// Unconditionally re-reads students and teachers from Google Sheets.
+    /// Unconditionally re-reads all tables from Google Sheets.
     ///
-    /// Called once at startup.  Use [`refresh_if_needed`] during normal
+    /// Returns any [`SheetParseError`]s encountered during parsing.
+    /// Called once at startup; use [`refresh_if_needed`] during normal
     /// operation to benefit from caching.
-    pub async fn refresh(&self) -> Result<()> {
+    pub async fn refresh(&self) -> Result<Vec<SheetParseError>> {
         self.do_reload().await
     }
 
@@ -118,12 +139,56 @@ impl BotState {
             current_modified
         );
         match self.do_reload().await {
-            Ok(()) => true,
+            Ok(_) => true,
             Err(e) => {
                 log::error!("Failed to reload data from spreadsheet: {}", e);
                 false
             }
         }
+    }
+
+    /// Checks if we already have a ChatId for the given teacher.
+    pub async fn is_teacher_chat_known(&self, telegram_name: &TelegramName) -> bool {
+        let map = self.teacher_chat_ids.read().await;
+        map.contains_key(telegram_name)
+    }
+
+    /// Records that the teacher with `telegram_name` is chatting from `chat_id`.
+    ///
+    /// Should be called whenever a known teacher sends any message.  If there
+    /// are pending parse errors that haven't been delivered to this teacher yet,
+    /// the caller is responsible for calling [`report_parse_errors`] afterwards.
+    pub async fn register_teacher_chat(&self, chat_id: ChatId, telegram_name: &TelegramName) {
+        let mut map = self.teacher_chat_ids.write().await;
+        map.insert(telegram_name.clone(), chat_id);
+    }
+
+    /// Sends pending parse errors to all known teacher chats and pins the
+    /// message.  If a teacher's chat already has a pinned message the report
+    /// for that chat is **skipped**.  Any teacher whose ChatId is not yet known
+    /// is skipped; the errors remain in `pending_errors` so they can be
+    /// delivered when that teacher next appears (see [`deliver_pending_to`]).
+    pub async fn report_parse_errors(&self, bot: &Bot) {
+        let pending = self.pending_errors.read().await;
+        if pending.is_empty() {
+            return;
+        }
+
+        let chat_ids = self.teacher_chat_ids.read().await;
+        for (_name, &chat_id) in chat_ids.iter() {
+            Self::try_send_error_pin(bot, chat_id, &pending).await;
+        }
+    }
+
+    /// Delivers any pending parse errors to a single teacher chat that has just
+    /// become known.  Should be called immediately after [`register_teacher_chat`]
+    /// so that teachers who appear after a failed reload still get their report.
+    pub async fn deliver_pending_to(&self, bot: &Bot, chat_id: ChatId) {
+        let pending = self.pending_errors.read().await;
+        if pending.is_empty() {
+            return;
+        }
+        Self::try_send_error_pin(bot, chat_id, &pending).await;
     }
 
     /// Looks up a user by Telegram name (normalised via [`TelegramName`]).
@@ -249,19 +314,93 @@ impl BotState {
     // Internal helpers
     // -----------------------------------------------------------------------
 
-    /// Reads all three tables from Google Sheets and atomically replaces the caches.
+    /// Reads all four tables from Google Sheets and atomically replaces the caches.
     /// Also fetches and caches the current modification time.
-    async fn do_reload(&self) -> Result<()> {
-        let students = self.sheets.get_students().await?;
-        let teachers = self.sheets.get_teachers().await?;
-        let assignments = self.sheets.get_assignments().await?;
+    ///
+    /// Returns all parse errors collected across all sheets.
+    async fn do_reload(&self) -> Result<Vec<SheetParseError>> {
+        let (students, mut errors) = self.sheets.get_students().await?;
+        let (teachers, teacher_errors) = self.sheets.get_teachers().await?;
+        let (assignments, assignment_errors) = self.sheets.get_assignments().await?;
         let modified_time = self.sheets.get_spreadsheet_modified_time().await?;
+
+        errors.extend(teacher_errors);
+        errors.extend(assignment_errors);
+
+        // Also reload the schedule to surface its errors (the cached data itself
+        // is read on demand, but we still want to report parse failures).
+        let (_, schedule_errors) = self.sheets.get_schedule().await?;
+        errors.extend(schedule_errors);
+
         let (ns, nt, na) = (students.len(), teachers.len(), assignments.len());
         *self.students.write().await = students;
         *self.teachers.write().await = teachers;
         *self.assignments.write().await = assignments;
+        *self.pending_errors.write().await = errors.clone();
         *self.last_modified.lock().unwrap() = Some(modified_time);
-        log::info!("Data reloaded: {ns} students, {nt} teachers, {na} assignments.");
-        Ok(())
+
+        if errors.is_empty() {
+            log::info!("Data reloaded: {ns} students, {nt} teachers, {na} assignments.");
+        } else {
+            log::error!(
+                "Data reloaded: {ns} students, {nt} teachers, {na} assignments \
+                 — {} parse error(s).",
+                errors.len()
+            );
+        }
+
+        Ok(errors)
+    }
+
+    /// Attempts to send the error report to `chat_id` and pin it.
+    ///
+    /// Skipped silently if the chat already has a pinned message.
+    /// All Telegram API errors are logged but do not propagate.
+    async fn try_send_error_pin(bot: &Bot, chat_id: ChatId, errors: &[SheetParseError]) {
+        // Check for an existing pinned message by fetching chat info.
+        match bot.get_chat(chat_id).await {
+            Ok(chat) => {
+                if chat.pinned_message.is_some() {
+                    log::debug!(
+                        "Skipping error report to chat {chat_id}: \
+                         a message is already pinned."
+                    );
+                    return;
+                }
+            }
+            Err(e) => {
+                log::warn!("Could not get chat info for {chat_id}: {e}");
+                return;
+            }
+        }
+
+        // Build the error message text.
+        let header = format!(
+            "⚠️ Spreadsheet parse errors ({} row(s) skipped):\n\n",
+            errors.len()
+        );
+        let body: String = errors
+            .iter()
+            .map(|e| format!("• {}\n", e))
+            .collect();
+        let text = format!("{}{}", header, body);
+
+        // Send the message.
+        let msg = match bot.send_message(chat_id, &text).await {
+            Ok(m) => m,
+            Err(e) => {
+                log::error!("Failed to send parse-error report to chat {chat_id}: {e}");
+                return;
+            }
+        };
+
+        // Pin it.
+        if let Err(e) = bot
+            .pin_chat_message(chat_id, msg.id)
+            .disable_notification(true)
+            .await
+        {
+            log::error!("Failed to pin parse-error report in chat {chat_id}: {e}");
+        }
     }
 }

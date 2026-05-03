@@ -164,3 +164,30 @@ pub enum UserRole {
     Student(Student),
     Teacher(Teacher),
 }
+
+/// A parse error encountered while reading a row from a Google Sheet.
+///
+/// Collected during table refresh and reported to teachers as a pinned
+/// Telegram message.  All indices are **1-based** (matching how Google Sheets
+/// labels rows to users).
+#[derive(Debug, Clone)]
+pub struct SheetParseError {
+    /// Name of the sheet tab (e.g. `"Schedule"`).
+    pub sheet: String,
+    /// 1-based row number where the error occurred (row 1 = header).
+    pub row: usize,
+    /// Column / field name that could not be parsed (e.g. `"student_telegram"`).
+    pub column: String,
+    /// Human-readable description of what went wrong.
+    pub message: String,
+}
+
+impl fmt::Display for SheetParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Sheet '{}', row {}, column '{}': {}",
+            self.sheet, self.row, self.column, self.message
+        )
+    }
+}
