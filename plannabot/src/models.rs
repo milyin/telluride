@@ -208,7 +208,7 @@ pub enum UserRole {
 
 /// A parse error encountered while reading a row from a Google Sheet.
 ///
-/// Collected during table refresh and reported to teachers as a pinned
+/// Collected during table refresh and reported to teachers as a
 /// Telegram message.  All indices are **1-based** (matching how Google Sheets
 /// labels rows to users).
 #[derive(Debug, Clone)]
