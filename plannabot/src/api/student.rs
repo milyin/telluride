@@ -2,11 +2,14 @@ use crate::api::common::format_duration;
 use crate::models::Student;
 use crate::state::BotState;
 use anyhow::Result;
+use chrono::{Datelike, Local};
 use chrono_tz::Tz;
 use std::sync::Arc;
+use telluride::calendar::build_month_calendar;
 use telluride::markdown::MarkdownStringMessage;
 use telluride::{markdown_format, markdown_string};
 use teloxide::prelude::*;
+use teloxide::types::InlineKeyboardButton;
 
 /// Handle the /help command for a student.
 pub async fn help(bot: &Bot, chat_id: ChatId) -> Result<()> {
@@ -14,7 +17,8 @@ pub async fn help(bot: &Bot, chat_id: ChatId) -> Result<()> {
         "*Available Commands:*\n\n\
         /start \\- Start the bot\n\
         /help \\- Display this help message\n\
-        /schedule \\- Show your planned lessons"
+        /schedule \\- Show your planned lessons\n\
+        /book \\- Book a lesson"
     );
     bot.send_markdown_message(chat_id, text).await?;
     Ok(())
@@ -58,5 +62,19 @@ pub async fn schedule(
         bot.send_markdown_message(chat_id, text).await?;
     }
 
+    Ok(())
+}
+
+/// Handle the /book command for a student.
+pub async fn book(bot: &Bot, chat_id: ChatId) -> Result<()> {
+    let now = Local::now();
+    let keyboard = build_month_calendar(now.year(), now.month(), |date| {
+        InlineKeyboardButton::callback(date.day().to_string(), "noop")
+    });
+    let month_str = now.format("%B %Y").to_string();
+    let text = markdown_format!("📅 *{}*", month_str);
+    bot.send_markdown_message(chat_id, text)
+        .reply_markup(keyboard)
+        .await?;
     Ok(())
 }

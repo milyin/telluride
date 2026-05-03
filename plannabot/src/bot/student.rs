@@ -15,6 +15,8 @@ pub enum StudentCommand {
     Help,
     #[command(description = "show your planned lessons")]
     Schedule,
+    #[command(description = "book a lesson")]
+    Book,
 }
 
 /// Returns true if the message sender has a Student role.
@@ -58,6 +60,7 @@ pub async fn student_command_handler(
         }
         StudentCommand::Help => api::student::help(&bot, msg.chat.id).await,
         StudentCommand::Schedule => api::student::schedule(&bot, msg.chat.id, &student, &state).await,
+        StudentCommand::Book => api::student::book(&bot, msg.chat.id).await,
     };
 
     result.map_err(|e| {

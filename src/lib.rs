@@ -1,5 +1,9 @@
 mod api;
 
+pub mod calendar {
+    pub use crate::api::calendar::build_month_calendar;
+}
+
 /// The `markdown` module provides utilities for safe working with MarkdownV2 formatted strings.
 /// The goal is to make it impossible to create invalid MarkdownV2 strings that will cause runtime errors.
 ///

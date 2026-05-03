@@ -27,13 +27,13 @@ pub async fn start(bot: &Bot, chat_id: ChatId, role: &UserRole, state: &Arc<BotS
     );
     text.push(&greeting);
 
-    if let UserRole::Teacher(teacher) = role {
-        if state.is_both_teacher_and_student(teacher.telegram_name.as_str()).await {
-            let info = markdown_string!(
-                "\n\n📌 *Note:* You are registered as both a teacher and a student\\."
-            );
-            text.push(&info);
-        }
+    if let UserRole::Teacher(teacher) = role
+        && state.is_both_teacher_and_student(teacher.telegram_name.as_str()).await
+    {
+        let info = markdown_string!(
+            "\n\n📌 *Note:* You are registered as both a teacher and a student\\."
+        );
+        text.push(&info);
     }
 
     bot.send_markdown_message(chat_id, text).await?;

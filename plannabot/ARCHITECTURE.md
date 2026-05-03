@@ -5,7 +5,7 @@
 | Crate | Purpose | Version |
 |-------|---------|---------|
 | **teloxide** | Telegram Bot API framework | 0.17 |
-| **telluride** | Compile-time-safe MarkdownV2 formatting | 0.2 |
+| **telluride** | Compile-time-safe MarkdownV2 formatting; calendar keyboard builder | 0.2 |
 | **tokio** | Async runtime (multi-threaded) | 1.8+ |
 | **dptree** | Handler routing / dependency injection | 0.5 |
 | **google-sheets4** | Google Sheets API client (re-exports `hyper`, `hyper_rustls`, `oauth2`) | 5 |
@@ -36,7 +36,7 @@ plannabot/
 │   ├── api/
 │   │   ├── mod.rs       – module declarations
 │   │   ├── common.rs    – start() (universal, resets to default mode), format_duration()
-│   │   ├── student.rs   – help(), schedule()
+│   │   ├── student.rs   – help(), schedule(), book()
 │   │   ├── teacher.rs   – help(), schedule(), admin()
 │   │   ├── impersonate.rs – impersonate() (enter), show_student_selection(), help(), schedule(), quit()
 │   │   └── admin.rs     – refresh(), help(), status(), quit()
@@ -65,7 +65,7 @@ The bot operates in one of four mutually exclusive modes per chat, each with its
 
 | Mode | Active when | Enum | Filter | Handler |
 |------|------------|------|--------|---------|
-| Student | UserRole::Student | `StudentCommand` | `is_student` | `student_command_handler` |
+| Student | UserRole::Student | `StudentCommand` (`/start`, `/help`, `/schedule`, `/book`) | `is_student` | `student_command_handler` |
 | Teacher | Teacher, not impersonating, not admin | `TeacherCommand` | `is_teacher` | `teacher_command_handler` |
 | Impersonate | Teacher + impersonation active | `ImpersonateCommand` | `is_impersonate` | `impersonate_command_handler` |
 | Admin | Teacher (admin=true) + admin mode active | `AdminCommand` | `is_admin` | `admin_command_handler` |
@@ -129,7 +129,7 @@ BotState
 Business logic, separated from Telegram routing:
 
 - **`api::common`** — `start()` (universal welcome + mode reset), `format_duration()` (shared helper)
-- **`api::student`** — `help()`, `schedule()`
+- **`api::student`** — `help()`, `schedule()`, `book()` (month calendar picker)
 - **`api::teacher`** — `help()`, `schedule()`, `admin()` (enter admin mode)
 - **`api::impersonate`** — `impersonate()` (enter impersonation), `help()`, `schedule()`, `quit()`
 - **`api::admin`** — `refresh()`, `help()`, `status()`, `quit()`
