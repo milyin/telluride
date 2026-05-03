@@ -167,6 +167,14 @@ pub async fn status(
         })
         .unwrap_or_else(|| "Never".to_string());
 
+    let last_modified_str = stats
+        .last_modified
+        .map(|t| {
+            let local_time = t.with_timezone(&tz);
+            local_time.format("%Y-%m-%d %H:%M:%S %Z").to_string()
+        })
+        .unwrap_or_else(|| "Unknown".to_string());
+
     let spreadsheet_url = format!(
         "https://docs.google.com/spreadsheets/d/{}/edit",
         stats.spreadsheet_id
@@ -177,12 +185,14 @@ pub async fn status(
         "📊 *Bot Status*\n\n\
         • *Students:* {}\n\
         • *Teachers:* {}\n\
+        • *Sheet Modified:* {}\n\
         • *Last Refresh:* {}\n\
         • *Refresh Delay:* {}s\n\n\
         You can use /refresh to forcefully update the data\\.\n\n\
         🔗 [View Google Sheet]({})",
         stats.students_count.to_string(),
         stats.teachers_count.to_string(),
+        MarkdownString::escape(last_modified_str),
         MarkdownString::escape(last_reload_str),
         stats.refresh_delay.as_secs().to_string(),
         @raw url_markdown

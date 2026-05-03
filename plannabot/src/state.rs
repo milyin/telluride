@@ -55,6 +55,7 @@ pub struct BotStats {
     pub students_count: usize,
     pub teachers_count: usize,
     pub last_reload: Option<DateTime<Utc>>,
+    pub last_modified: Option<DateTime<Utc>>,
     pub refresh_delay: Duration,
     pub spreadsheet_id: String,
 }
@@ -275,6 +276,7 @@ impl BotState {
             students_count: self.students.read().await.len(),
             teachers_count: self.teachers.read().await.len(),
             last_reload: *self.last_reload.lock().unwrap(),
+            last_modified: *self.last_modified.lock().unwrap(),
             refresh_delay: CHECK_INTERVAL,
             spreadsheet_id: self.sheets.get_spreadsheet_id().to_string(),
         }
