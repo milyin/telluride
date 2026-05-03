@@ -15,6 +15,8 @@ pub enum ImpersonateCommand {
     Help,
     #[command(description = "show the impersonated student's planned lessons")]
     Schedule,
+    #[command(description = "book a lesson as the impersonated student")]
+    Book,
     #[command(description = "exit impersonation mode")]
     Quit,
 }
@@ -56,6 +58,7 @@ pub async fn impersonate_command_handler(
         }
         ImpersonateCommand::Help => api::impersonate::help(&bot, msg.chat.id).await,
         ImpersonateCommand::Schedule => api::impersonate::schedule(&bot, msg.chat.id, &state).await,
+        ImpersonateCommand::Book => api::student::book(&bot, msg.chat.id).await,
         ImpersonateCommand::Quit => api::impersonate::quit(&bot, msg.chat.id, &teacher, &state).await,
     };
 

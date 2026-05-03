@@ -65,16 +65,22 @@ The bot operates in one of four mutually exclusive modes per chat, each with its
 
 | Mode | Active when | Enum | Filter | Handler |
 |------|------------|------|--------|---------|
-| Student | UserRole::Student | `StudentCommand` (`/start`, `/help`, `/schedule`, `/book`) | `is_student` | `student_command_handler` |
+| Student | UserRole::Student | `StudentCommand` | `is_student` | `student_command_handler` |
 | Teacher | Teacher, not impersonating, not admin | `TeacherCommand` | `is_teacher` | `teacher_command_handler` |
 | Impersonate | Teacher + impersonation active | `ImpersonateCommand` | `is_impersonate` | `impersonate_command_handler` |
 | Admin | Teacher (admin=true) + admin mode active | `AdminCommand` | `is_admin` | `admin_command_handler` |
 
 **Command cross-mode rules:**
-- All enums contain `/start` → `api::common::start` (clears all modes, shows welcome)
+- All enums contain `/start` → `api::common::start` (clears mode state and shows the welcome)
 - All enums contain `/help` → mode-specific help
-- Teacher and Admin both have `/refresh` → `api::admin::refresh`
+- Teacher and Admin both have admin-level management commands
 - Admin and Impersonate both have `/quit` → exits that mode
+
+**Mode semantics:**
+- Student mode exposes the normal student experience, including booking and schedule queries.
+- Teacher mode exposes teacher actions such as impersonation, admin, and schedule operations.
+- Impersonation mode exposes the impersonated student's view plus mode control commands like `/quit`.
+- Admin mode exposes administrator-only operations and status commands.
 
 **Mode exclusivity:** entering admin mode clears impersonation; entering impersonation clears admin mode.
 
