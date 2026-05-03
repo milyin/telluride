@@ -138,7 +138,7 @@ async fn show_student_selection(
 /// Handle the /help command in impersonation mode.
 pub async fn help(bot: &Bot, chat_id: ChatId) -> Result<()> {
     let text = markdown_string!(
-        "*Available Commands (Impersonation Mode):*\n\n\
+        "*Available Commands \\(Impersonation Mode\\):*\n\n\
         /start \\- Exit impersonation and restart the bot\n\
         /help \\- Display this help message\n\
         /schedule \\- Show the impersonated student's planned lessons\n\

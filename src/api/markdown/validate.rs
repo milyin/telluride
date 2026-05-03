@@ -83,14 +83,17 @@ pub const fn validate_markdownv2_format(format_str: &str) {
                     square_bracket_count = square_bracket_count.wrapping_sub(1);
                 }
                 b'(' => {
-                    // Only count if it's potentially part of a link (after ])
                     if prev_char == b']' {
                         paren_count = paren_count.wrapping_add(1);
+                    } else if !in_code && !in_pre {
+                        panic!("Unescaped '(' in MarkdownV2 format string. Use \\( to escape it.");
                     }
                 }
                 b')' => {
                     if paren_count > 0 {
                         paren_count = paren_count.wrapping_sub(1);
+                    } else if !in_code && !in_pre {
+                        panic!("Unescaped ')' in MarkdownV2 format string. Use \\) to escape it.");
                     }
                 }
 
