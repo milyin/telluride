@@ -50,6 +50,14 @@ pub enum AdminCommand {
     Refresh,
 }
 
+/// Commands available in student impersonation mode only.
+#[derive(BotCommands, Clone, Debug)]
+#[command(rename_rule = "lowercase", description = "Impersonation commands:")]
+pub enum ImpersonateCommand {
+    #[command(description = "exit impersonation mode")]
+    Quit,
+}
+
 /// Callback actions triggered by inline keyboard buttons.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, bitcode::Encode, bitcode::Decode)]
 pub enum Action {
@@ -59,12 +67,6 @@ pub enum Action {
 
 impl telluride::command::CallbackBitcode for Action {}
 
-/// Returns true if the message sender is a registered teacher.
-pub async fn is_teacher(msg: Message, state: Arc<BotState>) -> bool {
-    let Some(username) = get_username(&msg) else { return false; };
-    matches!(state.get_role(&username).await, Some(UserRole::Teacher(_)))
-}
-
 /// Returns true if the message sender is a teacher currently in admin mode.
 pub async fn is_teacher_in_admin_mode(msg: Message, state: Arc<BotState>) -> bool {
     let Some(username) = get_username(&msg) else { return false; };
@@ -73,6 +75,24 @@ pub async fn is_teacher_in_admin_mode(msg: Message, state: Arc<BotState>) -> boo
         Some(UserRole::Teacher(ref t)) if t.admin
     );
     is_admin && state.is_in_admin_mode(msg.chat.id).await
+}
+
+/// Returns true if the message sender is a teacher currently in impersonation mode.
+pub async fn is_teacher_in_impersonation_mode(msg: Message, state: Arc<BotState>) -> bool {
+    let Some(username) = get_username(&msg) else { return false; };
+    if !matches!(state.get_role(&username).await, Some(UserRole::Teacher(_))) {
+        return false;
+    }
+    state.get_impersonation(msg.chat.id).await.is_some()
+}
+
+/// Returns true if the message sender is a teacher and NOT in impersonation mode.
+pub async fn is_teacher_not_in_impersonation_mode(msg: Message, state: Arc<BotState>) -> bool {
+    let Some(username) = get_username(&msg) else { return false; };
+    if !matches!(state.get_role(&username).await, Some(UserRole::Teacher(_))) {
+        return false;
+    }
+    state.get_impersonation(msg.chat.id).await.is_none()
 }
 
 /// Extracts the Telegram username from a message sender.
@@ -328,6 +348,42 @@ pub async fn callback_action_handler(
             })?;
         }
     }
+
+    Ok(())
+}
+
+/// Teloxide endpoint handler for impersonation mode commands (/quit).
+///
+/// Access is pre-filtered by [`is_teacher_in_impersonation_mode`] — only called for
+/// teachers who are currently impersonating a student.
+pub async fn impersonate_command_handler(
+    bot: Bot,
+    msg: Message,
+    cmd: ImpersonateCommand,
+    state: Arc<BotState>,
+) -> ResponseResult<()> {
+    let _ = state.refresh_if_needed().await;
+
+    let Some(username) = get_username(&msg) else { return Ok(()); };
+    let Some(UserRole::Teacher(teacher)) = state.get_role(&username).await else {
+        return Ok(());
+    };
+
+    state
+        .try_send_errors_to_teacher(&bot, msg.chat.id, &teacher.telegram_name)
+        .await;
+
+    let result = match cmd {
+        ImpersonateCommand::Quit => api::teacher::quit(&bot, msg.chat.id, &teacher, &state).await,
+    };
+
+    result.map_err(|e| {
+        log::error!("Error handling impersonate command {:?} for @{}: {}", cmd, username, e);
+        teloxide::RequestError::Io(Arc::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            e.to_string(),
+        )))
+    })?;
 
     Ok(())
 }
