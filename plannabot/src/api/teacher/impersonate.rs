@@ -54,7 +54,7 @@ pub async fn impersonate(
                 chat_id,
                 format!(
                     "Now impersonating @{}. All commands will behave as if you were that student. \
-                     Use /quit to return to teacher mode.",
+                     Use /help to see available commands, use /quit to exit",
                     normalised
                 ),
             )
@@ -68,7 +68,7 @@ pub async fn impersonate(
                     chat_id,
                     format!(
                         "Now impersonating @{} (who is also a teacher). All commands will behave as if you were that student. \
-                         Use /quit to return to teacher mode.",
+                         Use /help to see available commands, use /quit to exit",
                         normalised
                     ),
                 )

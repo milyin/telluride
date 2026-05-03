@@ -47,6 +47,18 @@ pub async fn help(
     teacher: &Teacher,
     state: &Arc<BotState>,
 ) -> Result<()> {
+    if state.is_in_admin_mode(chat_id).await {
+        let text = markdown_string!(
+            "*Available Commands \\(Admin Mode\\):*\n\n\
+            /help \\- Display this help message\n\
+            /status \\- Show global stat information\n\
+            /refresh \\- Forcedly refresh the data\n\
+            /quit \\- Exit admin mode"
+        );
+        bot.send_markdown_message(chat_id, text).await?;
+        return Ok(());
+    }
+
     let spreadsheet_id = state.sheets.get_spreadsheet_id();
     let sheets_url = format!(
         "https://docs.google.com/spreadsheets/d/{}/edit",
@@ -183,7 +195,7 @@ pub async fn admin(
         return Ok(());
     }
     state.enter_admin_mode(chat_id).await;
-    bot.send_message(chat_id, "Admin mode activated. Use /quit to exit.")
+    bot.send_message(chat_id, "Admin mode activated. Use /help to see available commands, use /quit for exit")
         .await?;
     Ok(())
 }
