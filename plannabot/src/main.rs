@@ -58,12 +58,14 @@ async fn main() {
         // Teacher-only commands (/impersonate, /quit, /admin, /refresh).
         .branch(
             Update::filter_message()
+                .filter_async(bot::is_teacher)
                 .filter_command::<bot::TeacherCommand>()
                 .endpoint(bot::teacher_command_handler),
         )
         // Admin-only commands (/status).
         .branch(
             Update::filter_message()
+                .filter_async(bot::is_teacher_in_admin_mode)
                 .filter_command::<bot::AdminCommand>()
                 .endpoint(bot::admin_command_handler),
         )

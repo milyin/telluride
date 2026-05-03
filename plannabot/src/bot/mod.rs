@@ -57,6 +57,22 @@ pub enum Action {
 
 impl telluride::command::CallbackBitcode for Action {}
 
+/// Returns true if the message sender is a registered teacher.
+pub async fn is_teacher(msg: Message, state: Arc<BotState>) -> bool {
+    let Some(username) = get_username(&msg) else { return false; };
+    matches!(state.get_role(&username).await, Some(UserRole::Teacher(_)))
+}
+
+/// Returns true if the message sender is a teacher currently in admin mode.
+pub async fn is_teacher_in_admin_mode(msg: Message, state: Arc<BotState>) -> bool {
+    let Some(username) = get_username(&msg) else { return false; };
+    let is_admin = matches!(
+        state.get_role(&username).await,
+        Some(UserRole::Teacher(ref t)) if t.admin
+    );
+    is_admin && state.is_in_admin_mode(msg.chat.id).await
+}
+
 /// Extracts the Telegram username from a message sender.
 /// Returns the username without '@', converted to lowercase.
 pub fn get_username(msg: &Message) -> Option<String> {
@@ -154,9 +170,9 @@ pub async fn common_command_handler(
     Ok(())
 }
 
-/// Teloxide endpoint handler for teacher-only commands (Impersonate, Quit).
+/// Teloxide endpoint handler for teacher-only commands.
 ///
-/// Rejects the command silently (no response) if the sender is not a teacher.
+/// Access is pre-filtered by [`is_teacher`] — only called for registered teachers.
 pub async fn teacher_command_handler(
     bot: Bot,
     msg: Message,
@@ -164,38 +180,19 @@ pub async fn teacher_command_handler(
     state: Arc<BotState>,
     callback_storage: Arc<InMemStore<CallbackKey, Action>>,
 ) -> ResponseResult<()> {
-    // --- Refresh cache if the spreadsheet was modified ----------------------
     let _ = state.refresh_if_needed().await;
 
-    // --- Gate: require a Telegram username ----------------------------------
-    let Some(username) = get_username(&msg) else {
-        bot.send_message(
-            msg.chat.id,
-            "Please set a Telegram username to use this bot.",
-        )
-        .await?;
+    let Some(username) = get_username(&msg) else { return Ok(()); };
+    let Some(UserRole::Teacher(teacher)) = state.get_role(&username).await else {
         return Ok(());
     };
 
-    // --- Gate: require a teacher role ---------------------------------------
-    let role = state.get_role(&username).await;
-    let teacher = match role {
-        Some(UserRole::Teacher(ref t)) => t.clone(),
-        _ => {
-            // Students (or unknown users) cannot use teacher commands.
-            return Ok(());
-        }
-    };
-
-    // --- Register teacher chat & report errors ------------------------------
     state
         .try_send_errors_to_teacher(&bot, msg.chat.id, &teacher.telegram_name)
         .await;
 
-    // Retrieve the UserId for scoping callback storage (safe: get_username already confirmed msg.from is Some)
     let user_id: UserId = msg.from.as_ref().unwrap().id;
 
-    // --- Dispatch -----------------------------------------------------------
     let result = teacher::handle_teacher_command(
         &bot,
         &msg,
@@ -208,12 +205,7 @@ pub async fn teacher_command_handler(
     .await;
 
     result.map_err(|e| {
-        log::error!(
-            "Error handling teacher command {:?} for @{}: {}",
-            cmd,
-            username,
-            e
-        );
+        log::error!("Error handling teacher command {:?} for @{}: {}", cmd, username, e);
         teloxide::RequestError::Io(Arc::new(std::io::Error::new(
             std::io::ErrorKind::Other,
             e.to_string(),
@@ -223,9 +215,10 @@ pub async fn teacher_command_handler(
     Ok(())
 }
 
-/// Teloxide endpoint handler for admin-only commands (Status).
+/// Teloxide endpoint handler for admin-only commands.
 ///
-/// Rejects the command if the sender is not an admin teacher in admin mode.
+/// Access is pre-filtered by [`is_admin_in_admin_mode`] — only called for admin
+/// teachers who are currently in admin mode.
 pub async fn admin_command_handler(
     bot: Bot,
     msg: Message,
@@ -234,39 +227,19 @@ pub async fn admin_command_handler(
 ) -> ResponseResult<()> {
     let _ = state.refresh_if_needed().await;
 
-    let Some(username) = get_username(&msg) else {
+    let Some(username) = get_username(&msg) else { return Ok(()); };
+    let Some(UserRole::Teacher(teacher)) = state.get_role(&username).await else {
         return Ok(());
     };
-
-    let role = state.get_role(&username).await;
-    let teacher = match role {
-        Some(UserRole::Teacher(ref t)) if t.admin => t.clone(),
-        _ => return Ok(()),
-    };
-
-    if !state.is_in_admin_mode(msg.chat.id).await {
-        bot.send_message(
-            msg.chat.id,
-            "This command is only available in admin mode. Use /admin to enter admin mode.",
-        )
-        .await?;
-        return Ok(());
-    }
 
     state
         .try_send_errors_to_teacher(&bot, msg.chat.id, &teacher.telegram_name)
         .await;
 
-    let result =
-        admin::handle_admin_command(&bot, &msg, &cmd, &teacher, &state).await;
+    let result = admin::handle_admin_command(&bot, &msg, &cmd, &teacher, &state).await;
 
     result.map_err(|e| {
-        log::error!(
-            "Error handling admin command {:?} for @{}: {}",
-            cmd,
-            username,
-            e
-        );
+        log::error!("Error handling admin command {:?} for @{}: {}", cmd, username, e);
         teloxide::RequestError::Io(Arc::new(std::io::Error::new(
             std::io::ErrorKind::Other,
             e.to_string(),
