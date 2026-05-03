@@ -43,6 +43,7 @@ impl SheetsClient {
 
             let teacher = Teacher {
                 timezone: schema.get_field::<Tz>(row, row_num, Teacher::TIMEZONE, &mut errors),
+                admin: schema.get_field::<bool>(row, row_num, Teacher::ADMIN, &mut errors),
                 custom: schema.get_custom(row, TEACHERS_COLS),
                 telegram_name: telegram_name.clone(),
             };

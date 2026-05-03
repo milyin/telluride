@@ -39,6 +39,11 @@ pub struct BotState {
     /// removed by `/quit`.
     impersonations: RwLock<HashMap<ChatId, String>>,
 
+    // --- Admin mode ----------------------------------------------------------
+    /// The set of chat IDs currently in admin mode.  Entries are inserted by
+    /// `/admin` and removed by `/quit`.
+    admin_modes: RwLock<HashSet<ChatId>>,
+
     // --- Parse Error Reporting -----------------------------------------------
     /// Parse errors from the most recent reload.
     last_errors: RwLock<Vec<SheetParseError>>,
@@ -71,6 +76,7 @@ impl BotState {
             // Subtract CHECK_INTERVAL so the very first command fires a check.
             last_checked: Mutex::new(Instant::now() - CHECK_INTERVAL),
             impersonations: RwLock::new(HashMap::new()),
+            admin_modes: RwLock::new(HashSet::new()),
             last_errors: RwLock::new(Vec::new()),
             notified_teachers: RwLock::new(HashSet::new()),
             last_reload: Mutex::new(None),
@@ -305,6 +311,25 @@ impl BotState {
     /// normal mode.
     pub async fn clear_impersonation(&self, chat_id: ChatId) {
         self.impersonations.write().await.remove(&chat_id);
+    }
+
+    // -----------------------------------------------------------------------
+    // Admin mode API
+    // -----------------------------------------------------------------------
+
+    /// Puts `chat_id` into admin mode.
+    pub async fn enter_admin_mode(&self, chat_id: ChatId) {
+        self.admin_modes.write().await.insert(chat_id);
+    }
+
+    /// Returns `true` if `chat_id` is currently in admin mode.
+    pub async fn is_in_admin_mode(&self, chat_id: ChatId) -> bool {
+        self.admin_modes.read().await.contains(&chat_id)
+    }
+
+    /// Removes `chat_id` from admin mode.
+    pub async fn exit_admin_mode(&self, chat_id: ChatId) {
+        self.admin_modes.write().await.remove(&chat_id);
     }
 
     // -----------------------------------------------------------------------

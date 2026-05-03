@@ -137,6 +137,7 @@ sheet_struct! {
     pub struct Teacher {
         pub telegram_name: TelegramName,
         pub timezone: Tz,
+        pub admin: bool,
     }
 }
 

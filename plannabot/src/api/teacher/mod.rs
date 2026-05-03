@@ -41,29 +41,45 @@ pub async fn start(
 }
 
 /// Handle the /help command for a teacher.
-pub async fn help(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Result<()> {
+pub async fn help(
+    bot: &Bot,
+    chat_id: ChatId,
+    teacher: &Teacher,
+    state: &Arc<BotState>,
+) -> Result<()> {
     let spreadsheet_id = state.sheets.get_spreadsheet_id();
     let sheets_url = format!(
         "https://docs.google.com/spreadsheets/d/{}/edit",
         spreadsheet_id
     );
 
-    // Use the proper markdown_format! macro with escaped URL
     let url_markdown = MarkdownString::escape(sheets_url);
-    let formatted = markdown_format!(
+
+    let mut text = markdown_string!(
         "*Available Commands \\(Teacher Mode\\):*\n\n\
         /start \\- Start the bot\n\
         /help \\- Display this help message\n\
         /schedule \\- Show your planned lessons\n\
         /impersonate \\- Choose a student to impersonate from a button list\n\
-        /quit \\- Exit impersonation mode\n\
-        /status \\- Show global stat information\n\
-        /refresh \\- Forcedly refresh the data\n\n\
-        📊 *Master Schedule:* [View on Google Sheets]({})",
-        @raw url_markdown
+        /quit \\- Exit impersonation or admin mode\n\
+        /refresh \\- Forcedly refresh the data"
     );
 
-    bot.send_markdown_message(chat_id, formatted).await?;
+    if teacher.admin {
+        let admin_part = markdown_string!(
+            "\n/admin \\- Enter admin mode\n\
+            /status \\- Show global stat information \\(admin mode only\\)"
+        );
+        text.push(&admin_part);
+    }
+
+    let footer = markdown_format!(
+        "\n\n📊 *Master Schedule:* [View on Google Sheets]({})",
+        @raw url_markdown
+    );
+    text.push(&footer);
+
+    bot.send_markdown_message(chat_id, text).await?;
     Ok(())
 }
 
@@ -108,7 +124,7 @@ pub async fn schedule(
     Ok(())
 }
 
-/// Handle the /quit command for a teacher (exit impersonation mode).
+/// Handle the /quit command for a teacher (exit impersonation or admin mode).
 pub async fn quit(
     bot: &Bot,
     chat_id: ChatId,
@@ -125,8 +141,11 @@ pub async fn quit(
             ),
         )
         .await?;
+    } else if state.is_in_admin_mode(chat_id).await {
+        state.exit_admin_mode(chat_id).await;
+        bot.send_message(chat_id, "Exited admin mode.").await?;
     } else {
-        bot.send_message(chat_id, "You are not in impersonation mode.")
+        bot.send_message(chat_id, "You are not in impersonation or admin mode.")
             .await?;
     }
 
@@ -148,13 +167,43 @@ fn format_duration(minutes: i64) -> String {
     }
 }
 
-/// Handle the /status command for a teacher.
+/// Handle the /admin command — enter admin mode (only for teachers with admin = true).
+pub async fn admin(
+    bot: &Bot,
+    chat_id: ChatId,
+    teacher: &Teacher,
+    state: &Arc<BotState>,
+) -> Result<()> {
+    if !teacher.admin {
+        return Ok(());
+    }
+    if state.is_in_admin_mode(chat_id).await {
+        bot.send_message(chat_id, "You are already in admin mode. Use /quit to exit.")
+            .await?;
+        return Ok(());
+    }
+    state.enter_admin_mode(chat_id).await;
+    bot.send_message(chat_id, "Admin mode activated. Use /quit to exit.")
+        .await?;
+    Ok(())
+}
+
+/// Handle the /status command for a teacher (admin mode only).
 pub async fn status(
     bot: &Bot,
     chat_id: ChatId,
     teacher: &Teacher,
     state: &Arc<BotState>,
 ) -> Result<()> {
+    if !state.is_in_admin_mode(chat_id).await {
+        bot.send_message(
+            chat_id,
+            "This command is only available in admin mode. Use /admin to enter admin mode.",
+        )
+        .await?;
+        return Ok(());
+    }
+
     let stats = state.get_stats().await;
 
     let tz: Tz = teacher.timezone;

@@ -31,9 +31,11 @@ pub enum TeacherCommand {
         description = "view the bot as a student (shows student list or impersonates if username provided)"
     )]
     Impersonate(String),
-    #[command(description = "exit impersonation mode")]
+    #[command(description = "exit impersonation or admin mode")]
     Quit,
-    #[command(description = "show global stat information")]
+    #[command(description = "enter admin mode (admin teachers only)")]
+    Admin,
+    #[command(description = "show global stat information (admin mode only)")]
     Status,
     #[command(description = "forcedly refresh the data")]
     Refresh,

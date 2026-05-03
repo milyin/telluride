@@ -48,6 +48,15 @@ impl FromSheetValue for f64 {
     }
 }
 
+impl FromSheetValue for bool {
+    fn from_sheet_value(s: &str) -> Result<Self, String> {
+        match s.trim().to_lowercase().as_str() {
+            "true" | "yes" | "1" => Ok(true),
+            _ => Ok(false),
+        }
+    }
+}
+
 impl<T: FromSheetValue> FromSheetValue for Option<T> {
     fn from_sheet_value(s: &str) -> Result<Self, String> {
         if s.trim().is_empty() {
@@ -244,6 +253,13 @@ impl FromSheet for f64 {
 impl FromSheet for i64 {
     fn from_sheet(schema: &SheetSchema, row: &[String], _row_num: usize, col_name: &str, _errors: &mut Vec<SheetParseError>) -> Self {
         i64::from_sheet_value(schema.get_str(row, col_name)).unwrap_or(0)
+    }
+}
+
+/// Empty or unrecognised cell → `false` (silent).  "true"/"yes"/"1" → `true`.
+impl FromSheet for bool {
+    fn from_sheet(schema: &SheetSchema, row: &[String], _row_num: usize, col_name: &str, _errors: &mut Vec<SheetParseError>) -> Self {
+        bool::from_sheet_value(schema.get_str(row, col_name)).unwrap_or(false)
     }
 }
 
