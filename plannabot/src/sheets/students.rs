@@ -3,21 +3,15 @@
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
+use chrono_tz::Tz;
 
-use super::{
-    parse_telegram_name, parse_timezone_or_utc, SheetSchema, SheetsClient, SHEET_STUDENTS,
-    STUDENTS_COLS,
-};
-use crate::models::{SheetParseError, Student};
+use super::{SheetSchema, SheetsClient, SHEET_STUDENTS, STUDENTS_COLS};
+use crate::models::{SheetParseError, Student, TelegramName};
 
 impl SheetsClient {
     /// Reads all rows from the `Students` sheet and returns a map from
     /// (normalised) Telegram username → [`Student`], together with any
     /// [`SheetParseError`]s encountered while parsing rows.
-    ///
-    /// Rows whose `telegram_name` cell is empty or contains an invalid username
-    /// are skipped; the error is logged at `ERROR` level and collected.
-    /// Any column not in [`STUDENTS_COLS`] is collected into [`Student::custom`].
     pub async fn get_students(
         &self,
     ) -> Result<(HashMap<String, Student>, Vec<SheetParseError>)> {
@@ -31,45 +25,30 @@ impl SheetsClient {
             return Ok((HashMap::new(), vec![]));
         }
 
-        // First row is always the header.
         let schema = SheetSchema::new(SHEET_STUDENTS.to_string(), rows[0].clone());
 
         let mut students: HashMap<String, Student> = HashMap::new();
         let mut errors: Vec<SheetParseError> = Vec::new();
 
         for (row_idx, row) in rows.iter().enumerate().skip(1) {
-            // Skip empty rows.
             if row.is_empty() || row.iter().all(|c| c.is_empty()) {
                 continue;
             }
 
-            let Some(telegram_name) = parse_telegram_name(
-                SHEET_STUDENTS,
-                row_idx + 1,
-                Student::TELEGRAM_NAME,
-                schema.get_str(row, Student::TELEGRAM_NAME),
-                &mut errors,
-                false,
-            ) else {
+            let row_num = row_idx + 1;
+
+            let Some(telegram_name) = schema.get_field::<Option<TelegramName>>(row, row_num, Student::TELEGRAM_NAME, &mut errors) else {
                 continue;
             };
 
-            let timezone = parse_timezone_or_utc(
-                SHEET_STUDENTS,
-                row_idx + 1,
-                Student::TIMEZONE,
-                schema.get_str(row, Student::TIMEZONE),
-                &mut errors,
-            );
-
             let student = Student {
-                telegram_name: telegram_name.clone(),
-                name: schema.get_str(row, Student::NAME).to_string(),
-                timezone,
-                currency: schema.get_str(row, Student::CURRENCY).to_string(),
-                zoom_url: schema.get_optional(row, Student::ZOOM_URL).map(|s| s.to_string()),
-                board_url: schema.get_optional(row, Student::BOARD_URL).map(|s| s.to_string()),
+                timezone: schema.get_field::<Tz>(row, row_num, Student::TIMEZONE, &mut errors),
+                name: schema.get_field(row, row_num, Student::NAME, &mut errors),
+                currency: schema.get_field(row, row_num, Student::CURRENCY, &mut errors),
+                zoom_url: schema.get_field(row, row_num, Student::ZOOM_URL, &mut errors),
+                board_url: schema.get_field(row, row_num, Student::BOARD_URL, &mut errors),
                 custom: schema.get_custom(row, STUDENTS_COLS),
+                telegram_name: telegram_name.clone(),
             };
 
             students.insert(telegram_name.as_str().to_string(), student);
@@ -78,4 +57,3 @@ impl SheetsClient {
         Ok((students, errors))
     }
 }
-

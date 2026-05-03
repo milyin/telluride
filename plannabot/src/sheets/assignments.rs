@@ -2,17 +2,13 @@
 
 use anyhow::{Context, Result};
 
-use super::{parse_telegram_name, SheetSchema, SheetsClient, SHEET_ASSIGNMENTS};
+use super::{SheetSchema, SheetsClient, SHEET_ASSIGNMENTS};
 use crate::models::{SheetParseError, TeacherStudentAssignment, TelegramName};
 
 impl SheetsClient {
     /// Reads all rows from the `Assignments` sheet and returns them as a
     /// `Vec<TeacherStudentAssignment>`, together with any [`SheetParseError`]s
     /// encountered while parsing rows.
-    ///
-    /// Rows where either `teacher_telegram` or `student_telegram` is empty are
-    /// silently skipped.  Rows with a non-empty but invalid value are logged at
-    /// `ERROR` level and collected as errors.
     pub async fn get_assignments(
         &self,
     ) -> Result<(Vec<TeacherStudentAssignment>, Vec<SheetParseError>)> {
@@ -26,46 +22,29 @@ impl SheetsClient {
             return Ok((vec![], vec![]));
         }
 
-        // First row is always the header.
         let schema = SheetSchema::new(SHEET_ASSIGNMENTS.to_string(), rows[0].clone());
 
         let mut assignments: Vec<TeacherStudentAssignment> = Vec::new();
         let mut errors: Vec<SheetParseError> = Vec::new();
 
         for (row_idx, row) in rows.iter().enumerate().skip(1) {
-            // Skip empty rows.
             if row.is_empty() || row.iter().all(|c| c.is_empty()) {
                 continue;
             }
 
-            let Some(teacher_telegram) = parse_telegram_name(
-                SHEET_ASSIGNMENTS,
-                row_idx + 1,
-                TeacherStudentAssignment::TEACHER_TELEGRAM,
-                schema.get_str(row, TeacherStudentAssignment::TEACHER_TELEGRAM),
-                &mut errors,
-                false,
-            ) else {
+            let row_num = row_idx + 1;
+
+            let Some(teacher_telegram) = schema.get_field::<Option<TelegramName>>(row, row_num, TeacherStudentAssignment::TEACHER_TELEGRAM, &mut errors) else {
                 continue;
             };
-
-            let Some(student_telegram) = parse_telegram_name(
-                SHEET_ASSIGNMENTS,
-                row_idx + 1,
-                TeacherStudentAssignment::STUDENT_TELEGRAM,
-                schema.get_str(row, TeacherStudentAssignment::STUDENT_TELEGRAM),
-                &mut errors,
-                false,
-            ) else {
+            let Some(student_telegram) = schema.get_field::<Option<TelegramName>>(row, row_num, TeacherStudentAssignment::STUDENT_TELEGRAM, &mut errors) else {
                 continue;
             };
-
-            let custom = schema.get_custom(row, super::ASSIGNMENTS_COLS);
 
             assignments.push(TeacherStudentAssignment {
                 teacher_telegram,
                 student_telegram,
-                custom,
+                custom: schema.get_custom(row, super::ASSIGNMENTS_COLS),
             });
         }
 
@@ -73,9 +52,6 @@ impl SheetsClient {
     }
 
     /// Returns all students assigned to the given teacher.
-    ///
-    /// `telegram_name` is normalised and validated; an empty list is returned
-    /// for invalid names.
     pub async fn get_students_for_teacher(
         &self,
         telegram_name: &str,
@@ -90,13 +66,7 @@ impl SheetsClient {
             .collect())
     }
 
-    /// Returns the teacher assigned to the given student, if any.
-    ///
-    /// When multiple rows for the same student exist (misconfigured sheet),
-    /// all matching rows are returned so the caller can decide how to handle it.
-    ///
-    /// `telegram_name` is normalised and validated; an empty list is returned
-    /// for invalid names.
+    /// Returns the teacher(s) assigned to the given student, if any.
     pub async fn get_teachers_for_student(
         &self,
         telegram_name: &str,

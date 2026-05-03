@@ -1,0 +1,262 @@
+//! [`FromSheetValue`] and [`FromSheet`] traits and their implementations.
+//!
+//! * [`FromSheetValue`] — low-level: parses a value from a raw `&str` cell
+//!   value, returning `Result<T, String>`.
+//! * [`FromSheet`] — high-level: reads a named column from a [`super::SheetSchema`]
+//!   row, parses it, logs any errors into the provided `Vec<SheetParseError>`,
+//!   and returns a fallback or `None` on failure.  Replaces the old
+//!   `parse_timezone_or_utc` / `parse_telegram_name` helpers.
+
+use std::str::FromStr;
+
+use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono_tz::Tz;
+
+use crate::models::{LessonStatus, SheetParseError, TelegramName};
+
+use super::SheetSchema;
+
+// ---------------------------------------------------------------------------
+// FromSheetValue — raw string → T
+// ---------------------------------------------------------------------------
+
+/// Parses a value from a raw Google Sheets cell string.
+pub trait FromSheetValue: Sized {
+    fn from_sheet_value(s: &str) -> Result<Self, String>;
+}
+
+impl FromSheetValue for String {
+    fn from_sheet_value(s: &str) -> Result<Self, String> {
+        Ok(s.to_string())
+    }
+}
+
+impl FromSheetValue for i64 {
+    fn from_sheet_value(s: &str) -> Result<Self, String> {
+        s.trim()
+            .parse()
+            .map_err(|_| format!("cannot parse integer '{s}'"))
+    }
+}
+
+impl FromSheetValue for f64 {
+    fn from_sheet_value(s: &str) -> Result<Self, String> {
+        s.trim()
+            .replace(',', ".")
+            .parse()
+            .map_err(|_| format!("cannot parse number '{s}'"))
+    }
+}
+
+impl<T: FromSheetValue> FromSheetValue for Option<T> {
+    fn from_sheet_value(s: &str) -> Result<Self, String> {
+        if s.trim().is_empty() {
+            Ok(None)
+        } else {
+            T::from_sheet_value(s).map(Some)
+        }
+    }
+}
+
+impl FromSheetValue for TelegramName {
+    fn from_sheet_value(s: &str) -> Result<Self, String> {
+        TelegramName::try_from(s).map_err(|e| e.to_string())
+    }
+}
+
+impl FromSheetValue for LessonStatus {
+    fn from_sheet_value(s: &str) -> Result<Self, String> {
+        LessonStatus::from_str(s).ok_or_else(|| format!("unrecognised lesson status '{s}'"))
+    }
+}
+
+/// Parses a timezone from an IANA name (`"Europe/Berlin"`) or a numeric UTC
+/// offset in hours (`"+3"`, `"-5"`, `"3"`).
+///
+/// For numeric offsets the nearest whole-hour `Etc/GMT` zone is used.
+/// POSIX sign convention: `Etc/GMT-3` = UTC+3, `Etc/GMT+5` = UTC-5.
+impl FromSheetValue for Tz {
+    fn from_sheet_value(s: &str) -> Result<Self, String> {
+        let s = s.trim();
+        if s.is_empty() {
+            return Err("empty timezone".to_string());
+        }
+        if let Ok(tz) = Tz::from_str(s) {
+            return Ok(tz);
+        }
+        let hours: f64 = s
+            .parse()
+            .map_err(|_| format!("cannot parse timezone '{s}': not an IANA name or numeric offset"))?;
+        if !hours.is_finite() {
+            return Err(format!("invalid timezone offset '{s}'"));
+        }
+        let h = hours.round() as i32;
+        if !(-14..=12).contains(&h) {
+            return Err(format!("timezone offset {h}h is out of range [-14, +12]"));
+        }
+        // POSIX: UTC+N → "Etc/GMT-N", UTC-N → "Etc/GMT+N"
+        let name = match h.cmp(&0) {
+            std::cmp::Ordering::Equal => "Etc/GMT".to_string(),
+            std::cmp::Ordering::Greater => format!("Etc/GMT-{h}"),
+            std::cmp::Ordering::Less => format!("Etc/GMT+{}", -h),
+        };
+        Tz::from_str(&name).map_err(|_| format!("cannot resolve offset {h}h to an Etc/GMT zone"))
+    }
+}
+
+/// Tries several common datetime formats (in order):
+/// 1. RFC 3339 / ISO 8601 with timezone  (`2024-05-01T14:30:00+03:00`)
+/// 2. `YYYY-MM-DD HH:MM:SS`
+/// 3. `YYYY-MM-DD HH:MM`
+/// 4. `DD/MM/YYYY HH:MM:SS`
+/// 5. `DD/MM/YYYY HH:MM`
+///
+/// All naive formats are treated as UTC.
+impl FromSheetValue for DateTime<Utc> {
+    fn from_sheet_value(s: &str) -> Result<Self, String> {
+        let s = s.trim();
+        if s.is_empty() {
+            return Err("empty datetime".to_string());
+        }
+        if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+            return Ok(dt.with_timezone(&Utc));
+        }
+        for fmt in [
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+            "%d/%m/%Y %H:%M:%S",
+            "%d/%m/%Y %H:%M",
+        ] {
+            if let Ok(ndt) = NaiveDateTime::parse_from_str(s, fmt) {
+                return Ok(ndt.and_utc());
+            }
+        }
+        Err(format!("cannot parse datetime '{s}'"))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// FromSheet — schema-aware, error-reporting
+// ---------------------------------------------------------------------------
+
+/// Reads a named column from a sheet row, parses it, logs errors into
+/// `errors`, and returns a value (or fallback / `None` on failure).
+///
+/// This replaces the old `parse_timezone_or_utc` / `parse_telegram_name`
+/// free functions.
+pub trait FromSheet: Sized {
+    fn from_sheet(
+        schema: &SheetSchema,
+        row: &[String],
+        row_num: usize,
+        col_name: &str,
+        errors: &mut Vec<SheetParseError>,
+    ) -> Self;
+}
+
+// --- helpers ----------------------------------------------------------------
+
+fn push_error(
+    schema: &SheetSchema,
+    row_num: usize,
+    col_name: &str,
+    message: String,
+    errors: &mut Vec<SheetParseError>,
+) {
+    let err = SheetParseError {
+        sheet: schema.sheet_name.clone(),
+        row: row_num,
+        column: col_name.to_string(),
+        message,
+    };
+    log::error!("{err}");
+    errors.push(err);
+}
+
+// --- infallible primitives --------------------------------------------------
+
+impl FromSheet for String {
+    fn from_sheet(schema: &SheetSchema, row: &[String], _row_num: usize, col_name: &str, _errors: &mut Vec<SheetParseError>) -> Self {
+        schema.get_str(row, col_name).to_string()
+    }
+}
+
+impl FromSheet for Option<String> {
+    fn from_sheet(schema: &SheetSchema, row: &[String], _row_num: usize, col_name: &str, _errors: &mut Vec<SheetParseError>) -> Self {
+        schema.get_optional(row, col_name).map(|s| s.to_string())
+    }
+}
+
+/// Parses as f64 with comma-or-dot decimal separator; returns 0.0 on failure
+/// without logging an error (matches the sheet convention for optional costs).
+impl FromSheet for f64 {
+    fn from_sheet(schema: &SheetSchema, row: &[String], _row_num: usize, col_name: &str, _errors: &mut Vec<SheetParseError>) -> Self {
+        f64::from_sheet_value(schema.get_str(row, col_name)).unwrap_or(0.0)
+    }
+}
+
+/// Parses as i64; returns 0 on failure without logging an error.
+impl FromSheet for i64 {
+    fn from_sheet(schema: &SheetSchema, row: &[String], _row_num: usize, col_name: &str, _errors: &mut Vec<SheetParseError>) -> Self {
+        i64::from_sheet_value(schema.get_str(row, col_name)).unwrap_or(0)
+    }
+}
+
+// --- domain types -----------------------------------------------------------
+
+/// Parses as IANA name or numeric offset; on failure logs an error and returns
+/// UTC.
+impl FromSheet for Tz {
+    fn from_sheet(schema: &SheetSchema, row: &[String], row_num: usize, col_name: &str, errors: &mut Vec<SheetParseError>) -> Self {
+        let raw = schema.get_str(row, col_name);
+        match Tz::from_sheet_value(raw) {
+            Ok(tz) => tz,
+            Err(msg) => {
+                push_error(schema, row_num, col_name, format!("{msg}; using UTC"), errors);
+                chrono_tz::UTC
+            }
+        }
+    }
+}
+
+/// Empty cell → `None` (silent).  Non-empty but invalid → `None` + error
+/// logged.
+impl FromSheet for Option<TelegramName> {
+    fn from_sheet(schema: &SheetSchema, row: &[String], row_num: usize, col_name: &str, errors: &mut Vec<SheetParseError>) -> Self {
+        let raw = schema.get_str(row, col_name);
+        match TelegramName::from_sheet_value(raw) {
+            Ok(name) => Some(name),
+            Err(msg) => {
+                if !raw.trim().is_empty() {
+                    push_error(schema, row_num, col_name, msg, errors);
+                }
+                None
+            }
+        }
+    }
+}
+
+/// Empty or unrecognised cell → `None` (no error; treated as "planned").
+impl FromSheet for Option<LessonStatus> {
+    fn from_sheet(schema: &SheetSchema, row: &[String], _row_num: usize, col_name: &str, _errors: &mut Vec<SheetParseError>) -> Self {
+        LessonStatus::from_str(schema.get_str(row, col_name))
+    }
+}
+
+/// Empty cell → `None` (silent).  Non-empty but unparseable → `None` + error
+/// logged.
+impl FromSheet for Option<DateTime<Utc>> {
+    fn from_sheet(schema: &SheetSchema, row: &[String], row_num: usize, col_name: &str, errors: &mut Vec<SheetParseError>) -> Self {
+        let raw = schema.get_str(row, col_name);
+        if raw.is_empty() {
+            return None;
+        }
+        match DateTime::<Utc>::from_sheet_value(raw) {
+            Ok(dt) => Some(dt),
+            Err(msg) => {
+                push_error(schema, row_num, col_name, msg, errors);
+                None
+            }
+        }
+    }
+}
