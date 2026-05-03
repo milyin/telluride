@@ -151,14 +151,14 @@ impl SheetsClient {
                 }
             } else {
                 // Fall back to parsing a combined datetime column if it exists
-                let datetime_str = schema.get_str(row, "datetime");
+                let datetime_str = schema.get_str(row, ScheduleEntry::DATETIME);
                 match parse_datetime(datetime_str) {
                     Some(dt) => dt,
                     None => {
                         let err = SheetParseError {
                             sheet: SHEET_SCHEDULE.to_string(),
                             row: row_idx + 1,
-                            column: "datetime".to_string(),
+                            column: ScheduleEntry::DATETIME.to_string(),
                             message: format!("cannot parse datetime '{}'", datetime_str),
                         };
                         log::error!("{err}");
@@ -169,14 +169,14 @@ impl SheetsClient {
             };
 
             // --- telegram names -------------------------------------------------
-            let raw_student = schema.get_str(row, "student_telegram");
+            let raw_student = schema.get_str(row, ScheduleEntry::STUDENT_TELEGRAM);
             let student_telegram = match TelegramName::try_from(raw_student) {
                 Ok(n) => n,
                 Err(e) => {
                     let err = SheetParseError {
                         sheet: SHEET_SCHEDULE.to_string(),
                         row: row_idx + 1,
-                        column: "student_telegram".to_string(),
+                        column: ScheduleEntry::STUDENT_TELEGRAM.to_string(),
                         message: e.to_string(),
                     };
                     log::error!("{err}");
@@ -185,14 +185,14 @@ impl SheetsClient {
                 }
             };
 
-            let raw_teacher = schema.get_str(row, "teacher_telegram");
+            let raw_teacher = schema.get_str(row, ScheduleEntry::TEACHER_TELEGRAM);
             let teacher_telegram = match TelegramName::try_from(raw_teacher) {
                 Ok(n) => n,
                 Err(e) => {
                     let err = SheetParseError {
                         sheet: SHEET_SCHEDULE.to_string(),
                         row: row_idx + 1,
-                        column: "teacher_telegram".to_string(),
+                        column: ScheduleEntry::TEACHER_TELEGRAM.to_string(),
                         message: e.to_string(),
                     };
                     log::error!("{err}");
@@ -202,15 +202,15 @@ impl SheetsClient {
             };
 
             // --- numeric fields -------------------------------------------------
-            let cost_str = schema.get_str(row, "cost").replace(',', ".");
+            let cost_str = schema.get_str(row, ScheduleEntry::COST).replace(',', ".");
             let cost: f64 = cost_str.parse().unwrap_or(0.0);
 
-            let duration_str = schema.get_str(row, "duration_minutes");
+            let duration_str = schema.get_str(row, ScheduleEntry::DURATION_MINUTES);
             let duration_minutes: i64 = duration_str.parse().unwrap_or(60);
 
             // --- status ---------------------------------------------------------
             let status: Option<LessonStatus> =
-                LessonStatus::from_str(schema.get_str(row, "status"));
+                LessonStatus::from_str(schema.get_str(row, ScheduleEntry::STATUS));
 
             // --- custom columns -------------------------------------------------
             let custom = schema.get_custom(row, SCHEDULE_COLS);

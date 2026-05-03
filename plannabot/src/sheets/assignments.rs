@@ -38,7 +38,7 @@ impl SheetsClient {
                 continue;
             }
 
-            let raw_teacher = schema.get_str(row, "teacher_telegram");
+            let raw_teacher = schema.get_str(row, TeacherStudentAssignment::TEACHER_TELEGRAM);
             let teacher_telegram = match TelegramName::try_from(raw_teacher) {
                 Ok(n) => n,
                 Err(e) => {
@@ -46,7 +46,7 @@ impl SheetsClient {
                         let err = SheetParseError {
                             sheet: SHEET_ASSIGNMENTS.to_string(),
                             row: row_idx + 1,
-                            column: "teacher_telegram".to_string(),
+                            column: TeacherStudentAssignment::TEACHER_TELEGRAM.to_string(),
                             message: e.to_string(),
                         };
                         log::error!("{err}");
@@ -56,7 +56,7 @@ impl SheetsClient {
                 }
             };
 
-            let raw_student = schema.get_str(row, "student_telegram");
+            let raw_student = schema.get_str(row, TeacherStudentAssignment::STUDENT_TELEGRAM);
             let student_telegram = match TelegramName::try_from(raw_student) {
                 Ok(n) => n,
                 Err(e) => {
@@ -64,7 +64,7 @@ impl SheetsClient {
                         let err = SheetParseError {
                             sheet: SHEET_ASSIGNMENTS.to_string(),
                             row: row_idx + 1,
-                            column: "student_telegram".to_string(),
+                            column: TeacherStudentAssignment::STUDENT_TELEGRAM.to_string(),
                             message: e.to_string(),
                         };
                         log::error!("{err}");

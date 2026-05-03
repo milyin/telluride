@@ -40,7 +40,7 @@ impl SheetsClient {
                 continue;
             }
 
-            let raw = schema.get_str(row, "telegram_name");
+            let raw = schema.get_str(row, Student::TELEGRAM_NAME);
             let telegram_name = match TelegramName::try_from(raw) {
                 Ok(n) => n,
                 Err(e) => {
@@ -48,7 +48,7 @@ impl SheetsClient {
                         let err = SheetParseError {
                             sheet: SHEET_STUDENTS.to_string(),
                             row: row_idx + 1,
-                            column: "telegram_name".to_string(),
+                            column: Student::TELEGRAM_NAME.to_string(),
                             message: e.to_string(),
                         };
                         log::error!("{err}");
@@ -60,11 +60,11 @@ impl SheetsClient {
 
             let student = Student {
                 telegram_name: telegram_name.clone(),
-                name: schema.get_str(row, "name").to_string(),
-                timezone: schema.get_str(row, "timezone").to_string(),
-                currency: schema.get_str(row, "currency").to_string(),
-                zoom_url: schema.get_optional(row, "zoom_url").map(|s| s.to_string()),
-                board_url: schema.get_optional(row, "board_url").map(|s| s.to_string()),
+                name: schema.get_str(row, Student::NAME).to_string(),
+                timezone: schema.get_str(row, Student::TIMEZONE).to_string(),
+                currency: schema.get_str(row, Student::CURRENCY).to_string(),
+                zoom_url: schema.get_optional(row, Student::ZOOM_URL).map(|s| s.to_string()),
+                board_url: schema.get_optional(row, Student::BOARD_URL).map(|s| s.to_string()),
                 custom: schema.get_custom(row, STUDENTS_COLS),
             };
 

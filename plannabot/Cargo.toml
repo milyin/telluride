@@ -29,6 +29,7 @@ anyhow = "1.0"
 serde_json = "1.0"
 dotenv = "0.15"
 bitcode = "0.6"
+paste = "1.0.15"
 
 [[bin]]
 name = "plannabot"

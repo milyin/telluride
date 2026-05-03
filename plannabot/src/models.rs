@@ -108,6 +108,12 @@ macro_rules! sheet_struct {
                     stringify!($field),
                 )*
             ];
+
+            paste::paste! {
+                $(
+                    pub const [<$field:upper>]: &'static str = stringify!($field);
+                )*
+            }
         }
     };
 }
