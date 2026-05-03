@@ -19,7 +19,13 @@ pub async fn handle_command(
 ) -> Result<()> {
     match cmd {
         CommonCommand::Start => api::teacher::start(bot, msg.chat.id, teacher, state).await,
-        CommonCommand::Help => api::teacher::help(bot, msg.chat.id, teacher, state).await,
+        CommonCommand::Help => {
+            if state.is_in_admin_mode(msg.chat.id).await {
+                api::admin::help(bot, msg.chat.id).await
+            } else {
+                api::teacher::help(bot, msg.chat.id, teacher, state).await
+            }
+        }
         CommonCommand::Schedule => api::teacher::schedule(bot, msg.chat.id, teacher, state).await,
     }
 }
@@ -56,7 +62,6 @@ pub async fn handle_teacher_command(
         }
         TeacherCommand::Quit => api::teacher::quit(bot, msg.chat.id, teacher, state).await,
         TeacherCommand::Admin => api::teacher::admin(bot, msg.chat.id, teacher, state).await,
-        TeacherCommand::Status => api::teacher::status(bot, msg.chat.id, teacher, state).await,
         TeacherCommand::Refresh => api::teacher::refresh(bot, msg.chat.id, state).await,
     }
 }

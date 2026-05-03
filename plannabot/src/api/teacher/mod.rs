@@ -11,6 +11,7 @@ use telluride::markdown::{MarkdownString, MarkdownStringMessage};
 use telluride::{markdown_format, markdown_string};
 use teloxide::prelude::*;
 
+
 /// Handle the /start command for a teacher.
 pub async fn start(
     bot: &Bot,
@@ -47,18 +48,6 @@ pub async fn help(
     teacher: &Teacher,
     state: &Arc<BotState>,
 ) -> Result<()> {
-    if state.is_in_admin_mode(chat_id).await {
-        let text = markdown_string!(
-            "*Available Commands \\(Admin Mode\\):*\n\n\
-            /help \\- Display this help message\n\
-            /status \\- Show global stat information\n\
-            /refresh \\- Forcedly refresh the data\n\
-            /quit \\- Exit admin mode"
-        );
-        bot.send_markdown_message(chat_id, text).await?;
-        return Ok(());
-    }
-
     let spreadsheet_id = state.sheets.get_spreadsheet_id();
     let sheets_url = format!(
         "https://docs.google.com/spreadsheets/d/{}/edit",
@@ -73,15 +62,12 @@ pub async fn help(
         /help \\- Display this help message\n\
         /schedule \\- Show your planned lessons\n\
         /impersonate \\- Choose a student to impersonate from a button list\n\
-        /quit \\- Exit impersonation or admin mode\n\
+        /quit \\- Exit impersonation mode\n\
         /refresh \\- Forcedly refresh the data"
     );
 
     if teacher.admin {
-        let admin_part = markdown_string!(
-            "\n/admin \\- Enter admin mode\n\
-            /status \\- Show global stat information \\(admin mode only\\)"
-        );
+        let admin_part = markdown_string!("\n/admin \\- Enter admin mode");
         text.push(&admin_part);
     }
 
@@ -197,69 +183,6 @@ pub async fn admin(
     state.enter_admin_mode(chat_id).await;
     bot.send_message(chat_id, "Admin mode activated. Use /help to see available commands, use /quit for exit")
         .await?;
-    Ok(())
-}
-
-/// Handle the /status command for a teacher (admin mode only).
-pub async fn status(
-    bot: &Bot,
-    chat_id: ChatId,
-    teacher: &Teacher,
-    state: &Arc<BotState>,
-) -> Result<()> {
-    if !state.is_in_admin_mode(chat_id).await {
-        bot.send_message(
-            chat_id,
-            "This command is only available in admin mode. Use /admin to enter admin mode.",
-        )
-        .await?;
-        return Ok(());
-    }
-
-    let stats = state.get_stats().await;
-
-    let tz: Tz = teacher.timezone;
-
-    let last_reload_str = stats
-        .last_reload
-        .map(|t| {
-            let local_time = t.with_timezone(&tz);
-            local_time.format("%Y-%m-%d %H:%M:%S %Z").to_string()
-        })
-        .unwrap_or_else(|| "Never".to_string());
-
-    let last_modified_str = stats
-        .last_modified
-        .map(|t| {
-            let local_time = t.with_timezone(&tz);
-            local_time.format("%Y-%m-%d %H:%M:%S %Z").to_string()
-        })
-        .unwrap_or_else(|| "Unknown".to_string());
-
-    let spreadsheet_url = format!(
-        "https://docs.google.com/spreadsheets/d/{}/edit",
-        stats.spreadsheet_id
-    );
-    let url_markdown = MarkdownString::escape(spreadsheet_url);
-
-    let text = markdown_format!(
-        "📊 *Bot Status*\n\n\
-        • *Students:* {}\n\
-        • *Teachers:* {}\n\
-        • *Sheet Modified:* {}\n\
-        • *Last Refresh:* {}\n\
-        • *Refresh Delay:* {}s\n\n\
-        You can use /refresh to forcefully update the data\\.\n\n\
-        🔗 [View Google Sheet]({})",
-        stats.students_count.to_string(),
-        stats.teachers_count.to_string(),
-        MarkdownString::escape(last_modified_str),
-        MarkdownString::escape(last_reload_str),
-        stats.refresh_delay.as_secs().to_string(),
-        @raw url_markdown
-    );
-
-    bot.send_markdown_message(chat_id, text).await?;
     Ok(())
 }
 

@@ -55,11 +55,17 @@ async fn main() {
                 .filter_command::<bot::CommonCommand>()
                 .endpoint(bot::common_command_handler),
         )
-        // Teacher-only commands (/impersonate, /quit).
+        // Teacher-only commands (/impersonate, /quit, /admin, /refresh).
         .branch(
             Update::filter_message()
                 .filter_command::<bot::TeacherCommand>()
                 .endpoint(bot::teacher_command_handler),
+        )
+        // Admin-only commands (/status).
+        .branch(
+            Update::filter_message()
+                .filter_command::<bot::AdminCommand>()
+                .endpoint(bot::admin_command_handler),
         )
         // Inline keyboard button presses (student selection for /impersonate).
         .branch(

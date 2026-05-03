@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod student;
 pub mod teacher;
 
@@ -35,10 +36,16 @@ pub enum TeacherCommand {
     Quit,
     #[command(description = "enter admin mode (admin teachers only)")]
     Admin,
-    #[command(description = "show global stat information (admin mode only)")]
-    Status,
     #[command(description = "forcedly refresh the data")]
     Refresh,
+}
+
+/// Commands available in admin mode only.
+#[derive(BotCommands, Clone, Debug)]
+#[command(rename_rule = "lowercase", description = "Admin commands:")]
+pub enum AdminCommand {
+    #[command(description = "show global stat information")]
+    Status,
 }
 
 /// Callback actions triggered by inline keyboard buttons.
@@ -203,6 +210,59 @@ pub async fn teacher_command_handler(
     result.map_err(|e| {
         log::error!(
             "Error handling teacher command {:?} for @{}: {}",
+            cmd,
+            username,
+            e
+        );
+        teloxide::RequestError::Io(Arc::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            e.to_string(),
+        )))
+    })?;
+
+    Ok(())
+}
+
+/// Teloxide endpoint handler for admin-only commands (Status).
+///
+/// Rejects the command if the sender is not an admin teacher in admin mode.
+pub async fn admin_command_handler(
+    bot: Bot,
+    msg: Message,
+    cmd: AdminCommand,
+    state: Arc<BotState>,
+) -> ResponseResult<()> {
+    let _ = state.refresh_if_needed().await;
+
+    let Some(username) = get_username(&msg) else {
+        return Ok(());
+    };
+
+    let role = state.get_role(&username).await;
+    let teacher = match role {
+        Some(UserRole::Teacher(ref t)) if t.admin => t.clone(),
+        _ => return Ok(()),
+    };
+
+    if !state.is_in_admin_mode(msg.chat.id).await {
+        bot.send_message(
+            msg.chat.id,
+            "This command is only available in admin mode. Use /admin to enter admin mode.",
+        )
+        .await?;
+        return Ok(());
+    }
+
+    state
+        .try_send_errors_to_teacher(&bot, msg.chat.id, &teacher.telegram_name)
+        .await;
+
+    let result =
+        admin::handle_admin_command(&bot, &msg, &cmd, &teacher, &state).await;
+
+    result.map_err(|e| {
+        log::error!(
+            "Error handling admin command {:?} for @{}: {}",
             cmd,
             username,
             e
