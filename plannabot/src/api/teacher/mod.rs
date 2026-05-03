@@ -47,7 +47,7 @@ pub async fn help(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Result<(
         "https://docs.google.com/spreadsheets/d/{}/edit",
         spreadsheet_id
     );
-    
+
     // Use the proper markdown_format! macro with escaped URL
     let url_markdown = MarkdownString::escape(sheets_url);
     let formatted = markdown_format!(
@@ -62,7 +62,7 @@ pub async fn help(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Result<(
         📊 *Master Schedule:* [View on Google Sheets]({})",
         @raw url_markdown
     );
-    
+
     bot.send_markdown_message(chat_id, formatted).await?;
     Ok(())
 }
@@ -149,14 +149,28 @@ fn format_duration(minutes: i64) -> String {
 }
 
 /// Handle the /status command for a teacher.
-pub async fn status(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Result<()> {
+pub async fn status(
+    bot: &Bot,
+    chat_id: ChatId,
+    teacher: &Teacher,
+    state: &Arc<BotState>,
+) -> Result<()> {
     let stats = state.get_stats().await;
-    
-    let last_reload_str = stats.last_reload
-        .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+
+    let tz: Tz = teacher.timezone.parse().unwrap_or(chrono_tz::UTC);
+
+    let last_reload_str = stats
+        .last_reload
+        .map(|t| {
+            let local_time = t.with_timezone(&tz);
+            local_time.format("%Y-%m-%d %H:%M:%S %Z").to_string()
+        })
         .unwrap_or_else(|| "Never".to_string());
-    
-    let spreadsheet_url = format!("https://docs.google.com/spreadsheets/d/{}/edit", stats.spreadsheet_id);
+
+    let spreadsheet_url = format!(
+        "https://docs.google.com/spreadsheets/d/{}/edit",
+        stats.spreadsheet_id
+    );
     let url_markdown = MarkdownString::escape(spreadsheet_url);
 
     let text = markdown_format!(
@@ -173,15 +187,16 @@ pub async fn status(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Result
         stats.refresh_delay.as_secs().to_string(),
         @raw url_markdown
     );
-    
+
     bot.send_markdown_message(chat_id, text).await?;
     Ok(())
 }
 
 /// Handle the /refresh command for a teacher.
 pub async fn refresh(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Result<()> {
-    bot.send_message(chat_id, "🔄 Refreshing data from Google Sheets...").await?;
-    
+    bot.send_message(chat_id, "🔄 Refreshing data from Google Sheets...")
+        .await?;
+
     match state.refresh().await {
         Ok(errors) => {
             let stats = state.get_stats().await;
@@ -192,7 +207,7 @@ pub async fn refresh(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Resul
                 stats.students_count.to_string(),
                 stats.teachers_count.to_string()
             );
-            
+
             if !errors.is_empty() {
                 let err_text = markdown_format!(
                     "\n⚠️ *Encountered {} parse error\\(s\\)\\.*",
@@ -200,13 +215,14 @@ pub async fn refresh(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Resul
                 );
                 text.push(&err_text);
             }
-            
+
             bot.send_markdown_message(chat_id, text).await?;
         }
         Err(e) => {
-            bot.send_message(chat_id, format!("❌ Failed to refresh data: {}", e)).await?;
+            bot.send_message(chat_id, format!("❌ Failed to refresh data: {}", e))
+                .await?;
         }
     }
-    
+
     Ok(())
 }
