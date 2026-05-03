@@ -49,32 +49,33 @@ async fn main() {
     let callback_storage = Arc::new(InMemStore::<CallbackKey, Action>::new());
 
     let handler = dptree::entry()
-        // Common commands (/start, /help, /schedule) — available to all users.
+        // Student commands (/start, /help, /schedule).
         .branch(
             Update::filter_message()
-                .filter_command::<bot::CommonCommand>()
-                .endpoint(bot::common_command_handler),
+                .filter_async(bot::student::is_student)
+                .filter_command::<bot::student::StudentCommand>()
+                .endpoint(bot::student::student_command_handler),
         )
-        // Teacher-only commands (/impersonate, /quit, /admin, /refresh) — not in impersonation mode.
+        // Teacher commands (/start, /help, /schedule, /impersonate, /admin, /refresh).
         .branch(
             Update::filter_message()
-                .filter_async(bot::is_teacher_not_in_impersonation_mode)
-                .filter_command::<bot::TeacherCommand>()
-                .endpoint(bot::teacher_command_handler),
+                .filter_async(bot::teacher::is_teacher)
+                .filter_command::<bot::teacher::TeacherCommand>()
+                .endpoint(bot::teacher::teacher_command_handler),
         )
-        // Admin-only commands (/status, /refresh).
+        // Impersonation mode commands (/start, /help, /schedule, /quit).
         .branch(
             Update::filter_message()
-                .filter_async(bot::is_teacher_in_admin_mode)
-                .filter_command::<bot::AdminCommand>()
-                .endpoint(bot::admin_command_handler),
+                .filter_async(bot::impersonate::is_impersonate)
+                .filter_command::<bot::impersonate::ImpersonateCommand>()
+                .endpoint(bot::impersonate::impersonate_command_handler),
         )
-        // Impersonation mode commands (/quit).
+        // Admin mode commands (/start, /help, /status, /refresh, /quit).
         .branch(
             Update::filter_message()
-                .filter_async(bot::is_teacher_in_impersonation_mode)
-                .filter_command::<bot::ImpersonateCommand>()
-                .endpoint(bot::impersonate_command_handler),
+                .filter_async(bot::admin::is_admin)
+                .filter_command::<bot::admin::AdminCommand>()
+                .endpoint(bot::admin::admin_command_handler),
         )
         // Inline keyboard button presses (student selection for /impersonate).
         .branch(
@@ -82,11 +83,11 @@ async fn main() {
                 .filter(|q: CallbackQuery| {
                     q.data
                         .as_ref()
-                        .map_or(false, |data| CallbackKey::is_packed_data(data))
+                        .is_some_and(|data| CallbackKey::is_packed_data(data))
                 })
                 .endpoint(bot::callback_action_handler),
         )
-        // Plain text messages (non-command)
+        // Plain text messages (non-command) and unhandled commands (e.g. unauthorized users).
         .branch(
             Update::filter_message()
                 .filter(|msg: Message| msg.text().is_some())

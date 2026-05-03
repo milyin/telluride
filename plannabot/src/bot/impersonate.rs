@@ -1,0 +1,73 @@
+use crate::api;
+use crate::bot::get_username;
+use crate::models::UserRole;
+use crate::state::BotState;
+use std::sync::Arc;
+use teloxide::prelude::*;
+use teloxide::utils::command::BotCommands;
+
+#[derive(BotCommands, Clone, Debug)]
+#[command(rename_rule = "lowercase", description = "Impersonation commands:")]
+pub enum ImpersonateCommand {
+    #[command(description = "exit impersonation and restart the bot")]
+    Start,
+    #[command(description = "display help")]
+    Help,
+    #[command(description = "show the impersonated student's planned lessons")]
+    Schedule,
+    #[command(description = "exit impersonation mode")]
+    Quit,
+}
+
+/// Returns true if the message sender is a teacher currently in impersonation mode.
+pub async fn is_impersonate(msg: Message, state: Arc<BotState>) -> bool {
+    let Some(username) = get_username(&msg) else {
+        return false;
+    };
+    if !matches!(state.get_role(&username).await, Some(UserRole::Teacher(_))) {
+        return false;
+    }
+    state.get_impersonation(msg.chat.id).await.is_some()
+}
+
+pub async fn impersonate_command_handler(
+    bot: Bot,
+    msg: Message,
+    cmd: ImpersonateCommand,
+    state: Arc<BotState>,
+) -> ResponseResult<()> {
+    let _ = state.refresh_if_needed().await;
+
+    let Some(username) = get_username(&msg) else {
+        return Ok(());
+    };
+    let Some(UserRole::Teacher(teacher)) = state.get_role(&username).await else {
+        return Ok(());
+    };
+
+    state
+        .try_send_errors_to_teacher(&bot, msg.chat.id, &teacher.telegram_name)
+        .await;
+
+    let result = match cmd {
+        ImpersonateCommand::Start => {
+            let role = UserRole::Teacher(teacher.clone());
+            api::common::start(&bot, msg.chat.id, &role, &state).await
+        }
+        ImpersonateCommand::Help => api::impersonate::help(&bot, msg.chat.id).await,
+        ImpersonateCommand::Schedule => api::impersonate::schedule(&bot, msg.chat.id, &state).await,
+        ImpersonateCommand::Quit => api::impersonate::quit(&bot, msg.chat.id, &teacher, &state).await,
+    };
+
+    result.map_err(|e| {
+        log::error!(
+            "Error handling impersonate command {:?} for @{}: {}",
+            cmd,
+            username,
+            e
+        );
+        teloxide::RequestError::Io(Arc::new(std::io::Error::other(e.to_string())))
+    })?;
+
+    Ok(())
+}

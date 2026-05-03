@@ -46,6 +46,7 @@ pub async fn refresh(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Resul
 pub async fn help(bot: &Bot, chat_id: ChatId) -> Result<()> {
     let text = markdown_string!(
         "*Available Commands \\(Admin Mode\\):*\n\n\
+        /start \\- Exit admin mode and restart the bot\n\
         /help \\- Display this help message\n\
         /status \\- Show global stat information\n\
         /refresh \\- Forcedly refresh the data\n\
@@ -105,5 +106,12 @@ pub async fn status(
     );
 
     bot.send_markdown_message(chat_id, text).await?;
+    Ok(())
+}
+
+/// Handle the /quit command in admin mode.
+pub async fn quit(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Result<()> {
+    state.exit_admin_mode(chat_id).await;
+    bot.send_message(chat_id, "Exited admin mode.").await?;
     Ok(())
 }

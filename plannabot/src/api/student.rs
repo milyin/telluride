@@ -1,3 +1,4 @@
+use crate::api::common::format_duration;
 use crate::models::Student;
 use crate::state::BotState;
 use anyhow::Result;
@@ -7,30 +8,14 @@ use telluride::markdown::MarkdownStringMessage;
 use telluride::{markdown_format, markdown_string};
 use teloxide::prelude::*;
 
-/// Handle the /start command for a student.
-pub async fn start(bot: &Bot, chat_id: ChatId, student: &Student) -> Result<()> {
-    let mut text = markdown_string!("👋 *Welcome to Plannabot\\!*\n\n");
-    let greeting = markdown_format!(
-        "Hello, {}\\! Use /help to see available commands\\.",
-        student.name.as_str()
-    );
-    text.push(&greeting);
-    bot.send_markdown_message(chat_id, text).await?;
-    Ok(())
-}
-
 /// Handle the /help command for a student.
-pub async fn help(bot: &Bot, chat_id: ChatId, is_impersonating: bool) -> Result<()> {
-    let mut text = markdown_string!(
+pub async fn help(bot: &Bot, chat_id: ChatId) -> Result<()> {
+    let text = markdown_string!(
         "*Available Commands:*\n\n\
         /start \\- Start the bot\n\
         /help \\- Display this help message\n\
         /schedule \\- Show your planned lessons"
     );
-    if is_impersonating {
-        let quit_cmd = markdown_string!("\n/quit \\- Exit impersonation mode");
-        text.push(&quit_cmd);
-    }
     bot.send_markdown_message(chat_id, text).await?;
     Ok(())
 }
@@ -74,19 +59,4 @@ pub async fn schedule(
     }
 
     Ok(())
-}
-
-/// Formats a lesson duration in minutes to a human-readable string.
-///
-/// - `90`  → `"1h 30m"`
-/// - `120` → `"2h"`
-/// - `45`  → `"45m"`
-fn format_duration(minutes: i64) -> String {
-    let hours = minutes / 60;
-    let mins = minutes % 60;
-    match (hours, mins) {
-        (0, m) => format!("{}m", m),
-        (h, 0) => format!("{}h", h),
-        (h, m) => format!("{}h {}m", h, m),
-    }
 }

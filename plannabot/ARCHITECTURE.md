@@ -33,11 +33,19 @@ plannabot/
 │   │   ├── teachers.rs  – SheetsClient::get_teachers()
 │   │   ├── schedule.rs  – SheetsClient::get_schedule() / get_student_schedule() / get_teacher_schedule()
 │   │   └── payments.rs  – SheetsClient::get_payments() (stub)
+│   ├── api/
+│   │   ├── mod.rs       – module declarations
+│   │   ├── common.rs    – start() (universal, resets to default mode), format_duration()
+│   │   ├── student.rs   – help(), schedule()
+│   │   ├── teacher.rs   – help(), schedule(), admin()
+│   │   ├── impersonate.rs – impersonate() (enter), show_student_selection(), help(), schedule(), quit()
+│   │   └── admin.rs     – refresh(), help(), status(), quit()
 │   └── bot/
-│       ├── mod.rs       – Command enum (BotCommands derive), command_handler, message_handler,
-│       │                  get_username(), format_duration()
-│       ├── student.rs   – handle_command() for the Student role
-│       └── teacher.rs   – handle_command() for the Teacher role
+│       ├── mod.rs       – Action enum, get_username(), callback_action_handler(), message_handler()
+│       ├── student.rs   – StudentCommand enum, is_student(), student_command_handler()
+│       ├── teacher.rs   – TeacherCommand enum, is_teacher(), teacher_command_handler()
+│       ├── impersonate.rs – ImpersonateCommand enum, is_impersonate(), impersonate_command_handler()
+│       └── admin.rs     – AdminCommand enum, is_admin(), admin_command_handler()
 ├── .env.example
 ├── Cargo.toml
 └── README.md
@@ -49,12 +57,26 @@ plannabot/
 
 All messages sent to Telegram **must** use the `telluride` library for compile-time-safe MarkdownV2 formatting. For complete details on macros, escaping rules, imports, examples, and testing, see **[TELLURIDE.md](TELLURIDE.md)**.
 
-### Code Organization
+---
 
-Messages should be kept close to where they're used:
-- **`bot/student.rs`** — all student-facing messages
-- **`bot/teacher.rs`** — all teacher-facing messages
-- **`bot/mod.rs`** — only error/authorization messages that apply to both roles
+## User Modes
+
+The bot operates in one of four mutually exclusive modes per chat, each with its own command enum, filter function, and handler:
+
+| Mode | Active when | Enum | Filter | Handler |
+|------|------------|------|--------|---------|
+| Student | UserRole::Student | `StudentCommand` | `is_student` | `student_command_handler` |
+| Teacher | Teacher, not impersonating, not admin | `TeacherCommand` | `is_teacher` | `teacher_command_handler` |
+| Impersonate | Teacher + impersonation active | `ImpersonateCommand` | `is_impersonate` | `impersonate_command_handler` |
+| Admin | Teacher (admin=true) + admin mode active | `AdminCommand` | `is_admin` | `admin_command_handler` |
+
+**Command cross-mode rules:**
+- All enums contain `/start` → `api::common::start` (clears all modes, shows welcome)
+- All enums contain `/help` → mode-specific help
+- Teacher and Admin both have `/refresh` → `api::admin::refresh`
+- Admin and Impersonate both have `/quit` → exits that mode
+
+**Mode exclusivity:** entering admin mode clears impersonation; entering impersonation clears admin mode.
 
 ---
 
@@ -87,32 +109,42 @@ This makes startup idempotent: running the bot against an already-configured spr
 
 ### `state.rs` — `BotState`
 
-Holds the in-memory cache and all staleness-tracking state:
+Holds the in-memory cache and all mode/staleness state:
 
 ```
 BotState
 ├── sheets: Arc<SheetsClient>
 ├── students: Arc<RwLock<HashMap<String, Student>>>   ← keyed by normalised telegram_name
 ├── teachers: Arc<RwLock<HashMap<String, Teacher>>>   ← keyed by normalised telegram_name
-├── last_modified: Mutex<Option<DateTime<Utc>>>        ← Drive modifiedTime at last reload
-└── last_checked:  Mutex<Instant>                      ← wall-clock time of last Drive check
+├── impersonations: RwLock<HashMap<ChatId, String>>   ← teacher ChatId → impersonated student name
+├── admin_modes: RwLock<HashSet<ChatId>>              ← chats currently in admin mode
+├── last_modified: Mutex<Option<DateTime<Utc>>>       ← Drive modifiedTime at last reload
+└── last_checked:  Mutex<Instant>                     ← wall-clock time of last Drive check
 ```
 
 `RwLock` is used for the caches (many concurrent readers, rare writers).  
 `std::sync::Mutex` (not `tokio::sync::Mutex`) is used for the two staleness fields because they are only held for a few nanoseconds — never across an `.await`.
 
-### `bot/mod.rs`
-The entry point for every Telegram update. Both handlers follow the same pattern:
+### `api/` layer
+Business logic, separated from Telegram routing:
 
-```
-refresh_if_needed()   ← may reload from Sheets
-get_username()        ← 403 if no username set
-get_role()            ← 403 if not in Students or Teachers
-dispatch to student:: or teacher::handle_command()
-```
+- **`api::common`** — `start()` (universal welcome + mode reset), `format_duration()` (shared helper)
+- **`api::student`** — `help()`, `schedule()`
+- **`api::teacher`** — `help()`, `schedule()`, `admin()` (enter admin mode)
+- **`api::impersonate`** — `impersonate()` (enter impersonation), `help()`, `schedule()`, `quit()`
+- **`api::admin`** — `refresh()`, `help()`, `status()`, `quit()`
 
-### `bot/student.rs` and `bot/teacher.rs`
-Return `anyhow::Result<()>`; errors are converted to `teloxide::RequestError` at the boundary in `bot/mod.rs`.
+### `bot/` layer
+Telegram routing. Each module is self-contained with its command enum, filter, and handler:
+
+Each handler follows the same pattern:
+```
+refresh_if_needed()       ← may reload from Sheets
+get_username()            ← early return if no username set
+get_role() / verify mode  ← early return if wrong role/mode
+try_send_errors()         ← teacher handlers only
+match cmd { ... }         ← one api:: call per arm, no inline logic
+```
 
 ---
 
@@ -156,18 +188,18 @@ Has CHECK_INTERVAL (15 s) elapsed since the last Drive check?
 ## Telegram update routing
 
 ```
-Dispatcher (teloxide)
+Dispatcher (teloxide / dptree)
       │
-      ├─ filter_message → filter_command::<Command>
-      │         └─ command_handler(bot, msg, cmd, Arc<BotState>)
-      │
-      ├─ filter_message → msg.text().is_some()
-      │         └─ message_handler(bot, msg, Arc<BotState>)
-      │
+      ├─ filter_message → is_student   → filter_command::<StudentCommand>    → student_command_handler
+      ├─ filter_message → is_teacher   → filter_command::<TeacherCommand>    → teacher_command_handler
+      ├─ filter_message → is_impersonate → filter_command::<ImpersonateCommand> → impersonate_command_handler
+      ├─ filter_message → is_admin     → filter_command::<AdminCommand>      → admin_command_handler
+      ├─ filter_callback_query → is_packed_data → callback_action_handler
+      ├─ filter_message → msg.text().is_some() → message_handler
       └─ fallback endpoint → log debug, respond(())
 ```
 
-`Arc<BotState>` is injected by dptree via `.dependencies(dptree::deps![state])` in `main.rs`; handlers simply declare it as a parameter and dptree resolves it by type.
+`Arc<BotState>` and `Arc<InMemStore<CallbackKey, Action>>` are injected by dptree via `.dependencies(...)` in `main.rs`; handlers simply declare them as parameters.
 
 ---
 
