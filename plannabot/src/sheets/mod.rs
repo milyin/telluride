@@ -9,11 +9,15 @@
 //! whether cached data needs to be reloaded.
 
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
+use chrono_tz::Tz;
 use google_sheets4::{api, hyper, hyper_rustls, oauth2, FieldMask, Sheets};
 use serde::Deserialize;
+
+use crate::models::{SheetParseError, TelegramName};
 
 pub mod assignments;
 pub mod payments;
@@ -63,6 +67,55 @@ pub fn col_index_to_letter(index: usize) -> String {
         n = n / 26 - 1;
     }
     result
+}
+
+pub fn parse_timezone_or_utc(
+    sheet: &str,
+    row: usize,
+    column: &str,
+    raw: &str,
+    errors: &mut Vec<SheetParseError>,
+) -> Tz {
+    match Tz::from_str(raw) {
+        Ok(timezone) => timezone,
+        Err(error) => {
+            let err = SheetParseError {
+                sheet: sheet.to_string(),
+                row,
+                column: column.to_string(),
+                message: format!("cannot parse timezone '{}': {}; using UTC", raw, error),
+            };
+            log::error!("{err}");
+            errors.push(err);
+            chrono_tz::UTC
+        }
+    }
+}
+
+pub fn parse_telegram_name(
+    sheet: &str,
+    row: usize,
+    column: &str,
+    raw: &str,
+    errors: &mut Vec<SheetParseError>,
+    report_empty: bool,
+) -> Option<TelegramName> {
+    match TelegramName::try_from(raw) {
+        Ok(name) => Some(name),
+        Err(error) => {
+            if report_empty || !raw.trim().is_empty() {
+                let err = SheetParseError {
+                    sheet: sheet.to_string(),
+                    row,
+                    column: column.to_string(),
+                    message: error.to_string(),
+                };
+                log::error!("{err}");
+                errors.push(err);
+            }
+            None
+        }
+    }
 }
 
 /// Infers a Google Sheets number format for a column name.

@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 
-use super::{SheetSchema, SheetsClient, SHEET_ASSIGNMENTS};
+use super::{parse_telegram_name, SheetSchema, SheetsClient, SHEET_ASSIGNMENTS};
 use crate::models::{SheetParseError, TeacherStudentAssignment, TelegramName};
 
 impl SheetsClient {
@@ -38,40 +38,26 @@ impl SheetsClient {
                 continue;
             }
 
-            let raw_teacher = schema.get_str(row, TeacherStudentAssignment::TEACHER_TELEGRAM);
-            let teacher_telegram = match TelegramName::try_from(raw_teacher) {
-                Ok(n) => n,
-                Err(e) => {
-                    if !raw_teacher.trim().is_empty() {
-                        let err = SheetParseError {
-                            sheet: SHEET_ASSIGNMENTS.to_string(),
-                            row: row_idx + 1,
-                            column: TeacherStudentAssignment::TEACHER_TELEGRAM.to_string(),
-                            message: e.to_string(),
-                        };
-                        log::error!("{err}");
-                        errors.push(err);
-                    }
-                    continue;
-                }
+            let Some(teacher_telegram) = parse_telegram_name(
+                SHEET_ASSIGNMENTS,
+                row_idx + 1,
+                TeacherStudentAssignment::TEACHER_TELEGRAM,
+                schema.get_str(row, TeacherStudentAssignment::TEACHER_TELEGRAM),
+                &mut errors,
+                false,
+            ) else {
+                continue;
             };
 
-            let raw_student = schema.get_str(row, TeacherStudentAssignment::STUDENT_TELEGRAM);
-            let student_telegram = match TelegramName::try_from(raw_student) {
-                Ok(n) => n,
-                Err(e) => {
-                    if !raw_student.trim().is_empty() {
-                        let err = SheetParseError {
-                            sheet: SHEET_ASSIGNMENTS.to_string(),
-                            row: row_idx + 1,
-                            column: TeacherStudentAssignment::STUDENT_TELEGRAM.to_string(),
-                            message: e.to_string(),
-                        };
-                        log::error!("{err}");
-                        errors.push(err);
-                    }
-                    continue;
-                }
+            let Some(student_telegram) = parse_telegram_name(
+                SHEET_ASSIGNMENTS,
+                row_idx + 1,
+                TeacherStudentAssignment::STUDENT_TELEGRAM,
+                schema.get_str(row, TeacherStudentAssignment::STUDENT_TELEGRAM),
+                &mut errors,
+                false,
+            ) else {
+                continue;
             };
 
             let custom = schema.get_custom(row, super::ASSIGNMENTS_COLS);

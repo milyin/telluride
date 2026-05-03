@@ -1,8 +1,8 @@
-use std::collections::HashMap;
 use std::fmt;
 
 use anyhow::bail;
 use chrono::{DateTime, Utc};
+use chrono_tz::Tz;
 
 /// A normalised Telegram username.
 ///
@@ -124,7 +124,7 @@ sheet_struct! {
     pub struct Student {
         pub telegram_name: TelegramName,
         pub name: String,
-        pub timezone: String,
+        pub timezone: Tz,
         pub currency: String,
         pub zoom_url: Option<String>,
         pub board_url: Option<String>,
@@ -136,7 +136,7 @@ sheet_struct! {
     #[derive(Debug, Clone, PartialEq)]
     pub struct Teacher {
         pub telegram_name: TelegramName,
-        pub timezone: String,
+        pub timezone: Tz,
     }
 }
 

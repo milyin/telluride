@@ -4,8 +4,11 @@ use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 
-use super::{SheetSchema, SheetsClient, SHEET_STUDENTS, STUDENTS_COLS};
-use crate::models::{SheetParseError, Student, TelegramName};
+use super::{
+    parse_telegram_name, parse_timezone_or_utc, SheetSchema, SheetsClient, SHEET_STUDENTS,
+    STUDENTS_COLS,
+};
+use crate::models::{SheetParseError, Student};
 
 impl SheetsClient {
     /// Reads all rows from the `Students` sheet and returns a map from
@@ -40,28 +43,29 @@ impl SheetsClient {
                 continue;
             }
 
-            let raw = schema.get_str(row, Student::TELEGRAM_NAME);
-            let telegram_name = match TelegramName::try_from(raw) {
-                Ok(n) => n,
-                Err(e) => {
-                    if !raw.trim().is_empty() {
-                        let err = SheetParseError {
-                            sheet: SHEET_STUDENTS.to_string(),
-                            row: row_idx + 1,
-                            column: Student::TELEGRAM_NAME.to_string(),
-                            message: e.to_string(),
-                        };
-                        log::error!("{err}");
-                        errors.push(err);
-                    }
-                    continue;
-                }
+            let Some(telegram_name) = parse_telegram_name(
+                SHEET_STUDENTS,
+                row_idx + 1,
+                Student::TELEGRAM_NAME,
+                schema.get_str(row, Student::TELEGRAM_NAME),
+                &mut errors,
+                false,
+            ) else {
+                continue;
             };
+
+            let timezone = parse_timezone_or_utc(
+                SHEET_STUDENTS,
+                row_idx + 1,
+                Student::TIMEZONE,
+                schema.get_str(row, Student::TIMEZONE),
+                &mut errors,
+            );
 
             let student = Student {
                 telegram_name: telegram_name.clone(),
                 name: schema.get_str(row, Student::NAME).to_string(),
-                timezone: schema.get_str(row, Student::TIMEZONE).to_string(),
+                timezone,
                 currency: schema.get_str(row, Student::CURRENCY).to_string(),
                 zoom_url: schema.get_optional(row, Student::ZOOM_URL).map(|s| s.to_string()),
                 board_url: schema.get_optional(row, Student::BOARD_URL).map(|s| s.to_string()),

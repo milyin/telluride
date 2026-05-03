@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, NaiveDateTime, Utc};
 
-use super::{SheetSchema, SheetsClient, SCHEDULE_COLS, SHEET_SCHEDULE};
+use super::{parse_telegram_name, SheetSchema, SheetsClient, SCHEDULE_COLS, SHEET_SCHEDULE};
 use crate::models::{LessonStatus, ScheduleEntry, SheetParseError, TelegramName};
 
 // ---------------------------------------------------------------------------
@@ -169,36 +169,26 @@ impl SheetsClient {
             };
 
             // --- telegram names -------------------------------------------------
-            let raw_student = schema.get_str(row, ScheduleEntry::STUDENT_TELEGRAM);
-            let student_telegram = match TelegramName::try_from(raw_student) {
-                Ok(n) => n,
-                Err(e) => {
-                    let err = SheetParseError {
-                        sheet: SHEET_SCHEDULE.to_string(),
-                        row: row_idx + 1,
-                        column: ScheduleEntry::STUDENT_TELEGRAM.to_string(),
-                        message: e.to_string(),
-                    };
-                    log::error!("{err}");
-                    errors.push(err);
-                    continue;
-                }
+            let Some(student_telegram) = parse_telegram_name(
+                SHEET_SCHEDULE,
+                row_idx + 1,
+                ScheduleEntry::STUDENT_TELEGRAM,
+                schema.get_str(row, ScheduleEntry::STUDENT_TELEGRAM),
+                &mut errors,
+                true,
+            ) else {
+                continue;
             };
 
-            let raw_teacher = schema.get_str(row, ScheduleEntry::TEACHER_TELEGRAM);
-            let teacher_telegram = match TelegramName::try_from(raw_teacher) {
-                Ok(n) => n,
-                Err(e) => {
-                    let err = SheetParseError {
-                        sheet: SHEET_SCHEDULE.to_string(),
-                        row: row_idx + 1,
-                        column: ScheduleEntry::TEACHER_TELEGRAM.to_string(),
-                        message: e.to_string(),
-                    };
-                    log::error!("{err}");
-                    errors.push(err);
-                    continue;
-                }
+            let Some(teacher_telegram) = parse_telegram_name(
+                SHEET_SCHEDULE,
+                row_idx + 1,
+                ScheduleEntry::TEACHER_TELEGRAM,
+                schema.get_str(row, ScheduleEntry::TEACHER_TELEGRAM),
+                &mut errors,
+                true,
+            ) else {
+                continue;
             };
 
             // --- numeric fields -------------------------------------------------

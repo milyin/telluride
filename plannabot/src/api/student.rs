@@ -54,7 +54,7 @@ pub async fn schedule(
         let text = markdown_string!("📅 No planned lessons found\\.");
         bot.send_markdown_message(chat_id, text).await?;
     } else {
-        let tz: Tz = student.timezone.parse().unwrap_or(chrono_tz::UTC);
+        let tz: Tz = student.timezone;
         let mut text = markdown_string!("📅 *Your planned lessons:*\n\n");
         for entry in &planned {
             let local_time = entry.datetime.with_timezone(&tz);

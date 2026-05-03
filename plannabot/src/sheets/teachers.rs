@@ -4,8 +4,11 @@ use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 
-use super::{SheetSchema, SheetsClient, SHEET_TEACHERS, TEACHERS_COLS};
-use crate::models::{SheetParseError, Teacher, TelegramName};
+use super::{
+    parse_telegram_name, parse_timezone_or_utc, SheetSchema, SheetsClient, SHEET_TEACHERS,
+    TEACHERS_COLS,
+};
+use crate::models::{SheetParseError, Teacher};
 
 impl SheetsClient {
     /// Reads all rows from the `Teachers` sheet and returns a map from
@@ -42,27 +45,28 @@ impl SheetsClient {
                 continue;
             }
 
-            let raw = schema.get_str(row, Teacher::TELEGRAM_NAME);
-            let telegram_name = match TelegramName::try_from(raw) {
-                Ok(n) => n,
-                Err(e) => {
-                    if !raw.trim().is_empty() {
-                        let err = SheetParseError {
-                            sheet: SHEET_TEACHERS.to_string(),
-                            row: row_idx + 1,
-                            column: Teacher::TELEGRAM_NAME.to_string(),
-                            message: e.to_string(),
-                        };
-                        log::error!("{err}");
-                        errors.push(err);
-                    }
-                    continue;
-                }
+            let Some(telegram_name) = parse_telegram_name(
+                SHEET_TEACHERS,
+                row_idx + 1,
+                Teacher::TELEGRAM_NAME,
+                schema.get_str(row, Teacher::TELEGRAM_NAME),
+                &mut errors,
+                false,
+            ) else {
+                continue;
             };
+
+            let timezone = parse_timezone_or_utc(
+                SHEET_TEACHERS,
+                row_idx + 1,
+                Teacher::TIMEZONE,
+                schema.get_str(row, Teacher::TIMEZONE),
+                &mut errors,
+            );
 
             let teacher = Teacher {
                 telegram_name: telegram_name.clone(),
-                timezone: schema.get_str(row, Teacher::TIMEZONE).to_string(),
+                timezone,
                 custom: schema.get_custom(row, TEACHERS_COLS),
             };
 
