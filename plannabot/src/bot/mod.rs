@@ -46,6 +46,8 @@ pub enum TeacherCommand {
 pub enum AdminCommand {
     #[command(description = "show global stat information")]
     Status,
+    #[command(description = "forcedly refresh the data")]
+    Refresh,
 }
 
 /// Callback actions triggered by inline keyboard buttons.

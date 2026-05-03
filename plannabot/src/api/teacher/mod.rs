@@ -186,37 +186,3 @@ pub async fn admin(
     Ok(())
 }
 
-/// Handle the /refresh command for a teacher.
-pub async fn refresh(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Result<()> {
-    bot.send_message(chat_id, "🔄 Refreshing data from Google Sheets...")
-        .await?;
-
-    match state.refresh().await {
-        Ok(errors) => {
-            let stats = state.get_stats().await;
-            let mut text = markdown_format!(
-                "✅ *Data successfully refreshed\\!*\n\n\
-                • Students: {}\n\
-                • Teachers: {}\n",
-                stats.students_count.to_string(),
-                stats.teachers_count.to_string()
-            );
-
-            if !errors.is_empty() {
-                let err_text = markdown_format!(
-                    "\n⚠️ *Encountered {} parse error\\(s\\)\\.*",
-                    errors.len().to_string()
-                );
-                text.push(&err_text);
-            }
-
-            bot.send_markdown_message(chat_id, text).await?;
-        }
-        Err(e) => {
-            bot.send_message(chat_id, format!("❌ Failed to refresh data: {}", e))
-                .await?;
-        }
-    }
-
-    Ok(())
-}

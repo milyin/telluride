@@ -62,6 +62,6 @@ pub async fn handle_teacher_command(
         }
         TeacherCommand::Quit => api::teacher::quit(bot, msg.chat.id, teacher, state).await,
         TeacherCommand::Admin => api::teacher::admin(bot, msg.chat.id, teacher, state).await,
-        TeacherCommand::Refresh => api::teacher::refresh(bot, msg.chat.id, state).await,
+        TeacherCommand::Refresh => api::admin::refresh(bot, msg.chat.id, state).await,
     }
 }

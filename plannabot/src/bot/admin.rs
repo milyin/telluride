@@ -18,5 +18,6 @@ pub async fn handle_admin_command(
 ) -> Result<()> {
     match cmd {
         AdminCommand::Status => api::admin::status(bot, msg.chat.id, teacher, state).await,
+        AdminCommand::Refresh => api::admin::refresh(bot, msg.chat.id, state).await,
     }
 }
