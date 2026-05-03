@@ -46,6 +46,17 @@ pub struct BotState {
     /// The set of teacher TelegramNames who have ALREADY been sent the `last_errors`.
     /// This is cleared whenever `last_errors` is updated.
     notified_teachers: RwLock<HashSet<TelegramName>>,
+
+    /// The time of the last successful data reload from the spreadsheet.
+    last_reload: Mutex<Option<DateTime<Utc>>>,
+}
+
+pub struct BotStats {
+    pub students_count: usize,
+    pub teachers_count: usize,
+    pub last_reload: Option<DateTime<Utc>>,
+    pub refresh_delay: Duration,
+    pub spreadsheet_id: String,
 }
 
 impl BotState {
@@ -61,6 +72,7 @@ impl BotState {
             impersonations: RwLock::new(HashMap::new()),
             last_errors: RwLock::new(Vec::new()),
             notified_teachers: RwLock::new(HashSet::new()),
+            last_reload: Mutex::new(None),
         }
     }
 
@@ -257,6 +269,17 @@ impl BotState {
             .collect()
     }
 
+    /// Returns global statistics about the bot's state.
+    pub async fn get_stats(&self) -> BotStats {
+        BotStats {
+            students_count: self.students.read().await.len(),
+            teachers_count: self.teachers.read().await.len(),
+            last_reload: *self.last_reload.lock().unwrap(),
+            refresh_delay: CHECK_INTERVAL,
+            spreadsheet_id: self.sheets.get_spreadsheet_id().to_string(),
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Impersonation API
     // -----------------------------------------------------------------------
@@ -311,6 +334,7 @@ impl BotState {
         *self.last_errors.write().await = errors.clone();
         self.notified_teachers.write().await.clear();
         *self.last_modified.lock().unwrap() = Some(modified_time);
+        *self.last_reload.lock().unwrap() = Some(Utc::now());
 
         if errors.is_empty() {
             log::info!("Data reloaded: {ns} students, {nt} teachers, {na} assignments.");

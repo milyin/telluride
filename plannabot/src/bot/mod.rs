@@ -33,6 +33,10 @@ pub enum TeacherCommand {
     Impersonate(String),
     #[command(description = "exit impersonation mode")]
     Quit,
+    #[command(description = "show global stat information")]
+    Status,
+    #[command(description = "forcedly refresh the data")]
+    Refresh,
 }
 
 /// Callback actions triggered by inline keyboard buttons.
