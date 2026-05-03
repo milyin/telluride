@@ -157,7 +157,7 @@ impl BotState {
         }
 
         // Send the errors
-        Self::send_error_report(bot, chat_id, &errors).await;
+        self.send_error_report(bot, chat_id, &errors).await;
 
         // Mark as notified
         notified.insert(telegram_name.clone());
@@ -328,7 +328,10 @@ impl BotState {
     /// Sends the error report to `chat_id` without pinning it.
     ///
     /// All Telegram API errors are logged but do not propagate.
-    async fn send_error_report(bot: &Bot, chat_id: ChatId, errors: &[SheetParseError]) {
+    async fn send_error_report(&self, bot: &Bot, chat_id: ChatId, errors: &[SheetParseError]) {
+        let sheet_id = self.sheets.get_spreadsheet_id();
+        let url = format!("https://docs.google.com/spreadsheets/d/{}/edit", sheet_id);
+
         // Build the error message text.
         let header = format!(
             "⚠️ Spreadsheet parse errors ({} row(s) skipped):\n\n",
@@ -338,7 +341,8 @@ impl BotState {
             .iter()
             .map(|e| format!("• {}\n", e))
             .collect();
-        let text = format!("{}{}", header, body);
+        let footer = format!("\nLink to spreadsheet: {}", url);
+        let text = format!("{}{}{}", header, body, footer);
 
         // Send the message.
         if let Err(e) = bot.send_message(chat_id, &text).await {
