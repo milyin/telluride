@@ -74,9 +74,12 @@ impl SheetsClient {
                 }
             };
 
+            let custom = schema.get_custom(row, super::ASSIGNMENTS_COLS);
+
             assignments.push(TeacherStudentAssignment {
                 teacher_telegram,
                 student_telegram,
+                custom,
             });
         }
 

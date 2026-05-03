@@ -35,30 +35,15 @@ pub const SHEET_ASSIGNMENTS: &str = "Assignments";
 // Required column names for each sheet
 // ---------------------------------------------------------------------------
 
-pub const STUDENTS_COLS: &[&str] = &[
-    "telegram_name",
-    "name",
-    "timezone",
-    "currency",
-    "zoom_url",
-    "board_url",
-];
+pub const STUDENTS_COLS: &[&str] = crate::models::Student::SHEET_COLS;
 
-pub const TEACHERS_COLS: &[&str] = &["telegram_name", "timezone"];
+pub const TEACHERS_COLS: &[&str] = crate::models::Teacher::SHEET_COLS;
 
-pub const SCHEDULE_COLS: &[&str] = &[
-    "student_telegram",
-    "teacher_telegram",
-    "date",
-    "time",
-    "duration_minutes",
-    "cost",
-    "status",
-];
+pub const SCHEDULE_COLS: &[&str] = crate::models::ScheduleEntry::SHEET_COLS;
 
-pub const PAYMENTS_COLS: &[&str] = &["student_telegram", "date", "sum"];
+pub const PAYMENTS_COLS: &[&str] = crate::models::Payment::SHEET_COLS;
 
-pub const ASSIGNMENTS_COLS: &[&str] = &["teacher_telegram", "student_telegram"];
+pub const ASSIGNMENTS_COLS: &[&str] = crate::models::TeacherStudentAssignment::SHEET_COLS;
 
 // ---------------------------------------------------------------------------
 // Helper: column index → A1-notation letter(s)

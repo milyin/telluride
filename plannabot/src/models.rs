@@ -83,24 +83,55 @@ impl TelegramName {
     }
 }
 
-/// A student registered in the system.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Student {
-    pub telegram_name: TelegramName,
-    pub name: String,
-    pub timezone: String,
-    pub currency: String,
-    pub zoom_url: Option<String>,
-    pub board_url: Option<String>,
-    pub custom: HashMap<String, String>,
+macro_rules! sheet_struct {
+    (
+        $(#[$meta:meta])*
+        $vis:vis struct $name:ident {
+            $(
+                $(#[$field_meta:meta])*
+                $field_vis:vis $field:ident: $ty:ty
+            ),* $(,)?
+        }
+    ) => {
+        $(#[$meta])*
+        $vis struct $name {
+            $(
+                $(#[$field_meta])*
+                $field_vis $field: $ty,
+            )*
+            pub custom: std::collections::HashMap<String, String>,
+        }
+
+        impl $name {
+            pub const SHEET_COLS: &'static [&'static str] = &[
+                $(
+                    stringify!($field),
+                )*
+            ];
+        }
+    };
 }
 
-/// A teacher registered in the system.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Teacher {
-    pub telegram_name: TelegramName,
-    pub timezone: String,
-    pub custom: HashMap<String, String>,
+sheet_struct! {
+    /// A student registered in the system.
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct Student {
+        pub telegram_name: TelegramName,
+        pub name: String,
+        pub timezone: String,
+        pub currency: String,
+        pub zoom_url: Option<String>,
+        pub board_url: Option<String>,
+    }
+}
+
+sheet_struct! {
+    /// A teacher registered in the system.
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct Teacher {
+        pub telegram_name: TelegramName,
+        pub timezone: String,
+    }
 }
 
 /// Status of a scheduled lesson.
@@ -121,17 +152,18 @@ impl LessonStatus {
     }
 }
 
-/// A single entry in the schedule.
-/// `status = None` means the lesson is planned (not yet done or cancelled).
-#[derive(Debug, Clone)]
-pub struct ScheduleEntry {
-    pub student_telegram: TelegramName,
-    pub teacher_telegram: TelegramName,
-    pub datetime: DateTime<Utc>,
-    pub duration_minutes: i64,
-    pub cost: f64,
-    pub status: Option<LessonStatus>,
-    pub custom: HashMap<String, String>,
+sheet_struct! {
+    /// A single entry in the schedule.
+    /// `status = None` means the lesson is planned (not yet done or cancelled).
+    #[derive(Debug, Clone)]
+    pub struct ScheduleEntry {
+        pub student_telegram: TelegramName,
+        pub teacher_telegram: TelegramName,
+        pub datetime: DateTime<Utc>,
+        pub duration_minutes: i64,
+        pub cost: f64,
+        pub status: Option<LessonStatus>,
+    }
 }
 
 impl ScheduleEntry {
@@ -141,21 +173,24 @@ impl ScheduleEntry {
     }
 }
 
-/// A payment record for a student.
-#[derive(Debug, Clone)]
-pub struct Payment {
-    pub student_telegram: TelegramName,
-    pub date: DateTime<Utc>,
-    pub sum: f64,
-    pub custom: HashMap<String, String>,
+sheet_struct! {
+    /// A payment record for a student.
+    #[derive(Debug, Clone)]
+    pub struct Payment {
+        pub student_telegram: TelegramName,
+        pub date: DateTime<Utc>,
+        pub sum: f64,
+    }
 }
 
-/// A teacher ↔ student assignment row.
-/// Multiple students can be assigned to a single teacher.
-#[derive(Debug, Clone, PartialEq)]
-pub struct TeacherStudentAssignment {
-    pub teacher_telegram: TelegramName,
-    pub student_telegram: TelegramName,
+sheet_struct! {
+    /// A teacher ↔ student assignment row.
+    /// Multiple students can be assigned to a single teacher.
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct TeacherStudentAssignment {
+        pub teacher_telegram: TelegramName,
+        pub student_telegram: TelegramName,
+    }
 }
 
 /// The role of a Telegram user in the system.
