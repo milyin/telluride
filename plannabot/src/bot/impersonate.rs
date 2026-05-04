@@ -26,22 +26,30 @@ pub enum ImpersonateCommand {
 
 impl telluride::command::CallbackBitcode for ImpersonateCommand {}
 
-async fn check_is_impersonate(username: &TelegramName, chat_id: ChatId, state: &BotState) -> bool {
-    matches!(state.get_role(username.as_str()).await, Some(UserRole::Teacher(_)))
-        && state.get_impersonation(chat_id).await.is_some()
+async fn is_impersonate(username: &TelegramName, chat_id: ChatId, state: &BotState) -> bool {
+    matches!(
+        state.get_role(username.as_str()).await,
+        Some(UserRole::Teacher(_))
+    ) && state.get_impersonation(chat_id).await.is_some()
 }
 
 /// Returns true if the message sender is a teacher currently in impersonation mode.
-pub async fn is_impersonate(msg: Message, state: Arc<BotState>) -> bool {
-    let Some(username) = get_telegram_name(&msg) else { return false; };
-    check_is_impersonate(&username, msg.chat.id, &state).await
+pub async fn filter_message_by_impersonate(msg: Message, state: Arc<BotState>) -> bool {
+    let Some(username) = get_telegram_name(&msg) else {
+        return false;
+    };
+    is_impersonate(&username, msg.chat.id, &state).await
 }
 
 /// Returns true if the callback query sender is a teacher currently in impersonation mode.
-pub async fn is_impersonate_callback(q: CallbackQuery, state: Arc<BotState>) -> bool {
-    let Some(username) = get_callback_telegram_name(&q) else { return false; };
-    let Some(chat_id) = q.message.as_ref().map(|m| m.chat().id) else { return false; };
-    check_is_impersonate(&username, chat_id, &state).await
+pub async fn filter_callback_by_impersonate(q: CallbackQuery, state: Arc<BotState>) -> bool {
+    let Some(username) = get_callback_telegram_name(&q) else {
+        return false;
+    };
+    let Some(chat_id) = q.message.as_ref().map(|m| m.chat().id) else {
+        return false;
+    };
+    is_impersonate(&username, chat_id, &state).await
 }
 
 pub async fn impersonate_command_handler(
@@ -72,7 +80,9 @@ pub async fn impersonate_command_handler(
         ImpersonateCommand::Help => api::impersonate::help(&bot, msg.chat.id).await,
         ImpersonateCommand::Schedule => api::impersonate::schedule(&bot, msg.chat.id, &state).await,
         ImpersonateCommand::Book => api::student::book(&bot, msg.chat.id).await,
-        ImpersonateCommand::Quit => api::impersonate::quit(&bot, msg.chat.id, &teacher, &state).await,
+        ImpersonateCommand::Quit => {
+            api::impersonate::quit(&bot, msg.chat.id, &teacher, &state).await
+        }
     };
 
     result.map_err(|e| {

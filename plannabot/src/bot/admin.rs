@@ -34,15 +34,21 @@ async fn check_is_admin(username: &TelegramName, chat_id: ChatId, state: &BotSta
 }
 
 /// Returns true if the message sender is a teacher with admin=true currently in admin mode.
-pub async fn is_admin(msg: Message, state: Arc<BotState>) -> bool {
-    let Some(username) = get_telegram_name(&msg) else { return false; };
+pub async fn filter_message_by_admin(msg: Message, state: Arc<BotState>) -> bool {
+    let Some(username) = get_telegram_name(&msg) else {
+        return false;
+    };
     check_is_admin(&username, msg.chat.id, &state).await
 }
 
 /// Returns true if the callback query sender is a teacher with admin=true in admin mode.
-pub async fn is_admin_callback(q: CallbackQuery, state: Arc<BotState>) -> bool {
-    let Some(username) = get_callback_telegram_name(&q) else { return false; };
-    let Some(chat_id) = q.message.as_ref().map(|m| m.chat().id) else { return false; };
+pub async fn filter_callback_by_admin(q: CallbackQuery, state: Arc<BotState>) -> bool {
+    let Some(username) = get_callback_telegram_name(&q) else {
+        return false;
+    };
+    let Some(chat_id) = q.message.as_ref().map(|m| m.chat().id) else {
+        return false;
+    };
     check_is_admin(&username, chat_id, &state).await
 }
 
@@ -78,7 +84,12 @@ pub async fn admin_command_handler(
     };
 
     result.map_err(|e| {
-        log::error!("Error handling admin command {:?} for @{}: {}", cmd, username, e);
+        log::error!(
+            "Error handling admin command {:?} for @{}: {}",
+            cmd,
+            username,
+            e
+        );
         teloxide::RequestError::Io(Arc::new(std::io::Error::other(e.to_string())))
     })?;
 

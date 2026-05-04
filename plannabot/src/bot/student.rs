@@ -23,20 +23,27 @@ pub enum StudentCommand {
 
 impl telluride::command::CallbackBitcode for StudentCommand {}
 
-async fn check_is_student(username: &TelegramName, state: &BotState) -> bool {
-    matches!(state.get_role(username.as_str()).await, Some(UserRole::Student(_)))
+async fn is_student(username: &TelegramName, state: &BotState) -> bool {
+    matches!(
+        state.get_role(username.as_str()).await,
+        Some(UserRole::Student(_))
+    )
 }
 
 /// Returns true if the message sender has a Student role.
-pub async fn is_student(msg: Message, state: Arc<BotState>) -> bool {
-    let Some(username) = get_telegram_name(&msg) else { return false; };
-    check_is_student(&username, &state).await
+pub async fn filter_message_by_student(msg: Message, state: Arc<BotState>) -> bool {
+    let Some(username) = get_telegram_name(&msg) else {
+        return false;
+    };
+    is_student(&username, &state).await
 }
 
 /// Returns true if the callback query sender has a Student role.
-pub async fn is_student_callback(q: CallbackQuery, state: Arc<BotState>) -> bool {
-    let Some(username) = get_callback_telegram_name(&q) else { return false; };
-    check_is_student(&username, &state).await
+pub async fn filter_callback_by_student(q: CallbackQuery, state: Arc<BotState>) -> bool {
+    let Some(username) = get_callback_telegram_name(&q) else {
+        return false;
+    };
+    is_student(&username, &state).await
 }
 
 pub async fn student_command_handler(
@@ -72,12 +79,19 @@ pub async fn student_command_handler(
             api::common::start(&bot, msg.chat.id, &role, &state).await
         }
         StudentCommand::Help => api::student::help(&bot, msg.chat.id).await,
-        StudentCommand::Schedule => api::student::schedule(&bot, msg.chat.id, &student, &state).await,
+        StudentCommand::Schedule => {
+            api::student::schedule(&bot, msg.chat.id, &student, &state).await
+        }
         StudentCommand::Book => api::student::book(&bot, msg.chat.id).await,
     };
 
     result.map_err(|e| {
-        log::error!("Error handling student command {:?} for @{}: {}", cmd, username, e);
+        log::error!(
+            "Error handling student command {:?} for @{}: {}",
+            cmd,
+            username,
+            e
+        );
         teloxide::RequestError::Io(Arc::new(std::io::Error::other(e.to_string())))
     })?;
 

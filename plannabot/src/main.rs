@@ -58,28 +58,28 @@ async fn main() {
         // Student commands (/start, /help, /schedule, /book).
         .branch(
             Update::filter_message()
-                .filter_async(bot::student::is_student)
+                .filter_async(bot::student::filter_message_by_student)
                 .filter_command::<StudentCommand>()
                 .endpoint(bot::student::student_command_handler),
         )
         // Teacher commands (/start, /help, /schedule, /impersonate, /admin, /refresh).
         .branch(
             Update::filter_message()
-                .filter_async(bot::teacher::is_teacher)
+                .filter_async(bot::teacher::filter_message_by_teacher)
                 .filter_command::<TeacherCommand>()
                 .endpoint(bot::teacher::teacher_command_handler),
         )
         // Impersonation mode commands (/start, /help, /schedule, /book, /quit).
         .branch(
             Update::filter_message()
-                .filter_async(bot::impersonate::is_impersonate)
+                .filter_async(bot::impersonate::filter_message_by_impersonate)
                 .filter_command::<ImpersonateCommand>()
                 .endpoint(bot::impersonate::impersonate_command_handler),
         )
         // Admin mode commands (/start, /help, /status, /refresh, /quit).
         .branch(
             Update::filter_message()
-                .filter_async(bot::admin::is_admin)
+                .filter_async(bot::admin::filter_message_by_admin)
                 .filter_command::<AdminCommand>()
                 .endpoint(bot::admin::admin_command_handler),
         )
@@ -87,9 +87,11 @@ async fn main() {
         .branch(
             Update::filter_callback_query()
                 .filter(|q: CallbackQuery| {
-                    q.data.as_ref().is_some_and(|d| CallbackKey::is_packed_data(d))
+                    q.data
+                        .as_ref()
+                        .is_some_and(|d| CallbackKey::is_packed_data(d))
                 })
-                .filter_async(bot::student::is_student_callback)
+                .filter_async(bot::student::filter_callback_by_student)
                 .endpoint(
                     |bot, q, storage: Arc<InMemStore<CallbackKey, StudentCommand>>, state| {
                         bot::callback_action_handler(
@@ -106,9 +108,11 @@ async fn main() {
         .branch(
             Update::filter_callback_query()
                 .filter(|q: CallbackQuery| {
-                    q.data.as_ref().is_some_and(|d| CallbackKey::is_packed_data(d))
+                    q.data
+                        .as_ref()
+                        .is_some_and(|d| CallbackKey::is_packed_data(d))
                 })
-                .filter_async(bot::teacher::is_teacher_callback)
+                .filter_async(bot::teacher::filter_callback_by_teacher)
                 .endpoint(
                     |bot, q, storage: Arc<InMemStore<CallbackKey, TeacherCommand>>, state| {
                         bot::callback_action_handler(
@@ -125,14 +129,13 @@ async fn main() {
         .branch(
             Update::filter_callback_query()
                 .filter(|q: CallbackQuery| {
-                    q.data.as_ref().is_some_and(|d| CallbackKey::is_packed_data(d))
+                    q.data
+                        .as_ref()
+                        .is_some_and(|d| CallbackKey::is_packed_data(d))
                 })
-                .filter_async(bot::impersonate::is_impersonate_callback)
+                .filter_async(bot::impersonate::filter_callback_by_impersonate)
                 .endpoint(
-                    |bot,
-                     q,
-                     storage: Arc<InMemStore<CallbackKey, ImpersonateCommand>>,
-                     state| {
+                    |bot, q, storage: Arc<InMemStore<CallbackKey, ImpersonateCommand>>, state| {
                         bot::callback_action_handler(
                             bot,
                             q,
@@ -147,9 +150,11 @@ async fn main() {
         .branch(
             Update::filter_callback_query()
                 .filter(|q: CallbackQuery| {
-                    q.data.as_ref().is_some_and(|d| CallbackKey::is_packed_data(d))
+                    q.data
+                        .as_ref()
+                        .is_some_and(|d| CallbackKey::is_packed_data(d))
                 })
-                .filter_async(bot::admin::is_admin_callback)
+                .filter_async(bot::admin::filter_callback_by_admin)
                 .endpoint(
                     |bot, q, storage: Arc<InMemStore<CallbackKey, AdminCommand>>, state| {
                         bot::callback_action_handler(
