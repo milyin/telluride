@@ -18,8 +18,10 @@ pub enum StudentCommand {
     Help,
     #[command(description = "show your planned lessons")]
     Schedule,
-    #[command(description = "book a lesson")]
-    Book,
+    #[command(
+        description = "book a lesson (optionally provide: teacher_name date hour duration)"
+    )]
+    Book(String),
 }
 
 impl telluride::command::CallbackBitcode for StudentCommand {}
@@ -58,13 +60,13 @@ pub async fn student_command_handler(
         return Ok(());
     };
 
-    let result = match cmd {
+    let result = match &cmd {
         StudentCommand::Start => api::common::start(&bot, msg.chat.id, &username, &state).await,
         StudentCommand::Help => api::student::help(&bot, msg.chat.id).await,
         StudentCommand::Schedule => {
             api::student::schedule(&bot, msg.chat.id, &student, &state).await
         }
-        StudentCommand::Book => api::student::book(&bot, msg.chat.id).await,
+        StudentCommand::Book(params) => api::student::book(&bot, msg.chat.id, params).await,
     };
 
     result.map_err(|e| {

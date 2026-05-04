@@ -119,7 +119,15 @@ On first startup the bot will create the four required sheet tabs
 | `/start` | Greeting with student name | Greeting with Telegram handle |
 | `/help` | List of available commands | Same (labelled "Teacher Mode") |
 | `/schedule` | Upcoming planned lessons (with teacher) | Upcoming planned lessons (with students) |
-| `/book` | Month calendar picker for booking a lesson | — |
+| `/book [teacher] [date] [hour] [duration]` | Month calendar picker for booking a lesson (all parameters optional) | — |
+
+Parameters for `/book`:
+- `teacher` — teacher's Telegram handle (e.g., `john_doe`)
+- `date` — lesson date in YYYY-MM-DD format (e.g., `2024-12-25`)
+- `hour` — lesson start time in HH:MM format (e.g., `14:30`)
+- `duration` — lesson duration in minutes (e.g., `60`)
+
+Example: `/book john_doe 2024-12-25 14:30 60`
 
 Lesson times are shown in each user's own timezone (from the spreadsheet).
 

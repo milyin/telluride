@@ -135,7 +135,7 @@ BotState
 Business logic, separated from Telegram routing:
 
 - **`api::common`** — `start()` (universal welcome + mode reset), `format_duration()` (shared helper)
-- **`api::student`** — `help()`, `schedule()`, `book()` (month calendar picker)
+- **`api::student`** — `help()`, `schedule()`, `book(teacher, date, hour, duration)` (month calendar picker with parameters)
 - **`api::teacher`** — `help()`, `schedule()`, `admin()` (enter admin mode)
 - **`api::impersonate`** — `impersonate()` (enter impersonation), `help()`, `schedule()`, `quit()`
 - **`api::admin`** — `refresh()`, `help()`, `status()`, `quit()`

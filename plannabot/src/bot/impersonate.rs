@@ -18,8 +18,10 @@ pub enum ImpersonateCommand {
     Help,
     #[command(description = "show the impersonated student's planned lessons")]
     Schedule,
-    #[command(description = "book a lesson as the impersonated student")]
-    Book,
+    #[command(
+        description = "book a lesson as the impersonated student (optionally provide: teacher_name date hour duration)"
+    )]
+    Book(String),
     #[command(description = "exit impersonation mode")]
     Quit,
 }
@@ -55,11 +57,11 @@ pub async fn impersonate_command_handler(
         .try_send_errors_to_teacher(&bot, msg.chat.id, &teacher.telegram_name)
         .await;
 
-    let result = match cmd {
+    let result = match &cmd {
         ImpersonateCommand::Start => api::common::start(&bot, msg.chat.id, &username, &state).await,
         ImpersonateCommand::Help => api::impersonate::help(&bot, msg.chat.id).await,
         ImpersonateCommand::Schedule => api::impersonate::schedule(&bot, msg.chat.id, &state).await,
-        ImpersonateCommand::Book => api::student::book(&bot, msg.chat.id).await,
+        ImpersonateCommand::Book(params) => api::student::book(&bot, msg.chat.id, params).await,
         ImpersonateCommand::Quit => {
             api::impersonate::quit(&bot, msg.chat.id, &teacher, &state).await
         }
