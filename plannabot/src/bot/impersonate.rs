@@ -1,6 +1,6 @@
 use crate::api;
 use crate::bot::get_username;
-use crate::models::{TelegramName, UserRole};
+use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
 use std::sync::Arc;
 use telluride::command::CallbackKey;
@@ -33,7 +33,7 @@ pub async fn is_impersonate(
 ) -> bool {
     matches!(
         state.get_effective_role(username.as_str(), chat_id).await,
-        Some(UserRole::Impersonate(..))
+        Some(UserEffectiveRole::Impersonate(..))
     )
 }
 
@@ -49,7 +49,7 @@ pub async fn impersonate_command_handler(
     let Some(username) = get_username(&msg) else {
         return Ok(());
     };
-    let Some(UserRole::Impersonate(teacher, _)) = state.get_effective_role(&username, msg.chat.id).await else {
+    let Some(UserEffectiveRole::Impersonate(teacher, _)) = state.get_effective_role(&username, msg.chat.id).await else {
         return Ok(());
     };
 

@@ -1,6 +1,6 @@
 use crate::api;
 use crate::bot::get_username;
-use crate::models::{TelegramName, UserRole};
+use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
 use std::sync::Arc;
 use telluride::command::CallbackKey;
@@ -33,7 +33,7 @@ impl telluride::command::CallbackBitcode for TeacherCommand {}
 pub async fn is_teacher(username: TelegramName, chat_id: ChatId, state: Arc<BotState>) -> bool {
     matches!(
         state.get_effective_role(username.as_str(), chat_id).await,
-        Some(UserRole::Teacher(_))
+        Some(UserEffectiveRole::Teacher(_))
     )
 }
 
@@ -49,7 +49,7 @@ pub async fn teacher_command_handler(
     let Some(username) = get_username(&msg) else {
         return Ok(());
     };
-    let Some(UserRole::Teacher(teacher)) = state.get_effective_role(&username, msg.chat.id).await else {
+    let Some(UserEffectiveRole::Teacher(teacher)) = state.get_effective_role(&username, msg.chat.id).await else {
         return Ok(());
     };
 

@@ -215,15 +215,12 @@ sheet_struct! {
     }
 }
 
-/// The role of a Telegram user in the system.
+/// Persistent DB identity of a Telegram user. Only ever `Student` or `Teacher`.
+/// Returned by [`BotState::get_role`].
 #[derive(Debug, Clone)]
 pub enum UserRole {
     Student(Student),
     Teacher(Teacher),
-    /// Teacher currently in admin mode.
-    Admin(Teacher),
-    /// Teacher currently impersonating a student (stored telegram name without '@').
-    Impersonate(Teacher, String),
 }
 
 impl UserRole {
@@ -231,8 +228,38 @@ impl UserRole {
         match self {
             UserRole::Student(s) => &s.name,
             UserRole::Teacher(t) => &t.name,
-            UserRole::Admin(t) => &t.name,
-            UserRole::Impersonate(t, _) => &t.name,
+        }
+    }
+}
+
+/// Session-aware effective role of a Telegram user.
+/// Returned by [`BotState::get_effective_role`].
+#[derive(Debug, Clone)]
+pub enum UserEffectiveRole {
+    Student(Student),
+    Teacher(Teacher),
+    /// Teacher currently in admin mode.
+    Admin(Teacher),
+    /// Teacher currently impersonating a student (telegram name without '@').
+    Impersonate(Teacher, String),
+}
+
+impl UserEffectiveRole {
+    pub fn name(&self) -> &str {
+        match self {
+            UserEffectiveRole::Student(s) => &s.name,
+            UserEffectiveRole::Teacher(t) => &t.name,
+            UserEffectiveRole::Admin(t) => &t.name,
+            UserEffectiveRole::Impersonate(t, _) => &t.name,
+        }
+    }
+}
+
+impl From<UserRole> for UserEffectiveRole {
+    fn from(role: UserRole) -> Self {
+        match role {
+            UserRole::Student(s) => UserEffectiveRole::Student(s),
+            UserRole::Teacher(t) => UserEffectiveRole::Teacher(t),
         }
     }
 }

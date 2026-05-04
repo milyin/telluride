@@ -1,4 +1,4 @@
-use crate::models::{SheetParseError, Student, Teacher, TeacherStudentAssignment, TelegramName, UserRole};
+use crate::models::{SheetParseError, Student, Teacher, TeacherStudentAssignment, TelegramName, UserEffectiveRole, UserRole};
 use crate::sheets::SheetsClient;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -186,21 +186,21 @@ impl BotState {
     ///
     /// Combines the persistent identity from [`get_role`] with the current
     /// session mode (admin or impersonation) stored by `chat_id`:
-    /// - A teacher in admin mode → `UserRole::Admin`
-    /// - A teacher in impersonation mode → `UserRole::Impersonate`
-    /// - Otherwise → `UserRole::Teacher` or `UserRole::Student` unchanged
-    pub async fn get_effective_role(&self, telegram_name: &str, chat_id: ChatId) -> Option<UserRole> {
+    /// - A teacher in admin mode → `UserEffectiveRole::Admin`
+    /// - A teacher in impersonation mode → `UserEffectiveRole::Impersonate`
+    /// - Otherwise → `UserEffectiveRole::Teacher` or `UserEffectiveRole::Student` unchanged
+    pub async fn get_effective_role(&self, telegram_name: &str, chat_id: ChatId) -> Option<UserEffectiveRole> {
         match self.get_role(telegram_name).await? {
             UserRole::Teacher(teacher) => {
                 if self.is_in_admin_mode(chat_id).await {
-                    Some(UserRole::Admin(teacher))
+                    Some(UserEffectiveRole::Admin(teacher))
                 } else if let Some(student_name) = self.get_impersonation(chat_id).await {
-                    Some(UserRole::Impersonate(teacher, student_name))
+                    Some(UserEffectiveRole::Impersonate(teacher, student_name))
                 } else {
-                    Some(UserRole::Teacher(teacher))
+                    Some(UserEffectiveRole::Teacher(teacher))
                 }
             }
-            other => Some(other),
+            UserRole::Student(student) => Some(UserEffectiveRole::Student(student)),
         }
     }
 
