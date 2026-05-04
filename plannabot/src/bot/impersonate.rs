@@ -1,5 +1,5 @@
 use crate::api;
-use crate::bot::{callback_command_handler, get_username};
+use crate::bot::{get_username, book_command::BookCommand};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
 use std::sync::Arc;
@@ -28,6 +28,12 @@ pub enum ImpersonateCommand {
 
 impl telluride::command::CallbackBitcode for ImpersonateCommand {}
 
+impl BookCommand for ImpersonateCommand {
+    fn book(teacher_name: String) -> Self {
+        ImpersonateCommand::Book(teacher_name)
+    }
+}
+
 pub async fn is_impersonate(username: TelegramName, chat_id: ChatId, state: Arc<BotState>) -> bool {
     matches!(
         state.get_effective_role(username.as_str(), chat_id).await,
@@ -40,7 +46,7 @@ pub async fn impersonate_command_handler(
     msg: Message,
     cmd: ImpersonateCommand,
     state: Arc<BotState>,
-    _callback_storage: Arc<InMemStore<CallbackKey, ImpersonateCommand>>,
+    callback_storage: Arc<InMemStore<CallbackKey, ImpersonateCommand>>,
 ) -> ResponseResult<()> {
     let _ = state.refresh_if_needed().await;
 
@@ -62,7 +68,7 @@ pub async fn impersonate_command_handler(
         ImpersonateCommand::Help => api::impersonate::help(&bot, msg.chat.id).await,
         ImpersonateCommand::Schedule => api::impersonate::schedule(&bot, msg.chat.id, &state).await,
         ImpersonateCommand::Book(params) => {
-            api::student::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, None).await
+            api::student::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, callback_storage).await
         }
         ImpersonateCommand::Quit => {
             api::impersonate::quit(&bot, msg.chat.id, &teacher, &state).await
@@ -88,5 +94,27 @@ pub async fn impersonate_callback_command_handler(
     state: Arc<BotState>,
     callback_storage: Arc<InMemStore<CallbackKey, ImpersonateCommand>>,
 ) -> ResponseResult<()> {
-    callback_command_handler(bot, q, callback_storage, state, impersonate_command_handler).await
+    bot.answer_callback_query(q.id.clone()).await?;
+
+    let data = match &q.data {
+        Some(d) => d,
+        None => return Ok(()),
+    };
+
+    let user_proxy = telluride::data_store::UserProxy::new(callback_storage.clone(), q.from.id);
+    let cmd = match CallbackKey::unpack::<ImpersonateCommand, _>(data, &user_proxy).await {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("Failed to unpack callback: {}", e);
+            return Ok(());
+        }
+    };
+
+    let mut msg = match q.message.as_ref().and_then(|m| m.regular_message()) {
+        Some(m) => m.clone(),
+        None => return Ok(()),
+    };
+    msg.from = Some(q.from.clone());
+
+    impersonate_command_handler(bot, msg, cmd, state, callback_storage).await
 }

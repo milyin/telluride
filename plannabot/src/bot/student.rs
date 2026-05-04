@@ -1,5 +1,5 @@
 use crate::api;
-use crate::bot::{callback_command_handler, get_username};
+use crate::bot::{callback_command_handler, get_username, book_command::BookCommand};
 use crate::models::{TelegramName, UserEffectiveRole, UserRole};
 use crate::state::BotState;
 use std::sync::Arc;
@@ -25,6 +25,12 @@ pub enum StudentCommand {
 }
 
 impl telluride::command::CallbackBitcode for StudentCommand {}
+
+impl BookCommand for StudentCommand {
+    fn book(teacher_name: String) -> Self {
+        StudentCommand::Book(teacher_name)
+    }
+}
 
 pub async fn is_student(username: TelegramName, chat_id: ChatId, state: Arc<BotState>) -> bool {
     matches!(
@@ -67,7 +73,7 @@ pub async fn student_command_handler(
             api::student::schedule(&bot, msg.chat.id, &student, &state).await
         }
         StudentCommand::Book(params) => {
-            api::student::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, Some(_callback_storage)).await
+            api::student::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, _callback_storage).await
         }
     };
 
