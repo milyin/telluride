@@ -26,7 +26,7 @@ pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
 ) -> Result<()> {
     let params: BookParams = params.parse()?;
     match params {
-        BookParams::L0() => book_0(bot, chat_id, state, user_id, callback_storage).await,
+        BookParams::L0() => book_0(bot, chat_id, state, user_id, callback_storage, message_id).await,
         BookParams::L1(teacher) => {
             book_1(bot, chat_id, teacher, user_id, callback_storage, state, message_id).await
         }
@@ -47,11 +47,12 @@ async fn book_0<Cmd: BookCommand + CallbackBitcode + 'static>(
     state: &Arc<BotState>,
     user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
+    message_id: Option<MessageId>,
 ) -> Result<()> {
     show_teacher_selection(
         bot,
         chat_id,
-        None,
+        message_id,
         "📅 Select a teacher to book a lesson:",
         user_id,
         callback_storage,
