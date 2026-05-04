@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use chrono::{Datelike, Local, NaiveDate};
+use telluride::calendar::build_month_calendar;
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::{InMemStore, UserProxy};
 use teloxide::prelude::*;
@@ -51,6 +53,93 @@ where
         }
         None => {
             bot.send_message(chat_id, message)
+                .reply_markup(keyboard)
+                .await?;
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn show_date_selection<Cmd, F, G>(
+    bot: &Bot,
+    chat_id: ChatId,
+    message_id: Option<MessageId>,
+    year: i32,
+    month: u32,
+    user_id: UserId,
+    callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
+    make_date_cmd: F,
+    make_month_nav: G,
+) -> Result<()>
+where
+    Cmd: CallbackBitcode + 'static,
+    F: Fn(NaiveDate) -> Cmd,
+    G: Fn(i32, u32) -> Cmd,
+{
+    let user_proxy = UserProxy::new(callback_storage, user_id);
+
+    let num_days = {
+        let next_first = if month == 12 {
+            NaiveDate::from_ymd_opt(year + 1, 1, 1)
+        } else {
+            NaiveDate::from_ymd_opt(year, month + 1, 1)
+        }
+        .unwrap();
+        next_first.pred_opt().unwrap().day()
+    };
+
+    let today = Local::now().date_naive();
+
+    let mut date_keys: Vec<CallbackKey> = Vec::with_capacity(num_days as usize);
+    for day in 1..=num_days {
+        let date = NaiveDate::from_ymd_opt(year, month, day).unwrap();
+        let key = CallbackKey::pack(make_date_cmd(date), &user_proxy).await;
+        date_keys.push(key);
+    }
+
+    let (prev_year, prev_month) = if month == 1 { (year - 1, 12u32) } else { (year, month - 1) };
+    let (next_year, next_month) = if month == 12 { (year + 1, 1u32) } else { (year, month + 1) };
+    let prev_key = CallbackKey::pack(make_month_nav(prev_year, prev_month), &user_proxy).await;
+    let next_key = CallbackKey::pack(make_month_nav(next_year, next_month), &user_proxy).await;
+    let prev_btn = InlineKeyboardButton::callback_key("<", &prev_key);
+    let next_btn = InlineKeyboardButton::callback_key(">", &next_key);
+
+    let keyboard = build_month_calendar(
+        year,
+        month,
+        |date| {
+            let day = date.day();
+            let label = if date == today {
+                format!("[{}]", day)
+            } else {
+                format!("{}", day)
+            };
+            InlineKeyboardButton::callback_key(label, &date_keys[(day - 1) as usize])
+        },
+        |leading, _trailing| {
+            if leading >= 2 {
+                (vec![prev_btn.clone(), next_btn.clone()], vec![])
+            } else {
+                (vec![], vec![prev_btn.clone(), next_btn.clone()])
+            }
+        },
+    );
+
+    let month_name = NaiveDate::from_ymd_opt(year, month, 1)
+        .unwrap()
+        .format("%B %Y")
+        .to_string();
+    let text = month_name;
+
+    match message_id {
+        Some(id) => {
+            bot.edit_message_text(chat_id, id, text)
+                .reply_markup(keyboard)
+                .await?;
+        }
+        None => {
+            bot.send_message(chat_id, text)
                 .reply_markup(keyboard)
                 .await?;
         }
