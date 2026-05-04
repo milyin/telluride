@@ -3,13 +3,14 @@ use std::sync::Arc;
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime};
 use humantime::Duration;
-use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
-use telluride::data_store::{InMemStore, UserProxy};
+use telluride::command::{CallbackBitcode, CallbackKey};
+use telluride::data_store::InMemStore;
 use telluride::markdown::MarkdownStringMessage;
 use telluride::{markdown_format, markdown_string};
 use teloxide::prelude::*;
-use teloxide::types::{InlineKeyboardButton, UserId};
+use teloxide::types::UserId;
 
+use crate::api::menus::show_teacher_selection;
 use crate::api::traits::{BookCommand, BookParams};
 use crate::models::TelegramName;
 use crate::state::BotState;
@@ -41,44 +42,17 @@ async fn book_0<Cmd: BookCommand + CallbackBitcode + 'static>(
     user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
 ) -> Result<()> {
-    show_teacher_selection(bot, chat_id, user_id, callback_storage, state).await
-}
-
-async fn show_teacher_selection<Cmd: BookCommand + CallbackBitcode + 'static>(
-    bot: &Bot,
-    chat_id: ChatId,
-    user_id: UserId,
-    callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
-    state: &Arc<BotState>,
-) -> Result<()> {
-    let teacher_names = state.get_teacher_names().await;
-
-    if teacher_names.is_empty() {
-        bot.send_message(
-            chat_id,
-            "No teachers are registered in the spreadsheet yet.",
-        )
-        .await?;
-        return Ok(());
-    }
-
-    let user_proxy = UserProxy::new(callback_storage, user_id);
-
-    let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
-    for name in teacher_names {
-        let label = format!("@{}", name);
-        let cmd = Cmd::book(BookParams::L1(name.parse()?));
-        let key = CallbackKey::pack(cmd, &user_proxy).await;
-        let button = InlineKeyboardButton::callback_key(label, &key);
-        buttons.push(vec![button]);
-    }
-
-    let keyboard = teloxide::types::InlineKeyboardMarkup::new(buttons);
-    bot.send_message(chat_id, "📅 Select a teacher to book a lesson:")
-        .reply_markup(keyboard)
-        .await?;
-
-    Ok(())
+    show_teacher_selection(
+        bot,
+        chat_id,
+        None,
+        "📅 Select a teacher to book a lesson:",
+        user_id,
+        callback_storage,
+        state,
+        |name| Cmd::book(BookParams::L1(name)),
+    )
+    .await
 }
 
 async fn book_1(bot: &Bot, chat_id: ChatId, teacher: TelegramName) -> Result<()> {
