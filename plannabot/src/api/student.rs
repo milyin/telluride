@@ -68,9 +68,12 @@ pub async fn schedule(
 /// Handle the /book command for a student.
 pub async fn book(bot: &Bot, chat_id: ChatId) -> Result<()> {
     let now = Local::now();
-    let keyboard = build_month_calendar(now.year(), now.month(), |date| {
-        InlineKeyboardButton::callback(date.day().to_string(), "noop")
-    });
+    let keyboard = build_month_calendar(
+        now.year(),
+        now.month(),
+        |date| InlineKeyboardButton::callback(date.day().to_string(), "noop"),
+        |_leading, _trailing| (Vec::new(), Vec::new()),
+    );
     let month_str = now.format("%B %Y").to_string();
     let text = markdown_format!("📅 *{}*", month_str);
     bot.send_markdown_message(chat_id, text)
