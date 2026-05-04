@@ -82,7 +82,9 @@ async fn book_0(
     match callback_storage {
         Some(storage) => show_teacher_selection(bot, chat_id, user_id, storage, state).await,
         None => {
-            let text = markdown_string!("📅 *Book a Lesson*\n\nUsage: /book \\<teacher\\_name\\> [date] [time] [duration]");
+            let text = markdown_string!(
+                "📅 *Book a Lesson*\n\nUsage: /book \\<teacher\\_name\\> [date] [time] [duration]"
+            );
             bot.send_markdown_message(chat_id, text).await?;
             Ok(())
         }
@@ -135,12 +137,7 @@ async fn book_1(bot: &Bot, chat_id: ChatId, teacher: TelegramName) -> Result<()>
     Ok(())
 }
 
-async fn book_2(
-    bot: &Bot,
-    chat_id: ChatId,
-    teacher: TelegramName,
-    date: NaiveDate,
-) -> Result<()> {
+async fn book_2(bot: &Bot, chat_id: ChatId, teacher: TelegramName, date: NaiveDate) -> Result<()> {
     let mut text = markdown_string!("📅 *Book a Lesson*\n\n");
     let teacher_str = teacher.as_str();
     let line = markdown_format!("👨\\-🏫 Teacher: {}\n", teacher_str);
