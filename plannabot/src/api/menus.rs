@@ -21,6 +21,7 @@ pub async fn show_teacher_selection<Cmd, F>(
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
     state: &Arc<BotState>,
     make_cmd: F,
+    back: Option<Cmd>,
 ) -> Result<()>
 where
     Cmd: CallbackBitcode + 'static,
@@ -43,6 +44,11 @@ where
         let key = CallbackKey::pack(cmd, &user_proxy).await;
         let button = InlineKeyboardButton::callback_key(label, &key);
         buttons.push(vec![button]);
+    }
+
+    if let Some(back_cmd) = back {
+        let key = CallbackKey::pack(back_cmd, &user_proxy).await;
+        buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &key)]);
     }
 
     let keyboard = InlineKeyboardMarkup::new(buttons);
@@ -72,6 +78,7 @@ pub async fn show_date_selection<Cmd, F, G>(
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
     make_date_cmd: F,
     make_month_nav: G,
+    back: Option<Cmd>,
 ) -> Result<()>
 where
     Cmd: CallbackBitcode + 'static,
@@ -106,7 +113,7 @@ where
     let prev_btn = InlineKeyboardButton::callback_key("<", &prev_key);
     let next_btn = InlineKeyboardButton::callback_key(">", &next_key);
 
-    let keyboard = build_month_calendar(
+    let mut keyboard = build_month_calendar(
         year,
         month,
         |date| {
@@ -130,6 +137,11 @@ where
             (all, trailing_btns)
         },
     );
+
+    if let Some(back_cmd) = back {
+        let key = CallbackKey::pack(back_cmd, &user_proxy).await;
+        keyboard.inline_keyboard.push(vec![InlineKeyboardButton::callback_key("↩ Back", &key)]);
+    }
 
     let month_name = NaiveDate::from_ymd_opt(year, month, 1)
         .unwrap()
@@ -163,6 +175,7 @@ pub async fn show_slot_selection<Cmd, F>(
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
     state: &Arc<BotState>,
     make_cmd: F,
+    back: Option<Cmd>,
 ) -> Result<()>
 where
     Cmd: CallbackBitcode + 'static,
@@ -173,27 +186,50 @@ where
 
     let message = format!("@{} on {} — select a time slot:", teacher, date);
 
+    let user_proxy = UserProxy::new(callback_storage, user_id);
+    let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+
     if slots.is_empty() {
         let no_slots_msg = format!("{}\nNo available slots.", message);
-        match message_id {
-            Some(id) => {
-                bot.edit_message_text(chat_id, id, no_slots_msg).await?;
+        if let Some(back_cmd) = back {
+            let key = CallbackKey::pack(back_cmd, &user_proxy).await;
+            buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &key)]);
+            let keyboard = InlineKeyboardMarkup::new(buttons);
+            match message_id {
+                Some(id) => {
+                    bot.edit_message_text(chat_id, id, no_slots_msg)
+                        .reply_markup(keyboard)
+                        .await?;
+                }
+                None => {
+                    bot.send_message(chat_id, no_slots_msg)
+                        .reply_markup(keyboard)
+                        .await?;
+                }
             }
-            None => {
-                bot.send_message(chat_id, no_slots_msg).await?;
+        } else {
+            match message_id {
+                Some(id) => {
+                    bot.edit_message_text(chat_id, id, no_slots_msg).await?;
+                }
+                None => {
+                    bot.send_message(chat_id, no_slots_msg).await?;
+                }
             }
         }
         return Ok(());
     }
 
-    let user_proxy = UserProxy::new(callback_storage, user_id);
-    let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     for slot in slots {
         let label = format!("{:02}:00 – {:02}:00", slot.hour(), slot.hour() + 1);
         let cmd = make_cmd(slot);
         let key = CallbackKey::pack(cmd, &user_proxy).await;
-        let button = InlineKeyboardButton::callback_key(label, &key);
-        buttons.push(vec![button]);
+        buttons.push(vec![InlineKeyboardButton::callback_key(label, &key)]);
+    }
+
+    if let Some(back_cmd) = back {
+        let key = CallbackKey::pack(back_cmd, &user_proxy).await;
+        buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &key)]);
     }
 
     let keyboard = InlineKeyboardMarkup::new(buttons);

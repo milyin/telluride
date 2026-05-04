@@ -57,6 +57,7 @@ async fn book_0<Cmd: BookCommand + CallbackBitcode + 'static>(
         callback_storage,
         state,
         |name| Cmd::book(BookParams::L1(name)),
+        None,
     )
     .await
 }
@@ -99,6 +100,7 @@ async fn book_2<Cmd: BookCommand + CallbackBitcode + 'static>(
                 callback_storage,
                 move |date| Cmd::book(BookParams::L2(t1.clone(), SelectDate::Date(date))),
                 move |y, m| Cmd::book(BookParams::L2(t2.clone(), SelectDate::YearMonth(y, m))),
+                None,
             )
             .await
         }
@@ -114,6 +116,7 @@ async fn book_2<Cmd: BookCommand + CallbackBitcode + 'static>(
                 callback_storage,
                 state,
                 move |time| Cmd::book(BookParams::L3(teacher_clone.clone(), date, time)),
+                None,
             )
             .await
         }
