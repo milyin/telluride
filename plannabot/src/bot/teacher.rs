@@ -61,10 +61,7 @@ pub async fn teacher_command_handler(
     let user_id: UserId = msg.from.as_ref().unwrap().id;
 
     let result = match cmd {
-        TeacherCommand::Start => {
-            let role = UserRole::Teacher(teacher.clone());
-            api::common::start(&bot, msg.chat.id, &role, &state).await
-        }
+        TeacherCommand::Start => api::common::start(&bot, msg.chat.id, &username, &state).await,
         TeacherCommand::Help => api::teacher::help(&bot, msg.chat.id, &state).await,
         TeacherCommand::Schedule => {
             api::teacher::schedule(&bot, msg.chat.id, &teacher, &state).await

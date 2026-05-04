@@ -59,8 +59,7 @@ pub async fn impersonate_command_handler(
 
     let result = match cmd {
         ImpersonateCommand::Start => {
-            let role = UserRole::Teacher(teacher.clone());
-            api::common::start(&bot, msg.chat.id, &role, &state).await
+            api::common::start(&bot, msg.chat.id, &username, &state).await
         }
         ImpersonateCommand::Help => api::impersonate::help(&bot, msg.chat.id).await,
         ImpersonateCommand::Schedule => api::impersonate::schedule(&bot, msg.chat.id, &state).await,

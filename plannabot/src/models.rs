@@ -136,6 +136,7 @@ sheet_struct! {
     #[derive(Debug, Clone, PartialEq)]
     pub struct Teacher {
         pub telegram_name: TelegramName,
+        pub name: String,
         pub timezone: Tz,
         pub admin: bool,
     }
@@ -219,6 +220,15 @@ sheet_struct! {
 pub enum UserRole {
     Student(Student),
     Teacher(Teacher),
+}
+
+impl UserRole {
+    pub fn name(&self) -> &str {
+        match self {
+            UserRole::Student(s) => &s.name,
+            UserRole::Teacher(t) => &t.name,
+        }
+    }
 }
 
 /// A parse error encountered while reading a row from a Google Sheet.

@@ -59,10 +59,7 @@ pub async fn student_command_handler(
     };
 
     let result = match cmd {
-        StudentCommand::Start => {
-            let role = UserRole::Student(student.clone());
-            api::common::start(&bot, msg.chat.id, &role, &state).await
-        }
+        StudentCommand::Start => api::common::start(&bot, msg.chat.id, &username, &state).await,
         StudentCommand::Help => api::student::help(&bot, msg.chat.id).await,
         StudentCommand::Schedule => {
             api::student::schedule(&bot, msg.chat.id, &student, &state).await

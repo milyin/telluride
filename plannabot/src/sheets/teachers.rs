@@ -5,16 +5,14 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 use chrono_tz::Tz;
 
-use super::{SheetSchema, SheetsClient, SHEET_TEACHERS, TEACHERS_COLS};
+use super::{SHEET_TEACHERS, SheetSchema, SheetsClient, TEACHERS_COLS};
 use crate::models::{SheetParseError, Teacher, TelegramName};
 
 impl SheetsClient {
     /// Reads all rows from the `Teachers` sheet and returns a map from
     /// (normalised) Telegram username → [`Teacher`], together with any
     /// [`SheetParseError`]s encountered while parsing rows.
-    pub async fn get_teachers(
-        &self,
-    ) -> Result<(HashMap<String, Teacher>, Vec<SheetParseError>)> {
+    pub async fn get_teachers(&self) -> Result<(HashMap<String, Teacher>, Vec<SheetParseError>)> {
         let range = format!("{SHEET_TEACHERS}!A:Z");
         let rows = self
             .get_values(&range)
@@ -37,7 +35,12 @@ impl SheetsClient {
 
             let row_num = row_idx + 1;
 
-            let Some(telegram_name) = schema.get_field::<Option<TelegramName>>(row, row_num, Teacher::TELEGRAM_NAME, &mut errors) else {
+            let Some(telegram_name) = schema.get_field::<Option<TelegramName>>(
+                row,
+                row_num,
+                Teacher::TELEGRAM_NAME,
+                &mut errors,
+            ) else {
                 continue;
             };
 
@@ -46,6 +49,7 @@ impl SheetsClient {
                 admin: schema.get_field::<bool>(row, row_num, Teacher::ADMIN, &mut errors),
                 custom: schema.get_custom(row, TEACHERS_COLS),
                 telegram_name: telegram_name.clone(),
+                name: schema.get_field::<String>(row, row_num, Teacher::NAME, &mut errors),
             };
 
             teachers.insert(telegram_name.as_str().to_string(), teacher);

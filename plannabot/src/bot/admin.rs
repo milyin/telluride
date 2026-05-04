@@ -54,10 +54,7 @@ pub async fn admin_command_handler(
         .await;
 
     let result = match cmd {
-        AdminCommand::Start => {
-            let role = UserRole::Teacher(teacher.clone());
-            api::common::start(&bot, msg.chat.id, &role, &state).await
-        }
+        AdminCommand::Start => api::common::start(&bot, msg.chat.id, &username, &state).await,
         AdminCommand::Help => api::admin::help(&bot, msg.chat.id).await,
         AdminCommand::Status => api::admin::status(&bot, msg.chat.id, &teacher, &state).await,
         AdminCommand::Refresh => api::admin::refresh(&bot, msg.chat.id, &state).await,

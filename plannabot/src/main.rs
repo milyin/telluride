@@ -49,10 +49,10 @@ async fn main() {
     let bot = Bot::from_env();
 
     // Per-command-type callback storages for inline keyboard buttons.
-    let student_storage = Arc::new(InMemStore::<CallbackKey, StudentCommand>::new());
-    let teacher_storage = Arc::new(InMemStore::<CallbackKey, TeacherCommand>::new());
-    let impersonate_storage = Arc::new(InMemStore::<CallbackKey, ImpersonateCommand>::new());
-    let admin_storage = Arc::new(InMemStore::<CallbackKey, AdminCommand>::new());
+    let student_callbacks = Arc::new(InMemStore::<CallbackKey, StudentCommand>::new());
+    let teacher_callbacks = Arc::new(InMemStore::<CallbackKey, TeacherCommand>::new());
+    let impersonate_callbacks = Arc::new(InMemStore::<CallbackKey, ImpersonateCommand>::new());
+    let admin_callbacks = Arc::new(InMemStore::<CallbackKey, AdminCommand>::new());
 
     let handler = dptree::entry()
         // Student commands (/start, /help, /schedule, /book).
@@ -198,10 +198,10 @@ async fn main() {
     Dispatcher::builder(bot, handler)
         .dependencies(dptree::deps![
             state,
-            student_storage,
-            teacher_storage,
-            impersonate_storage,
-            admin_storage
+            student_callbacks,
+            teacher_callbacks,
+            impersonate_callbacks,
+            admin_callbacks
         ])
         .enable_ctrlc_handler()
         .build()

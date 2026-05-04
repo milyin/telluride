@@ -9,31 +9,36 @@ use teloxide::prelude::*;
 /// Reset user to default state and show a role-appropriate welcome message.
 ///
 /// Clears any active impersonation or admin mode (no-ops if not active), then
-/// sends a welcome message. This is the single implementation for all four
-/// modes' Start command.
-pub async fn start(bot: &Bot, chat_id: ChatId, role: &UserRole, state: &Arc<BotState>) -> Result<()> {
+/// looks up the user's role and sends a welcome message. This is the single
+/// implementation for all four modes' Start command.
+pub async fn start(
+    bot: &Bot,
+    chat_id: ChatId,
+    username: &str,
+    state: &Arc<BotState>,
+) -> Result<()> {
     state.clear_impersonation(chat_id).await;
     state.exit_admin_mode(chat_id).await;
 
-    let name = match role {
-        UserRole::Student(s) => s.name.clone(),
-        UserRole::Teacher(t) => t.telegram_name.to_string(),
-    };
+    let role = state.get_role(username).await;
 
     let mut text = markdown_string!("👋 *Welcome to Plannabot\\!*\n\n");
     let greeting = markdown_format!(
         "Hello, {}\\! Use /help to see available commands\\.",
-        name
+        role.as_ref().map(|r| r.name()).unwrap_or(username)
     );
     text.push(&greeting);
 
-    if let UserRole::Teacher(teacher) = role
-        && state.is_both_teacher_and_student(teacher.telegram_name.as_str()).await
-    {
-        let info = markdown_string!(
-            "\n\n📌 *Note:* You are registered as both a teacher and a student\\."
-        );
-        text.push(&info);
+    if let Some(UserRole::Teacher(teacher)) = &role {
+        if state
+            .is_both_teacher_and_student(teacher.telegram_name.as_str())
+            .await
+        {
+            let info = markdown_string!(
+                "\n\n📌 *Note:* You are registered as both a teacher and a student\\."
+            );
+            text.push(&info);
+        }
     }
 
     bot.send_markdown_message(chat_id, text).await?;
