@@ -1,6 +1,26 @@
 [workspace]
 members = [".", "plannabot"]
 
+[workspace.dependencies]
+async-trait = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+bitcode = "0.6"
+tokio = { version = "1.8", features = ["fs", "sync", "macros", "rt-multi-thread"] }
+log = "0.4"
+pretty_env_logger = "0.5"
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.9"
+humantime = "2.3.0"
+percent-encoding = "2.3"
+serde_yaml = "0.9.33"
+teloxide = { version = "0.17.0", default-features = false, features = ["macros", "rustls", "ctrlc_handler"] }
+google-sheets4 = "5"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+anyhow = "1.0"
+serde_json = "1.0"
+dotenv = "0.15"
+paste = "1.0.15"
+
 [package]
 name = "telluride"
 version = "0.2.0"
@@ -15,14 +35,15 @@ categories = ["development-tools"]
 description = "The extension for teloxide library providing extended and compile-time safe API"
 
 [dependencies]
-teloxide = { version = "0.17.0", default-features = false, features = ["macros", "rustls", "ctrlc_handler"] }
-async-trait = "0.1"
-serde = { version = "1.0", features = ["derive"] }
-bitcode = "0.6"
-percent-encoding = "2.3"
-serde_yaml = "0.9.33"
-tokio = { version =  "1.8", features = ["fs", "sync", "macros", "rt-multi-thread"] }
-log = "0.4"
-pretty_env_logger = "0.5"
-chrono = "0.4"
-humantime = "2.3.0"
+teloxide.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+bitcode.workspace = true
+percent-encoding.workspace = true
+serde_yaml.workspace = true
+tokio.workspace = true
+log.workspace = true
+pretty_env_logger.workspace = true
+chrono.workspace = true
+humantime.workspace = true
+chrono-tz.workspace = true

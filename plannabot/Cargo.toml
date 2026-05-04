@@ -4,32 +4,22 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-teloxide = { version = "0.17.0", default-features = false, features = ["macros", "rustls", "ctrlc_handler"] }
+teloxide.workspace = true
 telluride = { path = ".." }
-tokio = { version = "1.8", features = ["fs", "sync", "macros", "rt-multi-thread"] }
-log = "0.4"
-pretty_env_logger = "0.5"
-async-trait = "0.1"
-
-# Google Sheets API (re-exports hyper, hyper_rustls, oauth2)
-google-sheets4 = "5"
-
-# HTTP client for Drive API metadata calls (already a transitive dep via teloxide)
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-
-# Serialization (already a transitive dep)
-serde = { version = "1.0", features = ["derive"] }
-
-# Date/time
-chrono = { version = "0.4", features = ["serde"] }
-chrono-tz = "0.9"
-
-# Error handling and utilities
-anyhow = "1.0"
-serde_json = "1.0"
-dotenv = "0.15"
-bitcode = "0.6"
-paste = "1.0.15"
+tokio.workspace = true
+log.workspace = true
+pretty_env_logger.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+google-sheets4.workspace = true
+reqwest.workspace = true
+chrono.workspace = true
+chrono-tz.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+dotenv.workspace = true
+bitcode.workspace = true
+paste.workspace = true
 
 [[bin]]
 name = "plannabot"
