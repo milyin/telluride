@@ -1,14 +1,12 @@
 use std::str::FromStr;
 
 use anyhow::Result;
-use chrono::{Datelike, Local, NaiveDate, NaiveTime};
+use chrono::{NaiveDate, NaiveTime};
 use humantime::Duration;
-use telluride::calendar::build_month_calendar;
 use telluride::markdown::MarkdownStringMessage;
 use telluride::utils::split_with_screened_spaces;
 use telluride::{markdown_format, markdown_string};
 use teloxide::prelude::*;
-use teloxide::types::InlineKeyboardButton;
 
 use crate::models::TelegramName;
 
@@ -48,56 +46,97 @@ impl FromStr for BookParams {
     }
 }
 
-// pub async fn book(bot: &Bot, chat_id: ChatId, params: &str) -> Result<()> {
-// // Build summary of provided parameters
-//     let mut text = markdown_string!("📅 *Book a Lesson*\n\n");
+pub async fn book(bot: &Bot, chat_id: ChatId, params: &str) -> Result<()> {
+    let params: BookParams = params.parse()?;
+    match params {
+        BookParams::L0() => book_0(bot, chat_id).await,
+        BookParams::L1(teacher) => book_1(bot, chat_id, teacher).await,
+        BookParams::L2(teacher, date) => book_2(bot, chat_id, teacher, date).await,
+        BookParams::L3(teacher, date, hour) => book_3(bot, chat_id, teacher, date, hour).await,
+        BookParams::L4(teacher, date, hour, duration) => {
+            book_4(bot, chat_id, teacher, date, hour, duration).await
+        }
+    }
+}
 
-//     if let Some(t) = teacher {
-//         let line = markdown_format!("👨\\-🏫 Teacher: {}\n", t);
-//         text.push(&line);
-//     }
-//     if let Some(d) = date {
-//         let line = markdown_format!("📆 Date: {}\n", d);
-//         text.push(&line);
-//     }
-//     if let Some(h) = hour {
-//         let line = markdown_format!("⏰ Time: {}\n", h);
-//         text.push(&line);
-//     }
-//     if let Some(dur) = duration {
-//         let line = markdown_format!("⏱ Duration: {} min\n", dur);
-//         text.push(&line);
-//     }
+async fn book_0(bot: &Bot, chat_id: ChatId) -> Result<()> {
+    let text = markdown_string!("📅 *Book a Lesson*\n\nNo parameters provided\\.");
+    bot.send_markdown_message(chat_id, text).await?;
+    Ok(())
+}
 
-//     if teacher.is_none() && date.is_none() && hour.is_none() && duration.is_none() {
-//         text.push(&markdown_string!("No parameters provided\\.\n"));
-//     }
+async fn book_1(bot: &Bot, chat_id: ChatId, teacher: TelegramName) -> Result<()> {
+    let mut text = markdown_string!("📅 *Book a Lesson*\n\n");
+    let teacher_str = teacher.as_str();
+    let line = markdown_format!("👨\\-🏫 Teacher: {}\n", teacher_str);
+    text.push(&line);
 
-//     text.push(&markdown_string!("\n*Select a date from the calendar:*\n"));
+    bot.send_markdown_message(chat_id, text).await?;
+    Ok(())
+}
 
-//     // Determine which month/year to show
-//     let (year, month) = if let Some(d) = date {
-//         // Try to parse the date to show its month
-//         if let Ok(parsed) = NaiveDate::parse_from_str(d, "%Y-%m-%d") {
-//             (parsed.year(), parsed.month())
-//         } else {
-//             let now = Local::now();
-//             (now.year(), now.month())
-//         }
-//     } else {
-//         let now = Local::now();
-//         (now.year(), now.month())
-//     };
+async fn book_2(
+    bot: &Bot,
+    chat_id: ChatId,
+    teacher: TelegramName,
+    date: NaiveDate,
+) -> Result<()> {
+    let mut text = markdown_string!("📅 *Book a Lesson*\n\n");
+    let teacher_str = teacher.as_str();
+    let line = markdown_format!("👨\\-🏫 Teacher: {}\n", teacher_str);
+    text.push(&line);
+    let date_str = date.to_string();
+    let line = markdown_format!("📆 Date: {}\n", date_str);
+    text.push(&line);
 
-//     let keyboard = build_month_calendar(
-//         year,
-//         month,
-//         |d| InlineKeyboardButton::callback(d.day().to_string(), "noop"),
-//         |_leading, _trailing| (Vec::new(), Vec::new()),
-//     );
+    bot.send_markdown_message(chat_id, text).await?;
+    Ok(())
+}
 
-//     bot.send_markdown_message(chat_id, text)
-//         .reply_markup(keyboard)
-//         .await?;
-//     Ok(())
-// }
+async fn book_3(
+    bot: &Bot,
+    chat_id: ChatId,
+    teacher: TelegramName,
+    date: NaiveDate,
+    hour: NaiveTime,
+) -> Result<()> {
+    let mut text = markdown_string!("📅 *Book a Lesson*\n\n");
+    let teacher_str = teacher.as_str();
+    let line = markdown_format!("👨\\-🏫 Teacher: {}\n", teacher_str);
+    text.push(&line);
+    let date_str = date.to_string();
+    let line = markdown_format!("📆 Date: {}\n", date_str);
+    text.push(&line);
+    let hour_str = hour.to_string();
+    let line = markdown_format!("⏰ Time: {}\n", hour_str);
+    text.push(&line);
+
+    bot.send_markdown_message(chat_id, text).await?;
+    Ok(())
+}
+
+async fn book_4(
+    bot: &Bot,
+    chat_id: ChatId,
+    teacher: TelegramName,
+    date: NaiveDate,
+    hour: NaiveTime,
+    duration: Duration,
+) -> Result<()> {
+    let mut text = markdown_string!("📅 *Book a Lesson*\n\n");
+    let teacher_str = teacher.as_str();
+    let line = markdown_format!("👨\\-🏫 Teacher: {}\n", teacher_str);
+    text.push(&line);
+    let date_str = date.to_string();
+    let line = markdown_format!("📆 Date: {}\n", date_str);
+    text.push(&line);
+    let hour_str = hour.to_string();
+    let line = markdown_format!("⏰ Time: {}\n", hour_str);
+    text.push(&line);
+    let duration_str = duration.to_string();
+    let line = markdown_format!("⏱ Duration: {}\n", duration_str);
+    text.push(&line);
+
+    bot.send_markdown_message(chat_id, text).await?;
+    Ok(())
+}
