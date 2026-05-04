@@ -5,10 +5,12 @@ pub mod teacher;
 
 use crate::models::{TelegramName, UserRole};
 use crate::state::BotState;
+use std::future::Future;
 use std::sync::Arc;
 use telluride::command::CallbackKey;
 use telluride::data_store::{InMemStore, UserProxy};
 use teloxide::prelude::*;
+use teloxide::types::ChatId;
 
 /// Extracts the Telegram username from a message sender.
 /// Returns the username without '@', converted to lowercase.
@@ -33,6 +35,35 @@ pub fn get_callback_telegram_name(q: &CallbackQuery) -> Option<TelegramName> {
         .username
         .as_deref()
         .and_then(|s| TelegramName::try_from(s).ok())
+}
+
+pub async fn filter_message_by<F, Fut>(msg: Message, state: Arc<BotState>, is_role: F) -> bool
+where
+    F: FnOnce(TelegramName, ChatId, Arc<BotState>) -> Fut,
+    Fut: Future<Output = bool>,
+{
+    let Some(username) = get_telegram_name(&msg) else {
+        return false;
+    };
+    is_role(username, msg.chat.id, state).await
+}
+
+pub async fn filter_callback_by<F, Fut>(
+    q: CallbackQuery,
+    state: Arc<BotState>,
+    is_role: F,
+) -> bool
+where
+    F: FnOnce(TelegramName, ChatId, Arc<BotState>) -> Fut,
+    Fut: Future<Output = bool>,
+{
+    let Some(username) = get_callback_telegram_name(&q) else {
+        return false;
+    };
+    let Some(chat_id) = q.message.as_ref().map(|m| m.chat().id) else {
+        return false;
+    };
+    is_role(username, chat_id, state).await
 }
 
 /// Generic teloxide endpoint handler for inline keyboard callback queries.

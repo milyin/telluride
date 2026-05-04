@@ -1,5 +1,5 @@
 use crate::api;
-use crate::bot::{get_callback_telegram_name, get_telegram_name, get_username};
+use crate::bot::get_username;
 use crate::models::{TelegramName, UserRole};
 use crate::state::BotState;
 use std::sync::Arc;
@@ -26,30 +26,11 @@ pub enum AdminCommand {
 
 impl telluride::command::CallbackBitcode for AdminCommand {}
 
-async fn check_is_admin(username: &TelegramName, chat_id: ChatId, state: &BotState) -> bool {
+pub async fn is_admin(username: TelegramName, chat_id: ChatId, state: Arc<BotState>) -> bool {
     matches!(
         state.get_role(username.as_str()).await,
         Some(UserRole::Teacher(ref t)) if t.admin
     ) && state.is_in_admin_mode(chat_id).await
-}
-
-/// Returns true if the message sender is a teacher with admin=true currently in admin mode.
-pub async fn filter_message_by_admin(msg: Message, state: Arc<BotState>) -> bool {
-    let Some(username) = get_telegram_name(&msg) else {
-        return false;
-    };
-    check_is_admin(&username, msg.chat.id, &state).await
-}
-
-/// Returns true if the callback query sender is a teacher with admin=true in admin mode.
-pub async fn filter_callback_by_admin(q: CallbackQuery, state: Arc<BotState>) -> bool {
-    let Some(username) = get_callback_telegram_name(&q) else {
-        return false;
-    };
-    let Some(chat_id) = q.message.as_ref().map(|m| m.chat().id) else {
-        return false;
-    };
-    check_is_admin(&username, chat_id, &state).await
 }
 
 pub async fn admin_command_handler(

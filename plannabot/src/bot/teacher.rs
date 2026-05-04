@@ -1,5 +1,5 @@
 use crate::api;
-use crate::bot::{get_callback_telegram_name, get_telegram_name, get_username};
+use crate::bot::get_username;
 use crate::models::{TelegramName, UserRole};
 use crate::state::BotState;
 use std::sync::Arc;
@@ -30,32 +30,12 @@ pub enum TeacherCommand {
 
 impl telluride::command::CallbackBitcode for TeacherCommand {}
 
-async fn is_teacher(username: &TelegramName, chat_id: ChatId, state: &BotState) -> bool {
+pub async fn is_teacher(username: TelegramName, chat_id: ChatId, state: Arc<BotState>) -> bool {
     matches!(
         state.get_role(username.as_str()).await,
         Some(UserRole::Teacher(_))
     ) && !state.is_in_admin_mode(chat_id).await
         && state.get_impersonation(chat_id).await.is_none()
-}
-
-/// Returns true if the message sender is a teacher in normal mode
-/// (not in impersonation mode and not in admin mode).
-pub async fn filter_message_by_teacher(msg: Message, state: Arc<BotState>) -> bool {
-    let Some(username) = get_telegram_name(&msg) else {
-        return false;
-    };
-    is_teacher(&username, msg.chat.id, &state).await
-}
-
-/// Returns true if the callback query sender is a teacher in normal mode.
-pub async fn filter_callback_by_teacher(q: CallbackQuery, state: Arc<BotState>) -> bool {
-    let Some(username) = get_callback_telegram_name(&q) else {
-        return false;
-    };
-    let Some(chat_id) = q.message.as_ref().map(|m| m.chat().id) else {
-        return false;
-    };
-    is_teacher(&username, chat_id, &state).await
 }
 
 pub async fn teacher_command_handler(
