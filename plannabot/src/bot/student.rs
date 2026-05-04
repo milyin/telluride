@@ -1,6 +1,6 @@
 use crate::api;
-use crate::bot::get_username;
-use crate::models::UserRole;
+use crate::bot::{get_callback_telegram_name, get_telegram_name, get_username};
+use crate::models::{TelegramName, UserRole};
 use crate::state::BotState;
 use std::sync::Arc;
 use telluride::command::CallbackKey;
@@ -23,25 +23,20 @@ pub enum StudentCommand {
 
 impl telluride::command::CallbackBitcode for StudentCommand {}
 
+async fn check_is_student(username: &TelegramName, state: &BotState) -> bool {
+    matches!(state.get_role(username.as_str()).await, Some(UserRole::Student(_)))
+}
+
 /// Returns true if the message sender has a Student role.
 pub async fn is_student(msg: Message, state: Arc<BotState>) -> bool {
-    let Some(username) = get_username(&msg) else {
-        return false;
-    };
-    matches!(state.get_role(&username).await, Some(UserRole::Student(_)))
+    let Some(username) = get_telegram_name(&msg) else { return false; };
+    check_is_student(&username, &state).await
 }
 
 /// Returns true if the callback query sender has a Student role.
 pub async fn is_student_callback(q: CallbackQuery, state: Arc<BotState>) -> bool {
-    let Some(username) = q
-        .from
-        .username
-        .as_deref()
-        .map(|u| u.trim_start_matches('@').to_lowercase())
-    else {
-        return false;
-    };
-    matches!(state.get_role(&username).await, Some(UserRole::Student(_)))
+    let Some(username) = get_callback_telegram_name(&q) else { return false; };
+    check_is_student(&username, &state).await
 }
 
 pub async fn student_command_handler(

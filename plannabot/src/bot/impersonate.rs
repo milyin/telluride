@@ -1,11 +1,12 @@
 use crate::api;
-use crate::bot::get_username;
-use crate::models::UserRole;
+use crate::bot::{get_callback_telegram_name, get_telegram_name, get_username};
+use crate::models::{TelegramName, UserRole};
 use crate::state::BotState;
 use std::sync::Arc;
 use telluride::command::CallbackKey;
 use telluride::data_store::InMemStore;
 use teloxide::prelude::*;
+use teloxide::types::ChatId;
 use teloxide::utils::command::BotCommands;
 
 #[derive(BotCommands, Clone, Debug, Hash, bitcode::Encode, bitcode::Decode)]
@@ -25,34 +26,22 @@ pub enum ImpersonateCommand {
 
 impl telluride::command::CallbackBitcode for ImpersonateCommand {}
 
+async fn check_is_impersonate(username: &TelegramName, chat_id: ChatId, state: &BotState) -> bool {
+    matches!(state.get_role(username.as_str()).await, Some(UserRole::Teacher(_)))
+        && state.get_impersonation(chat_id).await.is_some()
+}
+
 /// Returns true if the message sender is a teacher currently in impersonation mode.
 pub async fn is_impersonate(msg: Message, state: Arc<BotState>) -> bool {
-    let Some(username) = get_username(&msg) else {
-        return false;
-    };
-    if !matches!(state.get_role(&username).await, Some(UserRole::Teacher(_))) {
-        return false;
-    }
-    state.get_impersonation(msg.chat.id).await.is_some()
+    let Some(username) = get_telegram_name(&msg) else { return false; };
+    check_is_impersonate(&username, msg.chat.id, &state).await
 }
 
 /// Returns true if the callback query sender is a teacher currently in impersonation mode.
 pub async fn is_impersonate_callback(q: CallbackQuery, state: Arc<BotState>) -> bool {
-    let Some(username) = q
-        .from
-        .username
-        .as_deref()
-        .map(|u| u.trim_start_matches('@').to_lowercase())
-    else {
-        return false;
-    };
-    if !matches!(state.get_role(&username).await, Some(UserRole::Teacher(_))) {
-        return false;
-    }
-    let Some(chat_id) = q.message.as_ref().map(|m| m.chat().id) else {
-        return false;
-    };
-    state.get_impersonation(chat_id).await.is_some()
+    let Some(username) = get_callback_telegram_name(&q) else { return false; };
+    let Some(chat_id) = q.message.as_ref().map(|m| m.chat().id) else { return false; };
+    check_is_impersonate(&username, chat_id, &state).await
 }
 
 pub async fn impersonate_command_handler(

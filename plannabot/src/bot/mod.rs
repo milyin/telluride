@@ -3,8 +3,8 @@ pub mod impersonate;
 pub mod student;
 pub mod teacher;
 
+use crate::models::{TelegramName, UserRole};
 use crate::state::BotState;
-use crate::models::UserRole;
 use std::sync::Arc;
 use telluride::command::CallbackKey;
 use telluride::data_store::{InMemStore, UserProxy};
@@ -17,6 +17,22 @@ pub fn get_username(msg: &Message) -> Option<String> {
         .as_ref()
         .and_then(|user| user.username.as_ref())
         .map(|username| username.trim_start_matches('@').to_lowercase())
+}
+
+/// Extracts and validates the sender's username from a message as a [`TelegramName`].
+pub fn get_telegram_name(msg: &Message) -> Option<TelegramName> {
+    msg.from
+        .as_ref()
+        .and_then(|u| u.username.as_deref())
+        .and_then(|s| TelegramName::try_from(s).ok())
+}
+
+/// Extracts and validates the sender's username from a callback query as a [`TelegramName`].
+pub fn get_callback_telegram_name(q: &CallbackQuery) -> Option<TelegramName> {
+    q.from
+        .username
+        .as_deref()
+        .and_then(|s| TelegramName::try_from(s).ok())
 }
 
 /// Generic teloxide endpoint handler for inline keyboard callback queries.
