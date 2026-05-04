@@ -66,7 +66,9 @@ pub async fn student_command_handler(
         StudentCommand::Schedule => {
             api::student::schedule(&bot, msg.chat.id, &student, &state).await
         }
-        StudentCommand::Book(params) => api::student::book(&bot, msg.chat.id, params).await,
+        StudentCommand::Book(params) => {
+            api::student::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, Some(_callback_storage)).await
+        }
     };
 
     result.map_err(|e| {

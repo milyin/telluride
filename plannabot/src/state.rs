@@ -257,6 +257,14 @@ impl BotState {
         names
     }
 
+    /// Returns a sorted list of all registered teacher telegram names (without '@', lowercase).
+    pub async fn get_teacher_names(&self) -> Vec<String> {
+        let teachers = self.teachers.read().await;
+        let mut names: Vec<String> = teachers.keys().cloned().collect();
+        names.sort();
+        names
+    }
+
     /// Gets a student by telegram name directly, bypassing the role-based lookup.
     /// This is useful for impersonating dual-role users.
     /// Returns the student if they are registered, regardless of whether they're also a teacher.

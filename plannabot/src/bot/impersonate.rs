@@ -61,7 +61,9 @@ pub async fn impersonate_command_handler(
         ImpersonateCommand::Start => api::common::start(&bot, msg.chat.id, &username, &state).await,
         ImpersonateCommand::Help => api::impersonate::help(&bot, msg.chat.id).await,
         ImpersonateCommand::Schedule => api::impersonate::schedule(&bot, msg.chat.id, &state).await,
-        ImpersonateCommand::Book(params) => api::student::book(&bot, msg.chat.id, params).await,
+        ImpersonateCommand::Book(params) => {
+            api::student::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, None).await
+        }
         ImpersonateCommand::Quit => {
             api::impersonate::quit(&bot, msg.chat.id, &teacher, &state).await
         }

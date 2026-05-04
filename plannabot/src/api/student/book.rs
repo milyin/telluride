@@ -1,14 +1,20 @@
 use std::str::FromStr;
+use std::sync::Arc;
 
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime};
 use humantime::Duration;
+use telluride::command::{CallbackKey, InlineKeyboardButtonPackedExt};
+use telluride::data_store::{InMemStore, UserProxy};
 use telluride::markdown::MarkdownStringMessage;
 use telluride::utils::split_with_screened_spaces;
 use telluride::{markdown_format, markdown_string};
 use teloxide::prelude::*;
+use teloxide::types::InlineKeyboardButton;
 
+use crate::bot::student::StudentCommand;
 use crate::models::TelegramName;
+use crate::state::BotState;
 
 enum BookParams {
     L0(),
@@ -46,10 +52,17 @@ impl FromStr for BookParams {
     }
 }
 
-pub async fn book(bot: &Bot, chat_id: ChatId, params: &str) -> Result<()> {
+pub async fn book(
+    bot: &Bot,
+    chat_id: ChatId,
+    params: &str,
+    state: &Arc<BotState>,
+    user_id: teloxide::types::UserId,
+    callback_storage: Option<Arc<InMemStore<CallbackKey, StudentCommand>>>,
+) -> Result<()> {
     let params: BookParams = params.parse()?;
     match params {
-        BookParams::L0() => book_0(bot, chat_id).await,
+        BookParams::L0() => book_0(bot, chat_id, state, user_id, callback_storage).await,
         BookParams::L1(teacher) => book_1(bot, chat_id, teacher).await,
         BookParams::L2(teacher, date) => book_2(bot, chat_id, teacher, date).await,
         BookParams::L3(teacher, date, hour) => book_3(bot, chat_id, teacher, date, hour).await,
@@ -59,9 +72,56 @@ pub async fn book(bot: &Bot, chat_id: ChatId, params: &str) -> Result<()> {
     }
 }
 
-async fn book_0(bot: &Bot, chat_id: ChatId) -> Result<()> {
-    let text = markdown_string!("📅 *Book a Lesson*\n\nNo parameters provided\\.");
-    bot.send_markdown_message(chat_id, text).await?;
+async fn book_0(
+    bot: &Bot,
+    chat_id: ChatId,
+    state: &Arc<BotState>,
+    user_id: teloxide::types::UserId,
+    callback_storage: Option<Arc<InMemStore<CallbackKey, StudentCommand>>>,
+) -> Result<()> {
+    match callback_storage {
+        Some(storage) => show_teacher_selection(bot, chat_id, user_id, storage, state).await,
+        None => {
+            let text = markdown_string!("📅 *Book a Lesson*\n\nUsage: /book \\<teacher\\_name\\> [date] [time] [duration]");
+            bot.send_markdown_message(chat_id, text).await?;
+            Ok(())
+        }
+    }
+}
+
+async fn show_teacher_selection(
+    bot: &Bot,
+    chat_id: ChatId,
+    user_id: teloxide::types::UserId,
+    callback_storage: Arc<InMemStore<CallbackKey, StudentCommand>>,
+    state: &Arc<BotState>,
+) -> Result<()> {
+    let teacher_names = state.get_teacher_names().await;
+
+    if teacher_names.is_empty() {
+        bot.send_message(
+            chat_id,
+            "No teachers are registered in the spreadsheet yet.",
+        )
+        .await?;
+        return Ok(());
+    }
+
+    let user_proxy = UserProxy::new(callback_storage, user_id);
+
+    let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+    for name in teacher_names {
+        let label = format!("@{}", name);
+        let key = CallbackKey::pack(StudentCommand::Book(name), &user_proxy).await;
+        let button = InlineKeyboardButton::callback_key(label, &key);
+        buttons.push(vec![button]);
+    }
+
+    let keyboard = teloxide::types::InlineKeyboardMarkup::new(buttons);
+    bot.send_message(chat_id, "📅 Select a teacher to book a lesson:")
+        .reply_markup(keyboard)
+        .await?;
+
     Ok(())
 }
 
