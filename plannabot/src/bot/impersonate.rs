@@ -32,9 +32,9 @@ pub async fn is_impersonate(
     state: Arc<BotState>,
 ) -> bool {
     matches!(
-        state.get_role(username.as_str()).await,
-        Some(UserRole::Teacher(_))
-    ) && state.get_impersonation(chat_id).await.is_some()
+        state.get_effective_role(username.as_str(), chat_id).await,
+        Some(UserRole::Impersonate(..))
+    )
 }
 
 pub async fn impersonate_command_handler(
@@ -49,7 +49,7 @@ pub async fn impersonate_command_handler(
     let Some(username) = get_username(&msg) else {
         return Ok(());
     };
-    let Some(UserRole::Teacher(teacher)) = state.get_role(&username).await else {
+    let Some(UserRole::Impersonate(teacher, _)) = state.get_effective_role(&username, msg.chat.id).await else {
         return Ok(());
     };
 

@@ -182,6 +182,28 @@ impl BotState {
         notified.insert(telegram_name.clone());
     }
 
+    /// Resolves the effective role of a user for the given chat session.
+    ///
+    /// Combines the persistent identity from [`get_role`] with the current
+    /// session mode (admin or impersonation) stored by `chat_id`:
+    /// - A teacher in admin mode → `UserRole::Admin`
+    /// - A teacher in impersonation mode → `UserRole::Impersonate`
+    /// - Otherwise → `UserRole::Teacher` or `UserRole::Student` unchanged
+    pub async fn get_effective_role(&self, telegram_name: &str, chat_id: ChatId) -> Option<UserRole> {
+        match self.get_role(telegram_name).await? {
+            UserRole::Teacher(teacher) => {
+                if self.is_in_admin_mode(chat_id).await {
+                    Some(UserRole::Admin(teacher))
+                } else if let Some(student_name) = self.get_impersonation(chat_id).await {
+                    Some(UserRole::Impersonate(teacher, student_name))
+                } else {
+                    Some(UserRole::Teacher(teacher))
+                }
+            }
+            other => Some(other),
+        }
+    }
+
     /// Looks up a user by Telegram name (normalised via [`TelegramName`]).
     ///
     /// If a user is both a teacher and a student, they are treated as a teacher.

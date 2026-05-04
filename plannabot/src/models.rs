@@ -220,6 +220,10 @@ sheet_struct! {
 pub enum UserRole {
     Student(Student),
     Teacher(Teacher),
+    /// Teacher currently in admin mode.
+    Admin(Teacher),
+    /// Teacher currently impersonating a student (stored telegram name without '@').
+    Impersonate(Teacher, String),
 }
 
 impl UserRole {
@@ -227,6 +231,8 @@ impl UserRole {
         match self {
             UserRole::Student(s) => &s.name,
             UserRole::Teacher(t) => &t.name,
+            UserRole::Admin(t) => &t.name,
+            UserRole::Impersonate(t, _) => &t.name,
         }
     }
 }

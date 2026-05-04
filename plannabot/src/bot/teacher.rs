@@ -32,10 +32,9 @@ impl telluride::command::CallbackBitcode for TeacherCommand {}
 
 pub async fn is_teacher(username: TelegramName, chat_id: ChatId, state: Arc<BotState>) -> bool {
     matches!(
-        state.get_role(username.as_str()).await,
+        state.get_effective_role(username.as_str(), chat_id).await,
         Some(UserRole::Teacher(_))
-    ) && !state.is_in_admin_mode(chat_id).await
-        && state.get_impersonation(chat_id).await.is_none()
+    )
 }
 
 pub async fn teacher_command_handler(
@@ -50,7 +49,7 @@ pub async fn teacher_command_handler(
     let Some(username) = get_username(&msg) else {
         return Ok(());
     };
-    let Some(UserRole::Teacher(teacher)) = state.get_role(&username).await else {
+    let Some(UserRole::Teacher(teacher)) = state.get_effective_role(&username, msg.chat.id).await else {
         return Ok(());
     };
 

@@ -61,7 +61,7 @@ pub async fn impersonate(
             )
             .await?;
         }
-        Some(UserRole::Teacher(_)) => {
+        Some(UserRole::Teacher(_) | UserRole::Admin(_) | UserRole::Impersonate(..)) => {
             if state.is_both_teacher_and_student(&normalised).await {
                 state.impersonate(chat_id, normalised.clone()).await;
                 bot.send_message(

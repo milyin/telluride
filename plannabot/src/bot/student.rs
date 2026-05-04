@@ -24,9 +24,9 @@ pub enum StudentCommand {
 
 impl telluride::command::CallbackBitcode for StudentCommand {}
 
-pub async fn is_student(username: TelegramName, _chat_id: ChatId, state: Arc<BotState>) -> bool {
+pub async fn is_student(username: TelegramName, chat_id: ChatId, state: Arc<BotState>) -> bool {
     matches!(
-        state.get_role(username.as_str()).await,
+        state.get_effective_role(username.as_str(), chat_id).await,
         Some(UserRole::Student(_))
     )
 }
