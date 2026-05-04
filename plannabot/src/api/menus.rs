@@ -22,12 +22,16 @@ pub async fn show_teacher_selection<Cmd, F>(
     state: &Arc<BotState>,
     make_cmd: F,
     back: Option<Cmd>,
+    teacher_filter: Vec<TelegramName>,
 ) -> Result<()>
 where
     Cmd: CallbackBitcode + 'static,
     F: Fn(TelegramName) -> Cmd,
 {
-    let teacher_names = state.get_teacher_names().await;
+    let mut teacher_names = state.get_teacher_names().await;
+    let filter_set: std::collections::HashSet<&str> =
+        teacher_filter.iter().map(|t| t.as_str()).collect();
+    teacher_names.retain(|n| filter_set.contains(n.as_str()));
 
     if teacher_names.is_empty() {
         bot.send_message(chat_id, "No teachers are registered in the spreadsheet yet.")

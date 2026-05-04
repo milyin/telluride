@@ -75,7 +75,7 @@ async fn student_handle(
             api::student::schedule(&bot, msg.chat.id, &student, &state).await
         }
         StudentCommand::Book(params) => {
-            api::student::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, callback_storage, message_id).await
+            api::student::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, callback_storage, message_id, &student.telegram_name).await
         }
     };
 

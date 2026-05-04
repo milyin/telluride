@@ -40,7 +40,7 @@ pub struct BotState {
     /// Maps a teacher's ChatId to the telegram name of the student they are
     /// currently impersonating.  Entries are inserted by `/impersonate` and
     /// removed by `/quit`.
-    impersonations: RwLock<HashMap<ChatId, String>>,
+    impersonations: RwLock<HashMap<ChatId, TelegramName>>,
 
     // --- Admin mode ----------------------------------------------------------
     /// The set of chat IDs currently in admin mode.  Entries are inserted by
@@ -275,24 +275,20 @@ impl BotState {
     /// Gets a student by telegram name directly, bypassing the role-based lookup.
     /// This is useful for impersonating dual-role users.
     /// Returns the student if they are registered, regardless of whether they're also a teacher.
-    pub async fn get_student(&self, telegram_name: &str) -> Option<crate::models::Student> {
-        let normalised = TelegramName::try_from(telegram_name).ok()?;
+    pub async fn get_student(&self, telegram_name: &TelegramName) -> Option<crate::models::Student> {
         let students = self.students.read().await;
-        students.get(normalised.as_str()).cloned()
+        students.get(telegram_name.as_str()).cloned()
     }
 
     /// Returns all pairings where the given teacher is the teacher.
     pub async fn get_pairings_for_teacher(
         &self,
-        telegram_name: &str,
+        telegram_name: &TelegramName,
     ) -> Vec<TeacherStudentPairing> {
-        let Ok(normalised) = TelegramName::try_from(telegram_name) else {
-            return vec![];
-        };
         let pairings = self.pairings.read().await;
         pairings
             .iter()
-            .filter(|a| a.teacher_telegram == normalised)
+            .filter(|a| a.teacher_telegram == *telegram_name)
             .cloned()
             .collect()
     }
@@ -300,15 +296,12 @@ impl BotState {
     /// Returns all pairings where the given student is the student.
     pub async fn get_pairings_for_student(
         &self,
-        telegram_name: &str,
+        telegram_name: &TelegramName,
     ) -> Vec<TeacherStudentPairing> {
-        let Ok(normalised) = TelegramName::try_from(telegram_name) else {
-            return vec![];
-        };
         let pairings = self.pairings.read().await;
         pairings
             .iter()
-            .filter(|a| a.student_telegram == normalised)
+            .filter(|a| a.student_telegram == *telegram_name)
             .cloned()
             .collect()
     }
@@ -331,7 +324,7 @@ impl BotState {
 
     /// Records that the teacher chatting in `chat_id` is now impersonating
     /// `student_name` (without '@', lowercase).
-    pub async fn impersonate(&self, chat_id: ChatId, student_name: String) {
+    pub async fn impersonate(&self, chat_id: ChatId, student_name: TelegramName) {
         self.impersonations
             .write()
             .await
@@ -340,7 +333,7 @@ impl BotState {
 
     /// Returns the telegram name of the student being impersonated in this
     /// chat, or `None` if the chat is not in impersonation mode.
-    pub async fn get_impersonation(&self, chat_id: ChatId) -> Option<String> {
+    pub async fn get_impersonation(&self, chat_id: ChatId) -> Option<TelegramName> {
         self.impersonations.read().await.get(&chat_id).cloned()
     }
 

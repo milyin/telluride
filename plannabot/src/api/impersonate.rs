@@ -1,6 +1,6 @@
 use crate::api;
 use crate::bot::teacher::TeacherCommand;
-use crate::models::{Teacher, UserRole};
+use crate::models::{Teacher, TelegramName, UserRole};
 use crate::state::BotState;
 use anyhow::Result;
 use std::sync::Arc;
@@ -38,45 +38,44 @@ pub async fn impersonate(
         return Ok(());
     };
 
-    let normalised = username.trim_start_matches('@').to_lowercase();
-    if normalised.is_empty() {
+    let Ok(name) = TelegramName::try_from(username) else {
         bot.send_message(chat_id, "Usage: /impersonate <student_username>")
             .await?;
         return Ok(());
-    }
+    };
 
     // Clear admin mode when entering impersonation.
     state.exit_admin_mode(chat_id).await;
 
-    match state.get_role(&normalised).await {
+    match state.get_role(name.as_str()).await {
         Some(UserRole::Student(_)) => {
-            state.impersonate(chat_id, normalised.clone()).await;
+            state.impersonate(chat_id, name.clone()).await;
             bot.send_message(
                 chat_id,
                 format!(
-                    "Now impersonating @{}. All commands will behave as if you were that student. \
+                    "Now impersonating {}. All commands will behave as if you were that student. \
                      Use /help to see available commands, use /quit to exit",
-                    normalised
+                    name
                 ),
             )
             .await?;
         }
         Some(UserRole::Teacher(_)) => {
-            if state.is_both_teacher_and_student(&normalised).await {
-                state.impersonate(chat_id, normalised.clone()).await;
+            if state.is_both_teacher_and_student(name.as_str()).await {
+                state.impersonate(chat_id, name.clone()).await;
                 bot.send_message(
                     chat_id,
                     format!(
-                        "Now impersonating @{} (who is also a teacher). All commands will behave as if you were that student. \
+                        "Now impersonating {} (who is also a teacher). All commands will behave as if you were that student. \
                          Use /help to see available commands, use /quit to exit",
-                        normalised
+                        name
                     ),
                 )
                 .await?;
             } else {
                 bot.send_message(
                     chat_id,
-                    format!("@{} is a teacher, not a student.", normalised),
+                    format!("{} is a teacher, not a student.", name),
                 )
                 .await?;
             }
@@ -84,7 +83,7 @@ pub async fn impersonate(
         None => {
             bot.send_message(
                 chat_id,
-                format!("Student @{} was not found in the spreadsheet.", normalised),
+                format!("Student {} was not found in the spreadsheet.", name),
             )
             .await?;
         }
@@ -161,7 +160,7 @@ pub async fn schedule(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Resu
         bot.send_message(
             chat_id,
             format!(
-                "Student @{} was not found in the spreadsheet. \
+                "Student {} was not found in the spreadsheet. \
                  Impersonation mode has been deactivated.",
                 student_name
             ),

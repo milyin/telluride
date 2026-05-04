@@ -250,8 +250,8 @@ pub enum UserEffectiveRole {
     Teacher(Teacher),
     /// Teacher currently in admin mode.
     Admin(Teacher),
-    /// Teacher currently impersonating a student (telegram name without '@').
-    Impersonate(Teacher, String),
+    /// Teacher currently impersonating a student.
+    Impersonate(Teacher, TelegramName),
 }
 
 impl UserEffectiveRole {

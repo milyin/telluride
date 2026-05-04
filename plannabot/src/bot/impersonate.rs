@@ -55,7 +55,7 @@ async fn impersonate_handle(
     let Some(username) = get_username(&msg) else {
         return Ok(());
     };
-    let Some(UserEffectiveRole::Impersonate(teacher, _)) =
+    let Some(UserEffectiveRole::Impersonate(teacher, student_name)) =
         state.get_effective_role(&username, msg.chat.id).await
     else {
         return Ok(());
@@ -70,7 +70,7 @@ async fn impersonate_handle(
         ImpersonateCommand::Help => api::impersonate::help(&bot, msg.chat.id).await,
         ImpersonateCommand::Schedule => api::impersonate::schedule(&bot, msg.chat.id, &state).await,
         ImpersonateCommand::Book(params) => {
-            api::student::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, callback_storage, message_id).await
+            api::student::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, callback_storage, message_id, &student_name).await
         }
         ImpersonateCommand::Quit => {
             api::impersonate::quit(&bot, msg.chat.id, &teacher, &state).await

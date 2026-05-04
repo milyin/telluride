@@ -23,10 +23,11 @@ pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
     user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
     message_id: Option<MessageId>,
+    student_name: &TelegramName,
 ) -> Result<()> {
     let params: BookParams = params.parse()?;
     match params {
-        BookParams::L0() => book_0(bot, chat_id, state, user_id, callback_storage, message_id).await,
+        BookParams::L0() => book_0(bot, chat_id, state, user_id, callback_storage, message_id, student_name).await,
         BookParams::L1(teacher) => {
             book_1(bot, chat_id, teacher, user_id, callback_storage, state, message_id).await
         }
@@ -48,7 +49,10 @@ async fn book_0<Cmd: BookCommand + CallbackBitcode + 'static>(
     user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
     message_id: Option<MessageId>,
+    student_name: &TelegramName,
 ) -> Result<()> {
+    let pairings = state.get_pairings_for_student(student_name).await;
+    let teacher_filter: Vec<_> = pairings.iter().map(|p| p.teacher_telegram.clone()).collect();
     show_teacher_selection(
         bot,
         chat_id,
@@ -59,6 +63,7 @@ async fn book_0<Cmd: BookCommand + CallbackBitcode + 'static>(
         state,
         |name| Cmd::book(BookParams::L1(name)),
         None,
+        teacher_filter,
     )
     .await
 }
