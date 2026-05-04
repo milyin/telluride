@@ -184,41 +184,14 @@ where
     let (worktime, _) = state.sheets.get_worktime().await?;
     let slots = available_slots(&worktime, teacher, date);
 
-    let message = format!("@{} on {} — select a time slot:", teacher, date);
+    let message = if slots.is_empty() {
+        format!("@{} on {} — no available slots.", teacher, date)
+    } else {
+        format!("@{} on {} — select a time slot:", teacher, date)
+    };
 
     let user_proxy = UserProxy::new(callback_storage, user_id);
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
-
-    if slots.is_empty() {
-        let no_slots_msg = format!("{}\nNo available slots.", message);
-        if let Some(back_cmd) = back {
-            let key = CallbackKey::pack(back_cmd, &user_proxy).await;
-            buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &key)]);
-            let keyboard = InlineKeyboardMarkup::new(buttons);
-            match message_id {
-                Some(id) => {
-                    bot.edit_message_text(chat_id, id, no_slots_msg)
-                        .reply_markup(keyboard)
-                        .await?;
-                }
-                None => {
-                    bot.send_message(chat_id, no_slots_msg)
-                        .reply_markup(keyboard)
-                        .await?;
-                }
-            }
-        } else {
-            match message_id {
-                Some(id) => {
-                    bot.edit_message_text(chat_id, id, no_slots_msg).await?;
-                }
-                None => {
-                    bot.send_message(chat_id, no_slots_msg).await?;
-                }
-            }
-        }
-        return Ok(());
-    }
 
     for slot in slots {
         let label = format!("{:02}:00 – {:02}:00", slot.hour(), slot.hour() + 1);

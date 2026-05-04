@@ -100,12 +100,13 @@ async fn book_2<Cmd: BookCommand + CallbackBitcode + 'static>(
                 callback_storage,
                 move |date| Cmd::book(BookParams::L2(t1.clone(), SelectDate::Date(date))),
                 move |y, m| Cmd::book(BookParams::L2(t2.clone(), SelectDate::YearMonth(y, m))),
-                None,
+                Some(Cmd::book(BookParams::L0())),
             )
             .await
         }
         SelectDate::Date(date) => {
-            let teacher_clone = teacher.clone();
+            let teacher_for_cmd = teacher.clone();
+            let teacher_for_back = teacher.clone();
             show_slot_selection(
                 bot,
                 chat_id,
@@ -115,8 +116,11 @@ async fn book_2<Cmd: BookCommand + CallbackBitcode + 'static>(
                 user_id,
                 callback_storage,
                 state,
-                move |time| Cmd::book(BookParams::L3(teacher_clone.clone(), date, time)),
-                None,
+                move |time| Cmd::book(BookParams::L3(teacher_for_cmd.clone(), date, time)),
+                Some(Cmd::book(BookParams::L2(
+                    teacher_for_back,
+                    SelectDate::YearMonth(date.year(), date.month()),
+                ))),
             )
             .await
         }
