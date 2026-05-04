@@ -3,6 +3,7 @@ use std::{fmt, str::FromStr};
 use anyhow::bail;
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc, Weekday};
 use chrono_tz::Tz;
+use std::convert::TryFrom;
 
 /// A normalised Telegram username.
 ///
@@ -73,6 +74,14 @@ impl FromStr for TelegramName {
 impl fmt::Display for TelegramName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "@{}", self.0)
+    }
+}
+
+impl TryFrom<&str> for TelegramName {
+    type Error = anyhow::Error;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        s.parse()
     }
 }
 
