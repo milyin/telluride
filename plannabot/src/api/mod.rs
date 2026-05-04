@@ -3,3 +3,4 @@ pub mod common;
 pub mod impersonate;
 pub mod student;
 pub mod teacher;
+pub mod traits;

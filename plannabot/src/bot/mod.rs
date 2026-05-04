@@ -1,5 +1,4 @@
 pub mod admin;
-pub mod book_command;
 pub mod impersonate;
 pub mod student;
 pub mod teacher;

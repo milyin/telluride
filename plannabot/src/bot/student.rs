@@ -1,5 +1,6 @@
 use crate::api;
-use crate::bot::{callback_command_handler, get_username, book_command::BookCommand};
+use crate::api::traits::BookCommand;
+use crate::bot::{callback_command_handler, get_username};
 use crate::models::{TelegramName, UserEffectiveRole, UserRole};
 use crate::state::BotState;
 use std::sync::Arc;

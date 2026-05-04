@@ -12,7 +12,7 @@ use telluride::{markdown_format, markdown_string};
 use teloxide::prelude::*;
 use teloxide::types::InlineKeyboardButton;
 
-use crate::bot::book_command::BookCommand;
+use crate::api::traits::BookCommand;
 use crate::models::TelegramName;
 use crate::state::BotState;
 
