@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use chrono::{Datelike, Local, NaiveDate};
+use chrono::{Datelike, Local, NaiveDate, NaiveTime, Timelike};
 use telluride::calendar::build_month_calendar;
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::{InMemStore, UserProxy};
@@ -9,6 +9,7 @@ use teloxide::prelude::*;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, MessageId, UserId};
 
 use crate::models::TelegramName;
+use crate::sheets::worktime::available_slots;
 use crate::state::BotState;
 
 pub async fn show_teacher_selection<Cmd, F>(
@@ -144,6 +145,66 @@ where
         }
         None => {
             bot.send_message(chat_id, text)
+                .reply_markup(keyboard)
+                .await?;
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn show_slot_selection<Cmd, F>(
+    bot: &Bot,
+    chat_id: ChatId,
+    message_id: Option<MessageId>,
+    teacher: &TelegramName,
+    date: NaiveDate,
+    user_id: UserId,
+    callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
+    state: &Arc<BotState>,
+    make_cmd: F,
+) -> Result<()>
+where
+    Cmd: CallbackBitcode + 'static,
+    F: Fn(NaiveTime) -> Cmd,
+{
+    let (worktime, _) = state.sheets.get_worktime().await?;
+    let slots = available_slots(&worktime, teacher, date);
+
+    let message = format!("@{} on {} — select a time slot:", teacher, date);
+
+    if slots.is_empty() {
+        let no_slots_msg = format!("{}\nNo available slots.", message);
+        match message_id {
+            Some(id) => {
+                bot.edit_message_text(chat_id, id, no_slots_msg).await?;
+            }
+            None => {
+                bot.send_message(chat_id, no_slots_msg).await?;
+            }
+        }
+        return Ok(());
+    }
+
+    let user_proxy = UserProxy::new(callback_storage, user_id);
+    let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+    for slot in slots {
+        let label = format!("{:02}:00 – {:02}:00", slot.hour(), slot.hour() + 1);
+        let cmd = make_cmd(slot);
+        let key = CallbackKey::pack(cmd, &user_proxy).await;
+        let button = InlineKeyboardButton::callback_key(label, &key);
+        buttons.push(vec![button]);
+    }
+
+    let keyboard = InlineKeyboardMarkup::new(buttons);
+    match message_id {
+        Some(id) => {
+            bot.edit_message_text(chat_id, id, message)
+                .reply_markup(keyboard)
+                .await?;
+        }
+        None => {
+            bot.send_message(chat_id, message)
                 .reply_markup(keyboard)
                 .await?;
         }

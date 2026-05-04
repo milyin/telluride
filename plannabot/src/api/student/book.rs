@@ -10,7 +10,7 @@ use telluride::{markdown_format, markdown_string};
 use teloxide::prelude::*;
 use teloxide::types::{MessageId, UserId};
 
-use crate::api::menus::{show_date_selection, show_teacher_selection};
+use crate::api::menus::{show_date_selection, show_slot_selection, show_teacher_selection};
 use crate::api::traits::{BookCommand, BookParams, SelectDate};
 use crate::models::TelegramName;
 use crate::state::BotState;
@@ -28,10 +28,11 @@ pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
     match params {
         BookParams::L0() => book_0(bot, chat_id, state, user_id, callback_storage).await,
         BookParams::L1(teacher) => {
-            book_1(bot, chat_id, teacher, user_id, callback_storage, message_id).await
+            book_1(bot, chat_id, teacher, user_id, callback_storage, state, message_id).await
         }
         BookParams::L2(teacher, select) => {
-            book_2(bot, chat_id, teacher, select, user_id, callback_storage, message_id).await
+            book_2(bot, chat_id, teacher, select, user_id, callback_storage, state, message_id)
+                .await
         }
         BookParams::L3(teacher, date, hour) => book_3(bot, chat_id, teacher, date, hour).await,
         BookParams::L4(teacher, date, hour, duration) => {
@@ -66,11 +67,12 @@ async fn book_1<Cmd: BookCommand + CallbackBitcode + 'static>(
     teacher: TelegramName,
     user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
+    state: &Arc<BotState>,
     message_id: Option<MessageId>,
 ) -> Result<()> {
     let now = Local::now();
     let select = SelectDate::YearMonth(now.year(), now.month());
-    book_2(bot, chat_id, teacher, select, user_id, callback_storage, message_id).await
+    book_2(bot, chat_id, teacher, select, user_id, callback_storage, state, message_id).await
 }
 
 async fn book_2<Cmd: BookCommand + CallbackBitcode + 'static>(
@@ -80,6 +82,7 @@ async fn book_2<Cmd: BookCommand + CallbackBitcode + 'static>(
     select: SelectDate,
     user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
+    state: &Arc<BotState>,
     message_id: Option<MessageId>,
 ) -> Result<()> {
     match select {
@@ -100,15 +103,19 @@ async fn book_2<Cmd: BookCommand + CallbackBitcode + 'static>(
             .await
         }
         SelectDate::Date(date) => {
-            let mut text = markdown_string!("📅 *Book a Lesson*\n\n");
-            let teacher_str = teacher.as_str();
-            let line = markdown_format!("👨\\-🏫 Teacher: {}\n", teacher_str);
-            text.push(&line);
-            let date_str = date.to_string();
-            let line = markdown_format!("📆 Date: {}\n", date_str);
-            text.push(&line);
-            bot.send_markdown_message(chat_id, text).await?;
-            Ok(())
+            let teacher_clone = teacher.clone();
+            show_slot_selection(
+                bot,
+                chat_id,
+                message_id,
+                &teacher,
+                date,
+                user_id,
+                callback_storage,
+                state,
+                move |time| Cmd::book(BookParams::L3(teacher_clone.clone(), date, time)),
+            )
+            .await
         }
     }
 }
