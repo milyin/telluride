@@ -17,8 +17,8 @@ use serde::Deserialize;
 
 use crate::models::SheetParseError;
 
-pub mod assignments;
 pub mod from_sheet;
+pub mod pairings;
 pub mod payments;
 pub mod schedule;
 pub mod students;
@@ -33,7 +33,7 @@ pub const SHEET_STUDENTS: &str = "Students";
 pub const SHEET_TEACHERS: &str = "Teachers";
 pub const SHEET_SCHEDULE: &str = "Schedule";
 pub const SHEET_PAYMENTS: &str = "Payments";
-pub const SHEET_PAIRINGS: &str = "Assignments";
+pub const SHEET_PAIRINGS: &str = "Pairings";
 pub const SHEET_WORKTIME: &str = "Worktime";
 
 // ---------------------------------------------------------------------------
@@ -48,7 +48,7 @@ pub const SCHEDULE_COLS: &[&str] = crate::models::ScheduleEntry::SHEET_COLS;
 
 pub const PAYMENTS_COLS: &[&str] = crate::models::Payment::SHEET_COLS;
 
-pub const PAIRINGS_COLS: &[&str] = crate::models::TeacherStudentAssignment::SHEET_COLS;
+pub const PAIRINGS_COLS: &[&str] = crate::models::TeacherStudentPairing::SHEET_COLS;
 
 pub const WORKTIME_COLS: &[&str] = crate::models::Worktime::SHEET_COLS;
 

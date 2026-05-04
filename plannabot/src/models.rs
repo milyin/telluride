@@ -207,6 +207,7 @@ sheet_struct! {
     pub struct TeacherStudentPairing {
         pub teacher_telegram: TelegramName,
         pub student_telegram: TelegramName,
+        pub cost: i64,
     }
 }
 

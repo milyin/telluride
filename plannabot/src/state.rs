@@ -1,4 +1,7 @@
-use crate::models::{SheetParseError, Student, Teacher, TeacherStudentAssignment, TelegramName, UserEffectiveRole, UserRole};
+use crate::models::{
+    SheetParseError, Student, Teacher, TeacherStudentPairing, TelegramName, UserEffectiveRole,
+    UserRole,
+};
 use crate::sheets::SheetsClient;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -21,7 +24,7 @@ pub struct BotState {
     // --- Cached sheet data ---------------------------------------------------
     students: Arc<RwLock<HashMap<String, Student>>>,
     teachers: Arc<RwLock<HashMap<String, Teacher>>>,
-    assignments: Arc<RwLock<Vec<TeacherStudentAssignment>>>,
+    pairings: Arc<RwLock<Vec<TeacherStudentPairing>>>,
 
     // --- Staleness tracking --------------------------------------------------
     /// The `modifiedTime` value returned by the Drive API the last time we
@@ -71,7 +74,7 @@ impl BotState {
             sheets,
             students: Arc::new(RwLock::new(HashMap::new())),
             teachers: Arc::new(RwLock::new(HashMap::new())),
-            assignments: Arc::new(RwLock::new(Vec::new())),
+            pairings: Arc::new(RwLock::new(Vec::new())),
             last_modified: Mutex::new(None),
             // Subtract CHECK_INTERVAL so the very first command fires a check.
             last_checked: Mutex::new(Instant::now() - CHECK_INTERVAL),
@@ -189,7 +192,11 @@ impl BotState {
     /// - A teacher in admin mode → `UserEffectiveRole::Admin`
     /// - A teacher in impersonation mode → `UserEffectiveRole::Impersonate`
     /// - Otherwise → `UserEffectiveRole::Teacher` or `UserEffectiveRole::Student` unchanged
-    pub async fn get_effective_role(&self, telegram_name: &str, chat_id: ChatId) -> Option<UserEffectiveRole> {
+    pub async fn get_effective_role(
+        &self,
+        telegram_name: &str,
+        chat_id: ChatId,
+    ) -> Option<UserEffectiveRole> {
         match self.get_role(telegram_name).await? {
             UserRole::Teacher(teacher) => {
                 if self.is_in_admin_mode(chat_id).await {
@@ -274,32 +281,32 @@ impl BotState {
         students.get(normalised.as_str()).cloned()
     }
 
-    /// Returns all assignments where the given teacher is the teacher.
-    pub async fn get_assignments_for_teacher(
+    /// Returns all pairings where the given teacher is the teacher.
+    pub async fn get_pairings_for_teacher(
         &self,
         telegram_name: &str,
-    ) -> Vec<TeacherStudentAssignment> {
+    ) -> Vec<TeacherStudentPairing> {
         let Ok(normalised) = TelegramName::try_from(telegram_name) else {
             return vec![];
         };
-        let assignments = self.assignments.read().await;
-        assignments
+        let pairings = self.pairings.read().await;
+        pairings
             .iter()
             .filter(|a| a.teacher_telegram == normalised)
             .cloned()
             .collect()
     }
 
-    /// Returns all assignments where the given student is the student.
-    pub async fn get_assignments_for_student(
+    /// Returns all pairings where the given student is the student.
+    pub async fn get_pairings_for_student(
         &self,
         telegram_name: &str,
-    ) -> Vec<TeacherStudentAssignment> {
+    ) -> Vec<TeacherStudentPairing> {
         let Ok(normalised) = TelegramName::try_from(telegram_name) else {
             return vec![];
         };
-        let assignments = self.assignments.read().await;
-        assignments
+        let pairings = self.pairings.read().await;
+        pairings
             .iter()
             .filter(|a| a.student_telegram == normalised)
             .cloned()
@@ -373,11 +380,11 @@ impl BotState {
     async fn do_reload(&self) -> Result<Vec<SheetParseError>> {
         let (students, mut errors) = self.sheets.get_students().await?;
         let (teachers, teacher_errors) = self.sheets.get_teachers().await?;
-        let (assignments, assignment_errors) = self.sheets.get_assignments().await?;
+        let (pairings, pairing_errors) = self.sheets.get_pairings().await?;
         let modified_time = self.sheets.get_spreadsheet_modified_time().await?;
 
         errors.extend(teacher_errors);
-        errors.extend(assignment_errors);
+        errors.extend(pairing_errors);
 
         // Also reload schedule and worktime to surface parse errors (data is read
         // on demand, but we still want to report failures at reload time).
@@ -386,20 +393,20 @@ impl BotState {
         let (_, worktime_errors) = self.sheets.get_worktime().await?;
         errors.extend(worktime_errors);
 
-        let (ns, nt, na) = (students.len(), teachers.len(), assignments.len());
+        let (ns, nt, na) = (students.len(), teachers.len(), pairings.len());
         *self.students.write().await = students;
         *self.teachers.write().await = teachers;
-        *self.assignments.write().await = assignments;
+        *self.pairings.write().await = pairings;
         *self.last_errors.write().await = errors.clone();
         self.notified_teachers.write().await.clear();
         *self.last_modified.lock().unwrap() = Some(modified_time);
         *self.last_reload.lock().unwrap() = Some(Utc::now());
 
         if errors.is_empty() {
-            log::info!("Data reloaded: {ns} students, {nt} teachers, {na} assignments.");
+            log::info!("Data reloaded: {ns} students, {nt} teachers, {na} pairings.");
         } else {
             log::error!(
-                "Data reloaded: {ns} students, {nt} teachers, {na} assignments \
+                "Data reloaded: {ns} students, {nt} teachers, {na} pairings \
                  — {} parse error(s).",
                 errors.len()
             );
@@ -420,10 +427,7 @@ impl BotState {
             "⚠️ Spreadsheet parse errors ({} row(s) skipped):\n\n",
             errors.len()
         );
-        let body: String = errors
-            .iter()
-            .map(|e| format!("• {}\n", e))
-            .collect();
+        let body: String = errors.iter().map(|e| format!("• {}\n", e)).collect();
         let footer = format!("\nLink to spreadsheet: {}", url);
         let text = format!("{}{}{}", header, body, footer);
 
