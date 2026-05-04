@@ -1,5 +1,5 @@
 use crate::api;
-use crate::bot::get_username;
+use crate::bot::{callback_command_handler, get_username};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
 use std::sync::Arc;
@@ -49,7 +49,9 @@ pub async fn teacher_command_handler(
     let Some(username) = get_username(&msg) else {
         return Ok(());
     };
-    let Some(UserEffectiveRole::Teacher(teacher)) = state.get_effective_role(&username, msg.chat.id).await else {
+    let Some(UserEffectiveRole::Teacher(teacher)) =
+        state.get_effective_role(&username, msg.chat.id).await
+    else {
         return Ok(());
     };
 
@@ -95,4 +97,13 @@ pub async fn teacher_command_handler(
     })?;
 
     Ok(())
+}
+
+pub async fn teacher_callback_command_handler(
+    bot: Bot,
+    q: CallbackQuery,
+    state: Arc<BotState>,
+    callback_storage: Arc<InMemStore<CallbackKey, TeacherCommand>>,
+) -> ResponseResult<()> {
+    callback_command_handler(bot, q, callback_storage, state, teacher_command_handler).await
 }

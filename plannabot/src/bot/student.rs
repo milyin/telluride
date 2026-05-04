@@ -1,5 +1,5 @@
 use crate::api;
-use crate::bot::get_username;
+use crate::bot::{callback_command_handler, get_username};
 use crate::models::{TelegramName, UserEffectiveRole, UserRole};
 use crate::state::BotState;
 use std::sync::Arc;
@@ -78,4 +78,13 @@ pub async fn student_command_handler(
     })?;
 
     Ok(())
+}
+
+pub async fn student_callback_command_handler(
+    bot: Bot,
+    q: CallbackQuery,
+    state: Arc<BotState>,
+    callback_storage: Arc<InMemStore<CallbackKey, StudentCommand>>,
+) -> ResponseResult<()> {
+    callback_command_handler(bot, q, callback_storage, state, student_command_handler).await
 }

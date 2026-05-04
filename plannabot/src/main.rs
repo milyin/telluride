@@ -18,6 +18,12 @@ use config::Config;
 use sheets::SheetsClient;
 use state::BotState;
 
+use crate::bot::admin::{admin_callback_command_handler, admin_command_handler};
+use crate::bot::filter_callback_by;
+use crate::bot::impersonate::{impersonate_callback_command_handler, impersonate_command_handler};
+use crate::bot::student::{student_callback_command_handler, student_command_handler};
+use crate::bot::teacher::{teacher_callback_command_handler, teacher_command_handler};
+
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
@@ -62,7 +68,7 @@ async fn main() {
                     bot::filter_message_by(msg, state, bot::student::is_student)
                 })
                 .filter_command::<StudentCommand>()
-                .endpoint(bot::student::student_command_handler),
+                .endpoint(student_command_handler),
         )
         // Teacher commands (/start, /help, /schedule, /impersonate, /admin, /refresh).
         .branch(
@@ -71,7 +77,7 @@ async fn main() {
                     bot::filter_message_by(msg, state, bot::teacher::is_teacher)
                 })
                 .filter_command::<TeacherCommand>()
-                .endpoint(bot::teacher::teacher_command_handler),
+                .endpoint(teacher_command_handler),
         )
         // Impersonation mode commands (/start, /help, /schedule, /book, /quit).
         .branch(
@@ -80,7 +86,7 @@ async fn main() {
                     bot::filter_message_by(msg, state, bot::impersonate::is_impersonate)
                 })
                 .filter_command::<ImpersonateCommand>()
-                .endpoint(bot::impersonate::impersonate_command_handler),
+                .endpoint(impersonate_command_handler),
         )
         // Admin mode commands (/start, /help, /status, /refresh, /quit).
         .branch(
@@ -89,7 +95,7 @@ async fn main() {
                     bot::filter_message_by(msg, state, bot::admin::is_admin)
                 })
                 .filter_command::<AdminCommand>()
-                .endpoint(bot::admin::admin_command_handler),
+                .endpoint(admin_command_handler),
         )
         // Student inline keyboard callbacks.
         .branch(
@@ -100,19 +106,9 @@ async fn main() {
                         .is_some_and(|d| CallbackKey::is_packed_data(d))
                 })
                 .filter_async(|q: CallbackQuery, state: Arc<BotState>| {
-                    bot::filter_callback_by(q, state, bot::student::is_student)
+                    filter_callback_by(q, state, bot::student::is_student)
                 })
-                .endpoint(
-                    |bot, q, storage: Arc<InMemStore<CallbackKey, StudentCommand>>, state| {
-                        bot::callback_action_handler(
-                            bot,
-                            q,
-                            storage,
-                            state,
-                            bot::student::student_command_handler,
-                        )
-                    },
-                ),
+                .endpoint(student_callback_command_handler),
         )
         // Teacher inline keyboard callbacks (e.g. student selection for /impersonate).
         .branch(
@@ -123,19 +119,9 @@ async fn main() {
                         .is_some_and(|d| CallbackKey::is_packed_data(d))
                 })
                 .filter_async(|q: CallbackQuery, state: Arc<BotState>| {
-                    bot::filter_callback_by(q, state, bot::teacher::is_teacher)
+                    filter_callback_by(q, state, bot::teacher::is_teacher)
                 })
-                .endpoint(
-                    |bot, q, storage: Arc<InMemStore<CallbackKey, TeacherCommand>>, state| {
-                        bot::callback_action_handler(
-                            bot,
-                            q,
-                            storage,
-                            state,
-                            bot::teacher::teacher_command_handler,
-                        )
-                    },
-                ),
+                .endpoint(teacher_callback_command_handler),
         )
         // Impersonation mode inline keyboard callbacks.
         .branch(
@@ -146,19 +132,9 @@ async fn main() {
                         .is_some_and(|d| CallbackKey::is_packed_data(d))
                 })
                 .filter_async(|q: CallbackQuery, state: Arc<BotState>| {
-                    bot::filter_callback_by(q, state, bot::impersonate::is_impersonate)
+                    filter_callback_by(q, state, bot::impersonate::is_impersonate)
                 })
-                .endpoint(
-                    |bot, q, storage: Arc<InMemStore<CallbackKey, ImpersonateCommand>>, state| {
-                        bot::callback_action_handler(
-                            bot,
-                            q,
-                            storage,
-                            state,
-                            bot::impersonate::impersonate_command_handler,
-                        )
-                    },
-                ),
+                .endpoint(impersonate_callback_command_handler),
         )
         // Admin mode inline keyboard callbacks.
         .branch(
@@ -169,19 +145,9 @@ async fn main() {
                         .is_some_and(|d| CallbackKey::is_packed_data(d))
                 })
                 .filter_async(|q: CallbackQuery, state: Arc<BotState>| {
-                    bot::filter_callback_by(q, state, bot::admin::is_admin)
+                    filter_callback_by(q, state, bot::admin::is_admin)
                 })
-                .endpoint(
-                    |bot, q, storage: Arc<InMemStore<CallbackKey, AdminCommand>>, state| {
-                        bot::callback_action_handler(
-                            bot,
-                            q,
-                            storage,
-                            state,
-                            bot::admin::admin_command_handler,
-                        )
-                    },
-                ),
+                .endpoint(admin_callback_command_handler),
         )
         // Plain text messages (non-command) and unhandled commands (e.g. unauthorized users).
         .branch(

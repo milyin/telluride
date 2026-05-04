@@ -1,5 +1,5 @@
 use crate::api;
-use crate::bot::get_username;
+use crate::bot::{callback_command_handler, get_username};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
 use std::sync::Arc;
@@ -26,11 +26,7 @@ pub enum ImpersonateCommand {
 
 impl telluride::command::CallbackBitcode for ImpersonateCommand {}
 
-pub async fn is_impersonate(
-    username: TelegramName,
-    chat_id: ChatId,
-    state: Arc<BotState>,
-) -> bool {
+pub async fn is_impersonate(username: TelegramName, chat_id: ChatId, state: Arc<BotState>) -> bool {
     matches!(
         state.get_effective_role(username.as_str(), chat_id).await,
         Some(UserEffectiveRole::Impersonate(..))
@@ -49,7 +45,9 @@ pub async fn impersonate_command_handler(
     let Some(username) = get_username(&msg) else {
         return Ok(());
     };
-    let Some(UserEffectiveRole::Impersonate(teacher, _)) = state.get_effective_role(&username, msg.chat.id).await else {
+    let Some(UserEffectiveRole::Impersonate(teacher, _)) =
+        state.get_effective_role(&username, msg.chat.id).await
+    else {
         return Ok(());
     };
 
@@ -58,9 +56,7 @@ pub async fn impersonate_command_handler(
         .await;
 
     let result = match cmd {
-        ImpersonateCommand::Start => {
-            api::common::start(&bot, msg.chat.id, &username, &state).await
-        }
+        ImpersonateCommand::Start => api::common::start(&bot, msg.chat.id, &username, &state).await,
         ImpersonateCommand::Help => api::impersonate::help(&bot, msg.chat.id).await,
         ImpersonateCommand::Schedule => api::impersonate::schedule(&bot, msg.chat.id, &state).await,
         ImpersonateCommand::Book => api::student::book(&bot, msg.chat.id).await,
@@ -80,4 +76,13 @@ pub async fn impersonate_command_handler(
     })?;
 
     Ok(())
+}
+
+pub async fn impersonate_callback_command_handler(
+    bot: Bot,
+    q: CallbackQuery,
+    state: Arc<BotState>,
+    callback_storage: Arc<InMemStore<CallbackKey, ImpersonateCommand>>,
+) -> ResponseResult<()> {
+    callback_command_handler(bot, q, callback_storage, state, impersonate_command_handler).await
 }

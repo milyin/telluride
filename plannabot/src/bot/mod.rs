@@ -48,11 +48,7 @@ where
     is_role(username, msg.chat.id, state).await
 }
 
-pub async fn filter_callback_by<F, Fut>(
-    q: CallbackQuery,
-    state: Arc<BotState>,
-    is_role: F,
-) -> bool
+pub async fn filter_callback_by<F, Fut>(q: CallbackQuery, state: Arc<BotState>, is_role: F) -> bool
 where
     F: FnOnce(TelegramName, ChatId, Arc<BotState>) -> Fut,
     Fut: Future<Output = bool>,
@@ -72,7 +68,7 @@ where
 /// real user into the attached message (the bot sent it, so `msg.from` would
 /// otherwise be the bot), and forwards to the supplied `handler` — the same
 /// function used for the corresponding text-command branch.
-pub async fn callback_action_handler<Cmd, F, Fut>(
+pub async fn callback_command_handler<Cmd, F, Fut>(
     bot: Bot,
     q: CallbackQuery,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
