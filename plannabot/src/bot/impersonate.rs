@@ -1,5 +1,5 @@
 use crate::api;
-use crate::api::traits::BookCommand;
+use crate::api::traits::{BookCommand, BookParams};
 use crate::bot::get_username;
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -30,8 +30,8 @@ pub enum ImpersonateCommand {
 impl telluride::command::CallbackBitcode for ImpersonateCommand {}
 
 impl BookCommand for ImpersonateCommand {
-    fn book(teacher_name: String) -> Self {
-        ImpersonateCommand::Book(teacher_name)
+    fn book(params: BookParams) -> Self {
+        ImpersonateCommand::Book(params.to_string())
     }
 }
 

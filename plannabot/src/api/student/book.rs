@@ -1,63 +1,25 @@
-use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime};
 use humantime::Duration;
-use telluride::command::{CallbackKey, InlineKeyboardButtonPackedExt, CallbackBitcode};
+use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::{InMemStore, UserProxy};
 use telluride::markdown::MarkdownStringMessage;
-use telluride::utils::split_with_screened_spaces;
 use telluride::{markdown_format, markdown_string};
 use teloxide::prelude::*;
-use teloxide::types::InlineKeyboardButton;
+use teloxide::types::{InlineKeyboardButton, UserId};
 
-use crate::api::traits::BookCommand;
+use crate::api::traits::{BookCommand, BookParams};
 use crate::models::TelegramName;
 use crate::state::BotState;
-
-enum BookParams {
-    L0(),
-    L1(TelegramName),
-    L2(TelegramName, NaiveDate),
-    L3(TelegramName, NaiveDate, NaiveTime),
-    L4(TelegramName, NaiveDate, NaiveTime, Duration),
-}
-
-impl FromStr for BookParams {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        let parts = split_with_screened_spaces(s);
-        let Some(teacher) = parts.get(0) else {
-            return Ok(BookParams::L0());
-        };
-        let teacher = teacher.parse()?;
-        let Some(date) = parts.get(1) else {
-            return Ok(BookParams::L1(teacher));
-        };
-        let date = date.parse()?;
-        let Some(hour) = parts.get(2) else {
-            return Ok(BookParams::L2(teacher, date));
-        };
-        let hour = hour.parse()?;
-        let Some(duration) = parts.get(3) else {
-            return Ok(BookParams::L3(teacher, date, hour));
-        };
-        let duration = duration.parse()?;
-        let Some(extra) = parts.get(4) else {
-            return Ok(BookParams::L4(teacher, date, hour, duration));
-        };
-        Err(anyhow::anyhow!("extra parameter: {}", extra))
-    }
-}
 
 pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
     bot: &Bot,
     chat_id: ChatId,
     params: &str,
     state: &Arc<BotState>,
-    user_id: teloxide::types::UserId,
+    user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
 ) -> Result<()> {
     let params: BookParams = params.parse()?;
@@ -76,7 +38,7 @@ async fn book_0<Cmd: BookCommand + CallbackBitcode + 'static>(
     bot: &Bot,
     chat_id: ChatId,
     state: &Arc<BotState>,
-    user_id: teloxide::types::UserId,
+    user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
 ) -> Result<()> {
     show_teacher_selection(bot, chat_id, user_id, callback_storage, state).await
@@ -85,7 +47,7 @@ async fn book_0<Cmd: BookCommand + CallbackBitcode + 'static>(
 async fn show_teacher_selection<Cmd: BookCommand + CallbackBitcode + 'static>(
     bot: &Bot,
     chat_id: ChatId,
-    user_id: teloxide::types::UserId,
+    user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
     state: &Arc<BotState>,
 ) -> Result<()> {
@@ -105,7 +67,7 @@ async fn show_teacher_selection<Cmd: BookCommand + CallbackBitcode + 'static>(
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     for name in teacher_names {
         let label = format!("@{}", name);
-        let cmd = Cmd::book(name);
+        let cmd = Cmd::book(BookParams::L1(name.parse()?));
         let key = CallbackKey::pack(cmd, &user_proxy).await;
         let button = InlineKeyboardButton::callback_key(label, &key);
         buttons.push(vec![button]);
