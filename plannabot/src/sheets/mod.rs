@@ -10,9 +10,9 @@
 
 use std::collections::HashMap;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use chrono::{DateTime, Utc};
-use google_sheets4::{api, hyper, hyper_rustls, oauth2, FieldMask, Sheets};
+use google_sheets4::{FieldMask, Sheets, api, hyper, hyper_rustls, oauth2};
 use serde::Deserialize;
 
 use crate::models::SheetParseError;
@@ -25,7 +25,6 @@ pub mod students;
 pub mod teachers;
 pub mod worktime;
 
-
 // ---------------------------------------------------------------------------
 // Sheet tab names
 // ---------------------------------------------------------------------------
@@ -34,7 +33,7 @@ pub const SHEET_STUDENTS: &str = "Students";
 pub const SHEET_TEACHERS: &str = "Teachers";
 pub const SHEET_SCHEDULE: &str = "Schedule";
 pub const SHEET_PAYMENTS: &str = "Payments";
-pub const SHEET_ASSIGNMENTS: &str = "Assignments";
+pub const SHEET_PAIRINGS: &str = "Assignments";
 pub const SHEET_WORKTIME: &str = "Worktime";
 
 // ---------------------------------------------------------------------------
@@ -49,7 +48,7 @@ pub const SCHEDULE_COLS: &[&str] = crate::models::ScheduleEntry::SHEET_COLS;
 
 pub const PAYMENTS_COLS: &[&str] = crate::models::Payment::SHEET_COLS;
 
-pub const ASSIGNMENTS_COLS: &[&str] = crate::models::TeacherStudentAssignment::SHEET_COLS;
+pub const PAIRINGS_COLS: &[&str] = crate::models::TeacherStudentAssignment::SHEET_COLS;
 
 pub const WORKTIME_COLS: &[&str] = crate::models::Worktime::SHEET_COLS;
 
@@ -72,7 +71,6 @@ pub fn col_index_to_letter(index: usize) -> String {
     }
     result
 }
-
 
 /// Infers a Google Sheets number format for a column name.
 ///
@@ -153,11 +151,7 @@ impl SheetSchema {
     /// Returns `Some(&str)` if the cell is non-empty, `None` otherwise.
     pub fn get_optional<'a>(&self, row: &'a [String], col_name: &str) -> Option<&'a str> {
         let s = self.get_str(row, col_name);
-        if s.is_empty() {
-            None
-        } else {
-            Some(s)
-        }
+        if s.is_empty() { None } else { Some(s) }
     }
 
     /// Reads `col_name` from `row`, parses it as `T` using [`from_sheet::FromSheet`],
@@ -590,7 +584,7 @@ impl SheetsClient {
         self.ensure_sheet(SHEET_TEACHERS, TEACHERS_COLS).await?;
         self.ensure_sheet(SHEET_SCHEDULE, SCHEDULE_COLS).await?;
         self.ensure_sheet(SHEET_PAYMENTS, PAYMENTS_COLS).await?;
-        self.ensure_sheet(SHEET_ASSIGNMENTS, ASSIGNMENTS_COLS).await?;
+        self.ensure_sheet(SHEET_PAIRINGS, PAIRINGS_COLS).await?;
         self.ensure_sheet(SHEET_WORKTIME, WORKTIME_COLS).await?;
         Ok(())
     }

@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 
-use super::{SheetSchema, SheetsClient, SHEET_ASSIGNMENTS};
+use super::{SHEET_PAIRINGS, SheetSchema, SheetsClient};
 use crate::models::{SheetParseError, TeacherStudentAssignment, TelegramName};
 
 impl SheetsClient {
@@ -12,7 +12,7 @@ impl SheetsClient {
     pub async fn get_assignments(
         &self,
     ) -> Result<(Vec<TeacherStudentAssignment>, Vec<SheetParseError>)> {
-        let range = format!("{SHEET_ASSIGNMENTS}!A:Z");
+        let range = format!("{SHEET_PAIRINGS}!A:Z");
         let rows = self
             .get_values(&range)
             .await
@@ -22,7 +22,7 @@ impl SheetsClient {
             return Ok((vec![], vec![]));
         }
 
-        let schema = SheetSchema::new(SHEET_ASSIGNMENTS.to_string(), rows[0].clone());
+        let schema = SheetSchema::new(SHEET_PAIRINGS.to_string(), rows[0].clone());
 
         let mut assignments: Vec<TeacherStudentAssignment> = Vec::new();
         let mut errors: Vec<SheetParseError> = Vec::new();
@@ -34,17 +34,27 @@ impl SheetsClient {
 
             let row_num = row_idx + 1;
 
-            let Some(teacher_telegram) = schema.get_field::<Option<TelegramName>>(row, row_num, TeacherStudentAssignment::TEACHER_TELEGRAM, &mut errors) else {
+            let Some(teacher_telegram) = schema.get_field::<Option<TelegramName>>(
+                row,
+                row_num,
+                TeacherStudentAssignment::TEACHER_TELEGRAM,
+                &mut errors,
+            ) else {
                 continue;
             };
-            let Some(student_telegram) = schema.get_field::<Option<TelegramName>>(row, row_num, TeacherStudentAssignment::STUDENT_TELEGRAM, &mut errors) else {
+            let Some(student_telegram) = schema.get_field::<Option<TelegramName>>(
+                row,
+                row_num,
+                TeacherStudentAssignment::STUDENT_TELEGRAM,
+                &mut errors,
+            ) else {
                 continue;
             };
 
             assignments.push(TeacherStudentAssignment {
                 teacher_telegram,
                 student_telegram,
-                custom: schema.get_custom(row, super::ASSIGNMENTS_COLS),
+                custom: schema.get_custom(row, super::PAIRINGS_COLS),
             });
         }
 

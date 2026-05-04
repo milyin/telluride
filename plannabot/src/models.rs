@@ -201,10 +201,10 @@ sheet_struct! {
 }
 
 sheet_struct! {
-    /// A teacher ↔ student assignment row.
+    /// A teacher ↔ student pairing row.
     /// Multiple students can be assigned to a single teacher.
     #[derive(Debug, Clone, PartialEq)]
-    pub struct TeacherStudentAssignment {
+    pub struct TeacherStudentPairing {
         pub teacher_telegram: TelegramName,
         pub student_telegram: TelegramName,
     }
