@@ -117,12 +117,16 @@ where
             };
             InlineKeyboardButton::callback_key(label, &date_keys[(day - 1) as usize])
         },
-        |leading, _trailing| {
-            if leading >= 2 {
-                (vec![prev_btn.clone(), next_btn.clone()], vec![])
-            } else {
-                (vec![], vec![prev_btn.clone(), next_btn.clone()])
+        |leading, trailing| {
+            let total = leading + trailing;
+            let mut all: Vec<InlineKeyboardButton> =
+                (0..total).map(|_| InlineKeyboardButton::callback(" ", "noop")).collect();
+            if total > 0 {
+                all[0] = prev_btn.clone();
+                all[total - 1] = next_btn.clone();
             }
+            let trailing_btns = all.split_off(leading);
+            (all, trailing_btns)
         },
     );
 
