@@ -3,10 +3,12 @@ use crate::bot::get_username;
 use crate::models::UserRole;
 use crate::state::BotState;
 use std::sync::Arc;
+use telluride::command::CallbackKey;
+use telluride::data_store::InMemStore;
 use teloxide::prelude::*;
 use teloxide::utils::command::BotCommands;
 
-#[derive(BotCommands, Clone, Debug)]
+#[derive(BotCommands, Clone, Debug, Hash, bitcode::Encode, bitcode::Decode)]
 #[command(rename_rule = "lowercase", description = "Impersonation commands:")]
 pub enum ImpersonateCommand {
     #[command(description = "exit impersonation and restart the bot")]
@@ -21,6 +23,8 @@ pub enum ImpersonateCommand {
     Quit,
 }
 
+impl telluride::command::CallbackBitcode for ImpersonateCommand {}
+
 /// Returns true if the message sender is a teacher currently in impersonation mode.
 pub async fn is_impersonate(msg: Message, state: Arc<BotState>) -> bool {
     let Some(username) = get_username(&msg) else {
@@ -32,11 +36,31 @@ pub async fn is_impersonate(msg: Message, state: Arc<BotState>) -> bool {
     state.get_impersonation(msg.chat.id).await.is_some()
 }
 
+/// Returns true if the callback query sender is a teacher currently in impersonation mode.
+pub async fn is_impersonate_callback(q: CallbackQuery, state: Arc<BotState>) -> bool {
+    let Some(username) = q
+        .from
+        .username
+        .as_deref()
+        .map(|u| u.trim_start_matches('@').to_lowercase())
+    else {
+        return false;
+    };
+    if !matches!(state.get_role(&username).await, Some(UserRole::Teacher(_))) {
+        return false;
+    }
+    let Some(chat_id) = q.message.as_ref().map(|m| m.chat().id) else {
+        return false;
+    };
+    state.get_impersonation(chat_id).await.is_some()
+}
+
 pub async fn impersonate_command_handler(
     bot: Bot,
     msg: Message,
     cmd: ImpersonateCommand,
     state: Arc<BotState>,
+    _callback_storage: Arc<InMemStore<CallbackKey, ImpersonateCommand>>,
 ) -> ResponseResult<()> {
     let _ = state.refresh_if_needed().await;
 

@@ -3,22 +3,12 @@ pub mod impersonate;
 pub mod student;
 pub mod teacher;
 
-use crate::api;
-use crate::models::UserRole;
 use crate::state::BotState;
+use crate::models::UserRole;
 use std::sync::Arc;
 use telluride::command::CallbackKey;
 use telluride::data_store::{InMemStore, UserProxy};
 use teloxide::prelude::*;
-
-/// Callback actions triggered by inline keyboard buttons.
-#[derive(Clone, Debug, Hash, PartialEq, Eq, bitcode::Encode, bitcode::Decode)]
-pub enum Action {
-    /// Impersonate the student with the given telegram name (without '@', lowercase).
-    ImpersonateStudent(String),
-}
-
-impl telluride::command::CallbackBitcode for Action {}
 
 /// Extracts the Telegram username from a message sender.
 /// Returns the username without '@', converted to lowercase.
@@ -29,18 +19,24 @@ pub fn get_username(msg: &Message) -> Option<String> {
         .map(|username| username.trim_start_matches('@').to_lowercase())
 }
 
-/// Teloxide endpoint handler for inline keyboard callback queries.
+/// Generic teloxide endpoint handler for inline keyboard callback queries.
 ///
-/// Unpacks the action from the callback data using [`CallbackKey::unpack`] and
-/// dispatches to the appropriate API function. Only teachers are permitted to
-/// trigger impersonation callbacks.
-pub async fn callback_action_handler(
+/// Unpacks a command of type `Cmd` from the callback data, substitutes the
+/// real user into the attached message (the bot sent it, so `msg.from` would
+/// otherwise be the bot), and forwards to the supplied `handler` — the same
+/// function used for the corresponding text-command branch.
+pub async fn callback_action_handler<Cmd, F, Fut>(
     bot: Bot,
     q: CallbackQuery,
-    callback_storage: Arc<InMemStore<CallbackKey, Action>>,
+    callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
     state: Arc<BotState>,
-) -> ResponseResult<()> {
-    // Acknowledge the button press immediately to remove the loading indicator.
+    handler: F,
+) -> ResponseResult<()>
+where
+    Cmd: telluride::command::CallbackBitcode + 'static,
+    F: Fn(Bot, Message, Cmd, Arc<BotState>, Arc<InMemStore<CallbackKey, Cmd>>) -> Fut,
+    Fut: std::future::Future<Output = ResponseResult<()>> + Send,
+{
     bot.answer_callback_query(q.id.clone()).await?;
 
     let data = match &q.data {
@@ -48,63 +44,24 @@ pub async fn callback_action_handler(
         None => return Ok(()),
     };
 
-    // Unpack the stored action for this user.
     let user_proxy = UserProxy::new(callback_storage.clone(), q.from.id);
-    let action = match CallbackKey::unpack::<Action, _>(data, &user_proxy).await {
-        Ok(a) => a,
+    let cmd = match CallbackKey::unpack::<Cmd, _>(data, &user_proxy).await {
+        Ok(c) => c,
         Err(e) => {
-            log::warn!("Failed to unpack callback action: {}", e);
+            log::warn!("Failed to unpack callback: {}", e);
             return Ok(());
         }
     };
 
-    // --- Security gate: only teachers may trigger impersonation -------------
-    let username = q
-        .from
-        .username
-        .as_deref()
-        .map(|u| u.trim_start_matches('@').to_lowercase());
-    let Some(username) = username else {
-        return Ok(());
-    };
-    if !matches!(state.get_role(&username).await, Some(UserRole::Teacher(_))) {
-        log::warn!(
-            "Non-teacher @{} attempted to trigger an impersonation callback — ignored.",
-            username
-        );
-        return Ok(());
-    }
-
-    // Resolve the chat to reply in.
-    let chat_id = match q.message.as_ref().map(|m| m.chat().id) {
-        Some(id) => id,
+    // The keyboard was sent by the bot, so q.message.from == bot.
+    // Replace `from` with the real user so command handlers see the correct sender.
+    let mut msg = match q.message.as_ref().and_then(|m| m.regular_message()) {
+        Some(m) => m.clone(),
         None => return Ok(()),
     };
+    msg.from = Some(q.from.clone());
 
-    match action {
-        Action::ImpersonateStudent(student_name) => {
-            api::impersonate::impersonate(
-                &bot,
-                chat_id,
-                Some(&student_name),
-                &state,
-                q.from.id,
-                callback_storage,
-            )
-            .await
-            .map_err(|e| {
-                log::error!(
-                    "Error impersonating @{} for @{}: {}",
-                    student_name,
-                    username,
-                    e
-                );
-                teloxide::RequestError::Io(Arc::new(std::io::Error::other(e.to_string())))
-            })?;
-        }
-    }
-
-    Ok(())
+    handler(bot, msg, cmd, state, callback_storage).await
 }
 
 /// Teloxide endpoint handler for plain (non-command) text messages.

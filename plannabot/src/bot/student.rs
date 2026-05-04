@@ -3,10 +3,12 @@ use crate::bot::get_username;
 use crate::models::UserRole;
 use crate::state::BotState;
 use std::sync::Arc;
+use telluride::command::CallbackKey;
+use telluride::data_store::InMemStore;
 use teloxide::prelude::*;
 use teloxide::utils::command::BotCommands;
 
-#[derive(BotCommands, Clone, Debug)]
+#[derive(BotCommands, Clone, Debug, Hash, bitcode::Encode, bitcode::Decode)]
 #[command(rename_rule = "lowercase", description = "Student commands:")]
 pub enum StudentCommand {
     #[command(description = "start the bot")]
@@ -19,9 +21,24 @@ pub enum StudentCommand {
     Book,
 }
 
+impl telluride::command::CallbackBitcode for StudentCommand {}
+
 /// Returns true if the message sender has a Student role.
 pub async fn is_student(msg: Message, state: Arc<BotState>) -> bool {
     let Some(username) = get_username(&msg) else {
+        return false;
+    };
+    matches!(state.get_role(&username).await, Some(UserRole::Student(_)))
+}
+
+/// Returns true if the callback query sender has a Student role.
+pub async fn is_student_callback(q: CallbackQuery, state: Arc<BotState>) -> bool {
+    let Some(username) = q
+        .from
+        .username
+        .as_deref()
+        .map(|u| u.trim_start_matches('@').to_lowercase())
+    else {
         return false;
     };
     matches!(state.get_role(&username).await, Some(UserRole::Student(_)))
@@ -32,6 +49,7 @@ pub async fn student_command_handler(
     msg: Message,
     cmd: StudentCommand,
     state: Arc<BotState>,
+    _callback_storage: Arc<InMemStore<CallbackKey, StudentCommand>>,
 ) -> ResponseResult<()> {
     let _ = state.refresh_if_needed().await;
 

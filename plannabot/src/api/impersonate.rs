@@ -1,5 +1,5 @@
 use crate::api;
-use crate::bot::Action;
+use crate::bot::teacher::TeacherCommand;
 use crate::models::{Teacher, UserRole};
 use crate::state::BotState;
 use anyhow::Result;
@@ -22,7 +22,7 @@ pub async fn impersonate(
     student_name: Option<&str>,
     state: &Arc<BotState>,
     user_id: UserId,
-    callback_storage: Arc<InMemStore<CallbackKey, Action>>,
+    callback_storage: Arc<InMemStore<CallbackKey, TeacherCommand>>,
 ) -> Result<()> {
     if state.get_impersonation(chat_id).await.is_some() {
         bot.send_message(
@@ -103,7 +103,7 @@ async fn show_student_selection(
     bot: &Bot,
     chat_id: ChatId,
     user_id: UserId,
-    callback_storage: Arc<InMemStore<CallbackKey, Action>>,
+    callback_storage: Arc<InMemStore<CallbackKey, TeacherCommand>>,
     state: &Arc<BotState>,
 ) -> Result<()> {
     let student_names = state.get_student_names().await;
@@ -122,7 +122,7 @@ async fn show_student_selection(
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     for name in student_names {
         let label = format!("@{}", name);
-        let key = CallbackKey::pack(Action::ImpersonateStudent(name), &user_proxy).await;
+        let key = CallbackKey::pack(TeacherCommand::Impersonate(name), &user_proxy).await;
         let button = InlineKeyboardButton::callback_key(label, &key);
         buttons.push(vec![button]);
     }

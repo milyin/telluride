@@ -10,7 +10,10 @@ use telluride::command::CallbackKey;
 use telluride::data_store::InMemStore;
 use teloxide::prelude::*;
 
-use bot::Action;
+use bot::admin::AdminCommand;
+use bot::impersonate::ImpersonateCommand;
+use bot::student::StudentCommand;
+use bot::teacher::TeacherCommand;
 use config::Config;
 use sheets::SheetsClient;
 use state::BotState;
@@ -45,47 +48,119 @@ async fn main() {
 
     let bot = Bot::from_env();
 
-    // Per-user callback action storage for inline keyboard buttons.
-    let callback_storage = Arc::new(InMemStore::<CallbackKey, Action>::new());
+    // Per-command-type callback storages for inline keyboard buttons.
+    let student_storage = Arc::new(InMemStore::<CallbackKey, StudentCommand>::new());
+    let teacher_storage = Arc::new(InMemStore::<CallbackKey, TeacherCommand>::new());
+    let impersonate_storage = Arc::new(InMemStore::<CallbackKey, ImpersonateCommand>::new());
+    let admin_storage = Arc::new(InMemStore::<CallbackKey, AdminCommand>::new());
 
     let handler = dptree::entry()
-        // Student commands (/start, /help, /schedule).
+        // Student commands (/start, /help, /schedule, /book).
         .branch(
             Update::filter_message()
                 .filter_async(bot::student::is_student)
-                .filter_command::<bot::student::StudentCommand>()
+                .filter_command::<StudentCommand>()
                 .endpoint(bot::student::student_command_handler),
         )
         // Teacher commands (/start, /help, /schedule, /impersonate, /admin, /refresh).
         .branch(
             Update::filter_message()
                 .filter_async(bot::teacher::is_teacher)
-                .filter_command::<bot::teacher::TeacherCommand>()
+                .filter_command::<TeacherCommand>()
                 .endpoint(bot::teacher::teacher_command_handler),
         )
-        // Impersonation mode commands (/start, /help, /schedule, /quit).
+        // Impersonation mode commands (/start, /help, /schedule, /book, /quit).
         .branch(
             Update::filter_message()
                 .filter_async(bot::impersonate::is_impersonate)
-                .filter_command::<bot::impersonate::ImpersonateCommand>()
+                .filter_command::<ImpersonateCommand>()
                 .endpoint(bot::impersonate::impersonate_command_handler),
         )
         // Admin mode commands (/start, /help, /status, /refresh, /quit).
         .branch(
             Update::filter_message()
                 .filter_async(bot::admin::is_admin)
-                .filter_command::<bot::admin::AdminCommand>()
+                .filter_command::<AdminCommand>()
                 .endpoint(bot::admin::admin_command_handler),
         )
-        // Inline keyboard button presses (student selection for /impersonate).
+        // Student inline keyboard callbacks.
         .branch(
             Update::filter_callback_query()
                 .filter(|q: CallbackQuery| {
-                    q.data
-                        .as_ref()
-                        .is_some_and(|data| CallbackKey::is_packed_data(data))
+                    q.data.as_ref().is_some_and(|d| CallbackKey::is_packed_data(d))
                 })
-                .endpoint(bot::callback_action_handler),
+                .filter_async(bot::student::is_student_callback)
+                .endpoint(
+                    |bot, q, storage: Arc<InMemStore<CallbackKey, StudentCommand>>, state| {
+                        bot::callback_action_handler(
+                            bot,
+                            q,
+                            storage,
+                            state,
+                            bot::student::student_command_handler,
+                        )
+                    },
+                ),
+        )
+        // Teacher inline keyboard callbacks (e.g. student selection for /impersonate).
+        .branch(
+            Update::filter_callback_query()
+                .filter(|q: CallbackQuery| {
+                    q.data.as_ref().is_some_and(|d| CallbackKey::is_packed_data(d))
+                })
+                .filter_async(bot::teacher::is_teacher_callback)
+                .endpoint(
+                    |bot, q, storage: Arc<InMemStore<CallbackKey, TeacherCommand>>, state| {
+                        bot::callback_action_handler(
+                            bot,
+                            q,
+                            storage,
+                            state,
+                            bot::teacher::teacher_command_handler,
+                        )
+                    },
+                ),
+        )
+        // Impersonation mode inline keyboard callbacks.
+        .branch(
+            Update::filter_callback_query()
+                .filter(|q: CallbackQuery| {
+                    q.data.as_ref().is_some_and(|d| CallbackKey::is_packed_data(d))
+                })
+                .filter_async(bot::impersonate::is_impersonate_callback)
+                .endpoint(
+                    |bot,
+                     q,
+                     storage: Arc<InMemStore<CallbackKey, ImpersonateCommand>>,
+                     state| {
+                        bot::callback_action_handler(
+                            bot,
+                            q,
+                            storage,
+                            state,
+                            bot::impersonate::impersonate_command_handler,
+                        )
+                    },
+                ),
+        )
+        // Admin mode inline keyboard callbacks.
+        .branch(
+            Update::filter_callback_query()
+                .filter(|q: CallbackQuery| {
+                    q.data.as_ref().is_some_and(|d| CallbackKey::is_packed_data(d))
+                })
+                .filter_async(bot::admin::is_admin_callback)
+                .endpoint(
+                    |bot, q, storage: Arc<InMemStore<CallbackKey, AdminCommand>>, state| {
+                        bot::callback_action_handler(
+                            bot,
+                            q,
+                            storage,
+                            state,
+                            bot::admin::admin_command_handler,
+                        )
+                    },
+                ),
         )
         // Plain text messages (non-command) and unhandled commands (e.g. unauthorized users).
         .branch(
@@ -100,7 +175,13 @@ async fn main() {
         });
 
     Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![state, callback_storage])
+        .dependencies(dptree::deps![
+            state,
+            student_storage,
+            teacher_storage,
+            impersonate_storage,
+            admin_storage
+        ])
         .enable_ctrlc_handler()
         .build()
         .dispatch()

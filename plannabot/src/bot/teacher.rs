@@ -1,5 +1,5 @@
 use crate::api;
-use crate::bot::{get_username, Action};
+use crate::bot::get_username;
 use crate::models::UserRole;
 use crate::state::BotState;
 use std::sync::Arc;
@@ -9,7 +9,7 @@ use teloxide::prelude::*;
 use teloxide::types::UserId;
 use teloxide::utils::command::BotCommands;
 
-#[derive(BotCommands, Clone, Debug)]
+#[derive(BotCommands, Clone, Debug, Hash, bitcode::Encode, bitcode::Decode)]
 #[command(rename_rule = "lowercase", description = "Teacher commands:")]
 pub enum TeacherCommand {
     #[command(description = "start the bot")]
@@ -28,6 +28,8 @@ pub enum TeacherCommand {
     Refresh,
 }
 
+impl telluride::command::CallbackBitcode for TeacherCommand {}
+
 /// Returns true if the message sender is a teacher in normal mode
 /// (not in impersonation mode and not in admin mode).
 pub async fn is_teacher(msg: Message, state: Arc<BotState>) -> bool {
@@ -41,12 +43,31 @@ pub async fn is_teacher(msg: Message, state: Arc<BotState>) -> bool {
     !state.is_in_admin_mode(chat_id).await && state.get_impersonation(chat_id).await.is_none()
 }
 
+/// Returns true if the callback query sender is a teacher in normal mode.
+pub async fn is_teacher_callback(q: CallbackQuery, state: Arc<BotState>) -> bool {
+    let Some(username) = q
+        .from
+        .username
+        .as_deref()
+        .map(|u| u.trim_start_matches('@').to_lowercase())
+    else {
+        return false;
+    };
+    if !matches!(state.get_role(&username).await, Some(UserRole::Teacher(_))) {
+        return false;
+    }
+    let Some(chat_id) = q.message.as_ref().map(|m| m.chat().id) else {
+        return false;
+    };
+    !state.is_in_admin_mode(chat_id).await && state.get_impersonation(chat_id).await.is_none()
+}
+
 pub async fn teacher_command_handler(
     bot: Bot,
     msg: Message,
     cmd: TeacherCommand,
     state: Arc<BotState>,
-    callback_storage: Arc<InMemStore<CallbackKey, Action>>,
+    callback_storage: Arc<InMemStore<CallbackKey, TeacherCommand>>,
 ) -> ResponseResult<()> {
     let _ = state.refresh_if_needed().await;
 

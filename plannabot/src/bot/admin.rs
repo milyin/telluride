@@ -3,10 +3,12 @@ use crate::bot::get_username;
 use crate::models::UserRole;
 use crate::state::BotState;
 use std::sync::Arc;
+use telluride::command::CallbackKey;
+use telluride::data_store::InMemStore;
 use teloxide::prelude::*;
 use teloxide::utils::command::BotCommands;
 
-#[derive(BotCommands, Clone, Debug)]
+#[derive(BotCommands, Clone, Debug, Hash, bitcode::Encode, bitcode::Decode)]
 #[command(rename_rule = "lowercase", description = "Admin commands:")]
 pub enum AdminCommand {
     #[command(description = "exit admin mode and restart the bot")]
@@ -21,6 +23,8 @@ pub enum AdminCommand {
     Quit,
 }
 
+impl telluride::command::CallbackBitcode for AdminCommand {}
+
 /// Returns true if the message sender is a teacher with admin=true currently in admin mode.
 pub async fn is_admin(msg: Message, state: Arc<BotState>) -> bool {
     let Some(username) = get_username(&msg) else {
@@ -33,11 +37,32 @@ pub async fn is_admin(msg: Message, state: Arc<BotState>) -> bool {
     is_admin && state.is_in_admin_mode(msg.chat.id).await
 }
 
+/// Returns true if the callback query sender is a teacher with admin=true in admin mode.
+pub async fn is_admin_callback(q: CallbackQuery, state: Arc<BotState>) -> bool {
+    let Some(username) = q
+        .from
+        .username
+        .as_deref()
+        .map(|u| u.trim_start_matches('@').to_lowercase())
+    else {
+        return false;
+    };
+    let is_admin = matches!(
+        state.get_role(&username).await,
+        Some(UserRole::Teacher(ref t)) if t.admin
+    );
+    let Some(chat_id) = q.message.as_ref().map(|m| m.chat().id) else {
+        return false;
+    };
+    is_admin && state.is_in_admin_mode(chat_id).await
+}
+
 pub async fn admin_command_handler(
     bot: Bot,
     msg: Message,
     cmd: AdminCommand,
     state: Arc<BotState>,
+    _callback_storage: Arc<InMemStore<CallbackKey, AdminCommand>>,
 ) -> ResponseResult<()> {
     let _ = state.refresh_if_needed().await;
 
