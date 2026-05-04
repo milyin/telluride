@@ -20,6 +20,7 @@ serde_json.workspace = true
 dotenv.workspace = true
 bitcode.workspace = true
 paste.workspace = true
+humantime.workspace = true
 
 [[bin]]
 name = "plannabot"
