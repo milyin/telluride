@@ -10,7 +10,7 @@ use std::sync::Arc;
 use telluride::command::CallbackKey;
 use telluride::data_store::{InMemStore, UserProxy};
 use teloxide::prelude::*;
-use teloxide::types::ChatId;
+use teloxide::types::{ChatId, MessageId};
 
 /// Extracts the Telegram username from a message sender.
 /// Returns the username without '@', converted to lowercase.
@@ -77,7 +77,7 @@ pub async fn callback_command_handler<Cmd, F, Fut>(
 ) -> ResponseResult<()>
 where
     Cmd: telluride::command::CallbackBitcode + 'static,
-    F: Fn(Bot, Message, Cmd, Arc<BotState>, Arc<InMemStore<CallbackKey, Cmd>>) -> Fut,
+    F: Fn(Bot, Message, Cmd, Arc<BotState>, Arc<InMemStore<CallbackKey, Cmd>>, Option<MessageId>) -> Fut,
     Fut: std::future::Future<Output = ResponseResult<()>> + Send,
 {
     bot.answer_callback_query(q.id.clone()).await?;
@@ -102,9 +102,10 @@ where
         Some(m) => m.clone(),
         None => return Ok(()),
     };
+    let message_id = Some(msg.id);
     msg.from = Some(q.from.clone());
 
-    handler(bot, msg, cmd, state, callback_storage).await
+    handler(bot, msg, cmd, state, callback_storage, message_id).await
 }
 
 /// Teloxide endpoint handler for plain (non-command) text messages.

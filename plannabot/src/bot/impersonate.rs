@@ -1,13 +1,13 @@
 use crate::api;
 use crate::api::traits::{BookCommand, BookParams};
-use crate::bot::get_username;
+use crate::bot::{callback_command_handler, get_username};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
 use std::sync::Arc;
 use telluride::command::CallbackKey;
 use telluride::data_store::InMemStore;
 use teloxide::prelude::*;
-use teloxide::types::ChatId;
+use teloxide::types::{ChatId, MessageId};
 use teloxide::utils::command::BotCommands;
 
 #[derive(BotCommands, Clone, Debug, Hash, bitcode::Encode, bitcode::Decode)]
@@ -42,12 +42,13 @@ pub async fn is_impersonate(username: TelegramName, chat_id: ChatId, state: Arc<
     )
 }
 
-pub async fn impersonate_command_handler(
+async fn impersonate_handle(
     bot: Bot,
     msg: Message,
     cmd: ImpersonateCommand,
     state: Arc<BotState>,
     callback_storage: Arc<InMemStore<CallbackKey, ImpersonateCommand>>,
+    message_id: Option<MessageId>,
 ) -> ResponseResult<()> {
     let _ = state.refresh_if_needed().await;
 
@@ -69,7 +70,7 @@ pub async fn impersonate_command_handler(
         ImpersonateCommand::Help => api::impersonate::help(&bot, msg.chat.id).await,
         ImpersonateCommand::Schedule => api::impersonate::schedule(&bot, msg.chat.id, &state).await,
         ImpersonateCommand::Book(params) => {
-            api::student::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, callback_storage).await
+            api::student::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, callback_storage, message_id).await
         }
         ImpersonateCommand::Quit => {
             api::impersonate::quit(&bot, msg.chat.id, &teacher, &state).await
@@ -89,33 +90,23 @@ pub async fn impersonate_command_handler(
     Ok(())
 }
 
+pub async fn impersonate_command_handler(
+    bot: Bot,
+    msg: Message,
+    cmd: ImpersonateCommand,
+    state: Arc<BotState>,
+    callback_storage: Arc<InMemStore<CallbackKey, ImpersonateCommand>>,
+) -> ResponseResult<()> {
+    impersonate_handle(bot, msg, cmd, state, callback_storage, None).await
+}
+
 pub async fn impersonate_callback_command_handler(
     bot: Bot,
     q: CallbackQuery,
     state: Arc<BotState>,
     callback_storage: Arc<InMemStore<CallbackKey, ImpersonateCommand>>,
 ) -> ResponseResult<()> {
-    bot.answer_callback_query(q.id.clone()).await?;
-
-    let data = match &q.data {
-        Some(d) => d,
-        None => return Ok(()),
-    };
-
-    let user_proxy = telluride::data_store::UserProxy::new(callback_storage.clone(), q.from.id);
-    let cmd = match CallbackKey::unpack::<ImpersonateCommand, _>(data, &user_proxy).await {
-        Ok(c) => c,
-        Err(e) => {
-            log::warn!("Failed to unpack callback: {}", e);
-            return Ok(());
-        }
-    };
-
-    let mut msg = match q.message.as_ref().and_then(|m| m.regular_message()) {
-        Some(m) => m.clone(),
-        None => return Ok(()),
-    };
-    msg.from = Some(q.from.clone());
-
-    impersonate_command_handler(bot, msg, cmd, state, callback_storage).await
+    callback_command_handler(bot, q, callback_storage, state, |bot, msg, cmd, state, cb, message_id| {
+        Box::pin(impersonate_handle(bot, msg, cmd, state, cb, message_id))
+    }).await
 }

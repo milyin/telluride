@@ -8,7 +8,7 @@ use telluride::data_store::InMemStore;
 use telluride::markdown::MarkdownStringMessage;
 use telluride::{markdown_format, markdown_string};
 use teloxide::prelude::*;
-use teloxide::types::UserId;
+use teloxide::types::{MessageId, UserId};
 
 use crate::api::menus::{show_date_selection, show_teacher_selection};
 use crate::api::traits::{BookCommand, BookParams, SelectDate};
@@ -22,13 +22,16 @@ pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
     state: &Arc<BotState>,
     user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
+    message_id: Option<MessageId>,
 ) -> Result<()> {
     let params: BookParams = params.parse()?;
     match params {
         BookParams::L0() => book_0(bot, chat_id, state, user_id, callback_storage).await,
-        BookParams::L1(teacher) => book_1(bot, chat_id, teacher, user_id, callback_storage).await,
+        BookParams::L1(teacher) => {
+            book_1(bot, chat_id, teacher, user_id, callback_storage, message_id).await
+        }
         BookParams::L2(teacher, select) => {
-            book_2(bot, chat_id, teacher, select, user_id, callback_storage).await
+            book_2(bot, chat_id, teacher, select, user_id, callback_storage, message_id).await
         }
         BookParams::L3(teacher, date, hour) => book_3(bot, chat_id, teacher, date, hour).await,
         BookParams::L4(teacher, date, hour, duration) => {
@@ -63,10 +66,11 @@ async fn book_1<Cmd: BookCommand + CallbackBitcode + 'static>(
     teacher: TelegramName,
     user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
+    message_id: Option<MessageId>,
 ) -> Result<()> {
     let now = Local::now();
     let select = SelectDate::YearMonth(now.year(), now.month());
-    book_2(bot, chat_id, teacher, select, user_id, callback_storage).await
+    book_2(bot, chat_id, teacher, select, user_id, callback_storage, message_id).await
 }
 
 async fn book_2<Cmd: BookCommand + CallbackBitcode + 'static>(
@@ -76,6 +80,7 @@ async fn book_2<Cmd: BookCommand + CallbackBitcode + 'static>(
     select: SelectDate,
     user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
+    message_id: Option<MessageId>,
 ) -> Result<()> {
     match select {
         SelectDate::YearMonth(year, month) => {
@@ -84,7 +89,7 @@ async fn book_2<Cmd: BookCommand + CallbackBitcode + 'static>(
             show_date_selection(
                 bot,
                 chat_id,
-                None,
+                message_id,
                 year,
                 month,
                 user_id,

@@ -82,5 +82,7 @@ pub async fn admin_callback_command_handler(
     state: Arc<BotState>,
     callback_storage: Arc<InMemStore<CallbackKey, AdminCommand>>,
 ) -> ResponseResult<()> {
-    callback_command_handler(bot, q, callback_storage, state, admin_command_handler).await
+    callback_command_handler(bot, q, callback_storage, state, |bot, msg, cmd, state, cb, _| {
+        Box::pin(admin_command_handler(bot, msg, cmd, state, cb))
+    }).await
 }

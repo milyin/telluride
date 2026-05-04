@@ -7,7 +7,7 @@ use std::sync::Arc;
 use telluride::command::CallbackKey;
 use telluride::data_store::InMemStore;
 use teloxide::prelude::*;
-use teloxide::types::ChatId;
+use teloxide::types::{ChatId, MessageId};
 use teloxide::utils::command::BotCommands;
 
 #[derive(BotCommands, Clone, Debug, Hash, bitcode::Encode, bitcode::Decode)]
@@ -40,12 +40,13 @@ pub async fn is_student(username: TelegramName, chat_id: ChatId, state: Arc<BotS
     )
 }
 
-pub async fn student_command_handler(
+async fn student_handle(
     bot: Bot,
     msg: Message,
     cmd: StudentCommand,
     state: Arc<BotState>,
-    _callback_storage: Arc<InMemStore<CallbackKey, StudentCommand>>,
+    callback_storage: Arc<InMemStore<CallbackKey, StudentCommand>>,
+    message_id: Option<MessageId>,
 ) -> ResponseResult<()> {
     let _ = state.refresh_if_needed().await;
 
@@ -74,7 +75,7 @@ pub async fn student_command_handler(
             api::student::schedule(&bot, msg.chat.id, &student, &state).await
         }
         StudentCommand::Book(params) => {
-            api::student::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, _callback_storage).await
+            api::student::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, callback_storage, message_id).await
         }
     };
 
@@ -91,11 +92,23 @@ pub async fn student_command_handler(
     Ok(())
 }
 
+pub async fn student_command_handler(
+    bot: Bot,
+    msg: Message,
+    cmd: StudentCommand,
+    state: Arc<BotState>,
+    callback_storage: Arc<InMemStore<CallbackKey, StudentCommand>>,
+) -> ResponseResult<()> {
+    student_handle(bot, msg, cmd, state, callback_storage, None).await
+}
+
 pub async fn student_callback_command_handler(
     bot: Bot,
     q: CallbackQuery,
     state: Arc<BotState>,
     callback_storage: Arc<InMemStore<CallbackKey, StudentCommand>>,
 ) -> ResponseResult<()> {
-    callback_command_handler(bot, q, callback_storage, state, student_command_handler).await
+    callback_command_handler(bot, q, callback_storage, state, |bot, msg, cmd, state, cb, message_id| {
+        Box::pin(student_handle(bot, msg, cmd, state, cb, message_id))
+    }).await
 }

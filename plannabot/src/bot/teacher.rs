@@ -105,5 +105,7 @@ pub async fn teacher_callback_command_handler(
     state: Arc<BotState>,
     callback_storage: Arc<InMemStore<CallbackKey, TeacherCommand>>,
 ) -> ResponseResult<()> {
-    callback_command_handler(bot, q, callback_storage, state, teacher_command_handler).await
+    callback_command_handler(bot, q, callback_storage, state, |bot, msg, cmd, state, cb, _| {
+        Box::pin(teacher_command_handler(bot, msg, cmd, state, cb))
+    }).await
 }
