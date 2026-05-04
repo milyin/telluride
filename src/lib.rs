@@ -36,9 +36,9 @@ pub mod markdown {
 
 pub mod command {
     pub use crate::api::command::{
-        callback_errors::UnpackError,
-        callback_packing::{CallbackKey, MAX_CALLBACK_DATA_SIZE, CallbackEncode, CallbackBitcode},
         button_extensions::InlineKeyboardButtonPackedExt,
+        callback_errors::UnpackError,
+        callback_packing::{CallbackBitcode, CallbackEncode, CallbackKey, MAX_CALLBACK_DATA_SIZE},
     };
 }
 
@@ -49,4 +49,8 @@ pub mod data_store {
         in_mem::InMemStore,
         util::{decode_filename_to_key, encode_key_to_filename},
     };
+}
+
+pub mod utils {
+    pub use crate::api::utils::{screen_spaces, split_with_screened_spaces};
 }

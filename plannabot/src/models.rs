@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 use anyhow::bail;
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc, Weekday};
@@ -18,10 +18,10 @@ use chrono_tz::Tz;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TelegramName(String);
 
-impl TryFrom<&str> for TelegramName {
-    type Error = anyhow::Error;
+impl FromStr for TelegramName {
+    type Err = anyhow::Error;
 
-    fn try_from(raw: &str) -> Result<Self, Self::Error> {
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
         // Normalise: strip leading '@' and lowercase.
         let s = raw.trim_start_matches('@').to_lowercase();
 
