@@ -151,6 +151,7 @@ pub async fn show_date_selection<Cmd, FDate, FPrev, FNext, FYear, FMonth>(
     bot: &Bot,
     chat_id: ChatId,
     message_id: Option<MessageId>,
+    message: &str,
     year: i32,
     month: u32,
     user_id: UserId,
@@ -225,17 +226,14 @@ where
         keyboard.inline_keyboard.push(vec![InlineKeyboardButton::callback_key("↩ Back", &key)]);
     }
 
-    let month_name =
-        NaiveDate::from_ymd_opt(year, month, 1).unwrap().format("%B %Y").to_string();
-
     match message_id {
         Some(id) => {
-            bot.edit_message_text(chat_id, id, &month_name)
+            bot.edit_message_text(chat_id, id, message)
                 .reply_markup(keyboard)
                 .await?;
         }
         None => {
-            bot.send_message(chat_id, &month_name)
+            bot.send_message(chat_id, message)
                 .reply_markup(keyboard)
                 .await?;
         }
@@ -264,9 +262,9 @@ where
     let slots = available_slots(&worktime, teacher, date);
 
     let message = if slots.is_empty() {
-        format!("@{} on {} — no available slots.", teacher, date)
+        format!("{} on {} — no available slots.", teacher, date)
     } else {
-        format!("@{} on {} — select a time slot:", teacher, date)
+        format!("{} on {} — select a time slot:", teacher, date)
     };
 
     let user_proxy = UserProxy::new(callback_storage, user_id);

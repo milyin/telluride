@@ -161,10 +161,12 @@ async fn book_4<Cmd: BookCommand + CallbackBitcode + 'static>(
     let t_year = teacher.clone();
     let t_month = teacher.clone();
     let t_back = teacher.clone();
+    let message = format!("📅 Book a Lesson\n{} — select a date:", teacher);
     show_date_selection(
         bot,
         chat_id,
         message_id,
+        &message,
         year,
         month,
         user_id,
@@ -232,7 +234,7 @@ async fn book_6(
         Duration::from(std::time::Duration::from_secs(pairing.duration_minutes * 60));
 
     let mut text = markdown_string!("📅 *Book a Lesson*\n\n");
-    let teacher_str = teacher.as_str();
+    let teacher_str = teacher.to_string();
     text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher_str));
     let date_str = date.to_string();
     text.push(&markdown_format!("📆 Date: {}\n", date_str));
@@ -303,7 +305,7 @@ async fn book_7(
         .await?;
 
     let mut text = markdown_string!("✅ *Lesson Booked\\!*\n\n");
-    let teacher_str = teacher.as_str();
+    let teacher_str = teacher.to_string();
     text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher_str));
     let date_str = date.to_string();
     text.push(&markdown_format!("📆 Date: {}\n", date_str));
