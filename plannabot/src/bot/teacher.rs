@@ -30,7 +30,7 @@ pub enum TeacherCommand {
     Schedule,
     #[command(
         description = "view the bot as a student (shows student list or impersonates if username provided)",
-        parse_with = "parse_impersonate_arg"
+        parse_with = parse_impersonate_arg
     )]
     Impersonate(Option<TelegramName>),
     #[command(description = "enter admin mode")]
