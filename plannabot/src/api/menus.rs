@@ -72,7 +72,82 @@ where
     Ok(())
 }
 
-pub async fn show_date_selection<Cmd, F, G>(
+pub async fn show_year_selection<Cmd, F>(
+    bot: &Bot,
+    chat_id: ChatId,
+    message_id: Option<MessageId>,
+    current_year: i32,
+    user_id: UserId,
+    callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
+    make_cmd: F,
+) -> Result<()>
+where
+    Cmd: CallbackBitcode + 'static,
+    F: Fn(i32) -> Cmd,
+{
+    let user_proxy = UserProxy::new(callback_storage, user_id);
+    let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+
+    for year in (current_year - 1)..=(current_year + 3) {
+        let label = year.to_string();
+        let key = CallbackKey::pack(make_cmd(year), &user_proxy).await;
+        buttons.push(vec![InlineKeyboardButton::callback_key(label, &key)]);
+    }
+
+    let keyboard = InlineKeyboardMarkup::new(buttons);
+    let text = "Select a year:";
+    match message_id {
+        Some(id) => {
+            bot.edit_message_text(chat_id, id, text).reply_markup(keyboard).await?;
+        }
+        None => {
+            bot.send_message(chat_id, text).reply_markup(keyboard).await?;
+        }
+    }
+    Ok(())
+}
+
+pub async fn show_month_selection<Cmd, F>(
+    bot: &Bot,
+    chat_id: ChatId,
+    message_id: Option<MessageId>,
+    year: i32,
+    user_id: UserId,
+    callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
+    make_cmd: F,
+) -> Result<()>
+where
+    Cmd: CallbackBitcode + 'static,
+    F: Fn(u32) -> Cmd,
+{
+    const MONTH_NAMES: [&str; 12] = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December",
+    ];
+
+    let user_proxy = UserProxy::new(callback_storage, user_id);
+    let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+
+    for (i, name) in MONTH_NAMES.iter().enumerate() {
+        let month = (i + 1) as u32;
+        let key = CallbackKey::pack(make_cmd(month), &user_proxy).await;
+        buttons.push(vec![InlineKeyboardButton::callback_key(*name, &key)]);
+    }
+
+    let keyboard = InlineKeyboardMarkup::new(buttons);
+    let text = format!("Select a month for {}:", year);
+    match message_id {
+        Some(id) => {
+            bot.edit_message_text(chat_id, id, &text).reply_markup(keyboard).await?;
+        }
+        None => {
+            bot.send_message(chat_id, &text).reply_markup(keyboard).await?;
+        }
+    }
+    Ok(())
+}
+
+pub async fn show_date_selection<Cmd, FDate, FPrev, FNext, FYear, FMonth>(
     bot: &Bot,
     chat_id: ChatId,
     message_id: Option<MessageId>,
@@ -80,14 +155,20 @@ pub async fn show_date_selection<Cmd, F, G>(
     month: u32,
     user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
-    make_date_cmd: F,
-    make_month_nav: G,
+    make_date_cmd: FDate,
+    make_prev_month: FPrev,
+    make_next_month: FNext,
+    make_year_cmd: FYear,
+    make_month_cmd: FMonth,
     back: Option<Cmd>,
 ) -> Result<()>
 where
     Cmd: CallbackBitcode + 'static,
-    F: Fn(NaiveDate) -> Cmd,
-    G: Fn(i32, u32) -> Cmd,
+    FDate: Fn(NaiveDate) -> Cmd,
+    FPrev: FnOnce(i32, u32) -> Cmd,
+    FNext: FnOnce(i32, u32) -> Cmd,
+    FYear: FnOnce() -> Cmd,
+    FMonth: FnOnce() -> Cmd,
 {
     let user_proxy = UserProxy::new(callback_storage, user_id);
 
@@ -112,55 +193,50 @@ where
 
     let (prev_year, prev_month) = if month == 1 { (year - 1, 12u32) } else { (year, month - 1) };
     let (next_year, next_month) = if month == 12 { (year + 1, 1u32) } else { (year, month + 1) };
-    let prev_key = CallbackKey::pack(make_month_nav(prev_year, prev_month), &user_proxy).await;
-    let next_key = CallbackKey::pack(make_month_nav(next_year, next_month), &user_proxy).await;
+
+    let prev_key = CallbackKey::pack(make_prev_month(prev_year, prev_month), &user_proxy).await;
+    let next_key = CallbackKey::pack(make_next_month(next_year, next_month), &user_proxy).await;
+    let year_key = CallbackKey::pack(make_year_cmd(), &user_proxy).await;
+    let month_key = CallbackKey::pack(make_month_cmd(), &user_proxy).await;
+
     let prev_btn = InlineKeyboardButton::callback_key("<", &prev_key);
     let next_btn = InlineKeyboardButton::callback_key(">", &next_key);
+    let year_btn = InlineKeyboardButton::callback_key(year.to_string(), &year_key);
+    let month_btn = InlineKeyboardButton::callback_key(
+        NaiveDate::from_ymd_opt(year, month, 1).unwrap().format("%B").to_string(),
+        &month_key,
+    );
 
     let mut keyboard = build_month_calendar(
         year,
         month,
         |date| {
             let day = date.day();
-            let label = if date == today {
-                format!("[{}]", day)
-            } else {
-                format!("{}", day)
-            };
+            let label = if date == today { format!("[{}]", day) } else { format!("{}", day) };
             InlineKeyboardButton::callback_key(label, &date_keys[(day - 1) as usize])
         },
-        |leading, trailing| {
-            let total = leading + trailing;
-            let mut all: Vec<InlineKeyboardButton> =
-                (0..total).map(|_| InlineKeyboardButton::callback(" ", "noop")).collect();
-            if total > 0 {
-                all[0] = prev_btn.clone();
-                all[total - 1] = next_btn.clone();
-            }
-            let trailing_btns = all.split_off(leading);
-            (all, trailing_btns)
-        },
+        |_leading, _trailing| (vec![], vec![]),
     );
+
+    // Insert navigation row (<, year, month, >) after the weekday header row
+    keyboard.inline_keyboard.insert(1, vec![prev_btn, year_btn, month_btn, next_btn]);
 
     if let Some(back_cmd) = back {
         let key = CallbackKey::pack(back_cmd, &user_proxy).await;
         keyboard.inline_keyboard.push(vec![InlineKeyboardButton::callback_key("↩ Back", &key)]);
     }
 
-    let month_name = NaiveDate::from_ymd_opt(year, month, 1)
-        .unwrap()
-        .format("%B %Y")
-        .to_string();
-    let text = month_name;
+    let month_name =
+        NaiveDate::from_ymd_opt(year, month, 1).unwrap().format("%B %Y").to_string();
 
     match message_id {
         Some(id) => {
-            bot.edit_message_text(chat_id, id, text)
+            bot.edit_message_text(chat_id, id, &month_name)
                 .reply_markup(keyboard)
                 .await?;
         }
         None => {
-            bot.send_message(chat_id, text)
+            bot.send_message(chat_id, &month_name)
                 .reply_markup(keyboard)
                 .await?;
         }

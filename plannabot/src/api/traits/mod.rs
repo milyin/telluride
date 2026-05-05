@@ -1,5 +1,5 @@
 pub mod book;
-pub use book::{BookParams, SelectDate};
+pub use book::BookParams;
 
 /// Trait for commands that can emit a book command.
 /// Both StudentCommand and ImpersonateCommand implement this trait,

@@ -110,7 +110,7 @@ pub async fn inline_query_handler(bot: Bot, q: InlineQuery) -> ResponseResult<()
         bot.answer_inline_query(q.id, vec![]).await?;
         return Ok(());
     };
-    let BookParams::L4(ref teacher, ref date, ref hour, ref duration) = params else {
+    let BookParams::L7(ref teacher, ref date, ref hour, ref duration) = params else {
         bot.answer_inline_query(q.id, vec![]).await?;
         return Ok(());
     };

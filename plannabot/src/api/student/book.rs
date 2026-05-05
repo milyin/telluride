@@ -12,8 +12,11 @@ use teloxide::prelude::*;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, MessageId, UserId};
 
 use crate::api::common::format_duration;
-use crate::api::menus::{show_date_selection, show_slot_selection, show_teacher_selection};
-use crate::api::traits::{BookCommand, BookParams, SelectDate};
+use crate::api::menus::{
+    show_date_selection, show_month_selection, show_slot_selection, show_teacher_selection,
+    show_year_selection,
+};
+use crate::api::traits::{BookCommand, BookParams};
 use crate::models::TelegramName;
 use crate::state::BotState;
 
@@ -29,19 +32,31 @@ pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
 ) -> Result<()> {
     let params: BookParams = params.parse()?;
     match params {
-        BookParams::L0() => book_0(bot, chat_id, state, user_id, callback_storage, message_id, student_name).await,
+        BookParams::L0() => {
+            book_0(bot, chat_id, state, user_id, callback_storage, message_id, student_name).await
+        }
         BookParams::L1(teacher) => {
             book_1(bot, chat_id, teacher, user_id, callback_storage, state, message_id).await
         }
-        BookParams::L2(teacher, select) => {
-            book_2(bot, chat_id, teacher, select, user_id, callback_storage, state, message_id)
+        BookParams::L2(teacher, year) => {
+            book_2(bot, chat_id, teacher, year, user_id, callback_storage, message_id).await
+        }
+        BookParams::L3(teacher, year, month) => {
+            book_3(bot, chat_id, teacher, year, month, user_id, callback_storage, message_id)
                 .await
         }
-        BookParams::L3(teacher, date, hour) => {
-            book_3(bot, chat_id, teacher, date, hour, state, student_name).await
+        BookParams::L4(teacher, year, month, day) => {
+            book_4(bot, chat_id, teacher, year, month, day, user_id, callback_storage, message_id)
+                .await
         }
-        BookParams::L4(teacher, date, hour, duration) => {
-            book_4(bot, chat_id, teacher, date, hour, duration, state, student_name).await
+        BookParams::L5(teacher, date) => {
+            book_5(bot, chat_id, teacher, date, user_id, callback_storage, state, message_id).await
+        }
+        BookParams::L6(teacher, date, hour) => {
+            book_6(bot, chat_id, teacher, date, hour, state, student_name).await
+        }
+        BookParams::L7(teacher, date, hour, duration) => {
+            book_7(bot, chat_id, teacher, date, hour, duration, state, student_name).await
         }
     }
 }
@@ -78,66 +93,125 @@ async fn book_1<Cmd: BookCommand + CallbackBitcode + 'static>(
     teacher: TelegramName,
     user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
-    state: &Arc<BotState>,
+    _state: &Arc<BotState>,
     message_id: Option<MessageId>,
 ) -> Result<()> {
     let now = Local::now();
-    let select = SelectDate::YearMonth(now.year(), now.month());
-    book_2(bot, chat_id, teacher, select, user_id, callback_storage, state, message_id).await
+    book_4(bot, chat_id, teacher, now.year(), now.month(), now.day(), user_id, callback_storage, message_id)
+        .await
 }
 
 async fn book_2<Cmd: BookCommand + CallbackBitcode + 'static>(
     bot: &Bot,
     chat_id: ChatId,
     teacher: TelegramName,
-    select: SelectDate,
+    year: i32,
+    user_id: UserId,
+    callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
+    message_id: Option<MessageId>,
+) -> Result<()> {
+    show_year_selection(
+        bot,
+        chat_id,
+        message_id,
+        year,
+        user_id,
+        callback_storage,
+        |y| Cmd::book(BookParams::L4(teacher.clone(), y, 1, 1)),
+    )
+    .await
+}
+
+async fn book_3<Cmd: BookCommand + CallbackBitcode + 'static>(
+    bot: &Bot,
+    chat_id: ChatId,
+    teacher: TelegramName,
+    year: i32,
+    _month: u32,
+    user_id: UserId,
+    callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
+    message_id: Option<MessageId>,
+) -> Result<()> {
+    show_month_selection(
+        bot,
+        chat_id,
+        message_id,
+        year,
+        user_id,
+        callback_storage,
+        |m| Cmd::book(BookParams::L4(teacher.clone(), year, m, 1)),
+    )
+    .await
+}
+
+async fn book_4<Cmd: BookCommand + CallbackBitcode + 'static>(
+    bot: &Bot,
+    chat_id: ChatId,
+    teacher: TelegramName,
+    year: i32,
+    month: u32,
+    _day: u32,
+    user_id: UserId,
+    callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
+    message_id: Option<MessageId>,
+) -> Result<()> {
+    let t_date = teacher.clone();
+    let t_prev = teacher.clone();
+    let t_next = teacher.clone();
+    let t_year = teacher.clone();
+    let t_month = teacher.clone();
+    let t_back = teacher.clone();
+    show_date_selection(
+        bot,
+        chat_id,
+        message_id,
+        year,
+        month,
+        user_id,
+        callback_storage,
+        move |date| Cmd::book(BookParams::L5(t_date.clone(), date)),
+        move |py, pm| Cmd::book(BookParams::L4(t_prev.clone(), py, pm, 1)),
+        move |ny, nm| Cmd::book(BookParams::L4(t_next.clone(), ny, nm, 1)),
+        move || Cmd::book(BookParams::L2(t_year.clone(), year)),
+        move || Cmd::book(BookParams::L3(t_month.clone(), year, month)),
+        Some(Cmd::book(BookParams::L1(t_back))),
+    )
+    .await
+}
+
+async fn book_5<Cmd: BookCommand + CallbackBitcode + 'static>(
+    bot: &Bot,
+    chat_id: ChatId,
+    teacher: TelegramName,
+    date: NaiveDate,
     user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
     state: &Arc<BotState>,
     message_id: Option<MessageId>,
 ) -> Result<()> {
-    match select {
-        SelectDate::YearMonth(year, month) => {
-            let t1 = teacher.clone();
-            let t2 = teacher;
-            show_date_selection(
-                bot,
-                chat_id,
-                message_id,
-                year,
-                month,
-                user_id,
-                callback_storage,
-                move |date| Cmd::book(BookParams::L2(t1.clone(), SelectDate::Date(date))),
-                move |y, m| Cmd::book(BookParams::L2(t2.clone(), SelectDate::YearMonth(y, m))),
-                Some(Cmd::book(BookParams::L0())),
-            )
-            .await
-        }
-        SelectDate::Date(date) => {
-            let teacher_for_cmd = teacher.clone();
-            let teacher_for_back = teacher.clone();
-            show_slot_selection(
-                bot,
-                chat_id,
-                message_id,
-                &teacher,
-                date,
-                user_id,
-                callback_storage,
-                state,
-                move |time| Cmd::book(BookParams::L3(teacher_for_cmd.clone(), date, time)),
-                Some(Cmd::book(BookParams::L2(
-                    teacher_for_back,
-                    SelectDate::YearMonth(date.year(), date.month()),
-                ))),
-            )
-            .await
-        }
-    }
+    let teacher_for_cmd = teacher.clone();
+    let teacher_for_back = teacher.clone();
+    show_slot_selection(
+        bot,
+        chat_id,
+        message_id,
+        &teacher,
+        date,
+        user_id,
+        callback_storage,
+        state,
+        move |time| Cmd::book(BookParams::L6(teacher_for_cmd.clone(), date, time)),
+        Some(Cmd::book(BookParams::L4(
+            teacher_for_back,
+            date.year(),
+            date.month(),
+            date.day(),
+        ))),
+    )
+    .await
 }
 
-async fn book_3(
+async fn book_6(
     bot: &Bot,
     chat_id: ChatId,
     teacher: TelegramName,
@@ -169,9 +243,9 @@ async fn book_3(
     let cost_str = pairing.cost.to_string();
     text.push(&markdown_format!("💰 Cost: {}\n", cost_str));
 
-    let l4_params = BookParams::L4(teacher, date, hour, duration).to_string();
+    let l7_params = BookParams::L7(teacher, date, hour, duration).to_string();
     let button =
-        InlineKeyboardButton::switch_inline_query_current_chat("✏️ Edit & Book", l4_params);
+        InlineKeyboardButton::switch_inline_query_current_chat("✏️ Edit & Book", l7_params);
     let keyboard = InlineKeyboardMarkup::new(vec![vec![button]]);
 
     bot.send_markdown_message(chat_id, text)
@@ -180,7 +254,7 @@ async fn book_3(
     Ok(())
 }
 
-async fn book_4(
+async fn book_7(
     bot: &Bot,
     chat_id: ChatId,
     teacher: TelegramName,
