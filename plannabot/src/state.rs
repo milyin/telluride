@@ -293,6 +293,19 @@ impl BotState {
             .collect()
     }
 
+    /// Returns the pairing for a specific (student, teacher) pair, if one exists.
+    pub async fn get_pairing(
+        &self,
+        student: &TelegramName,
+        teacher: &TelegramName,
+    ) -> Option<TeacherStudentPairing> {
+        let pairings = self.pairings.read().await;
+        pairings
+            .iter()
+            .find(|p| p.student_telegram == *student && p.teacher_telegram == *teacher)
+            .cloned()
+    }
+
     /// Returns all pairings where the given student is the student.
     pub async fn get_pairings_for_student(
         &self,

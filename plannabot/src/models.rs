@@ -177,8 +177,8 @@ sheet_struct! {
         pub student_telegram: TelegramName,
         pub teacher_telegram: TelegramName,
         pub datetime: DateTime<Utc>,
-        pub duration_minutes: i64,
-        pub cost: f64,
+        pub duration_minutes: u64,
+        pub cost: i64,
         pub status: Option<LessonStatus>,
     }
 }
@@ -196,7 +196,7 @@ sheet_struct! {
     pub struct Payment {
         pub student_telegram: TelegramName,
         pub date: DateTime<Utc>,
-        pub sum: f64,
+        pub sum: i64,
     }
 }
 
@@ -208,6 +208,7 @@ sheet_struct! {
         pub teacher_telegram: TelegramName,
         pub student_telegram: TelegramName,
         pub cost: i64,
+        pub duration_minutes: u64,
     }
 }
 

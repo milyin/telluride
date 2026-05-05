@@ -50,11 +50,16 @@ impl SheetsClient {
             };
             let cost =
                 schema.get_field::<i64>(row, row_num, TeacherStudentPairing::COST, &mut errors);
+            let duration_minutes: u64 = schema
+                .get_str(row, TeacherStudentPairing::DURATION_MINUTES)
+                .parse()
+                .unwrap_or(60);
 
             pairings.push(TeacherStudentPairing {
                 teacher_telegram,
                 student_telegram,
                 cost,
+                duration_minutes,
                 custom: schema.get_custom(row, super::PAIRINGS_COLS),
             });
         }

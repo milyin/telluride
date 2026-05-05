@@ -50,7 +50,7 @@ pub async fn schedule(
             let local_time = entry.datetime.with_timezone(&tz);
             let date_str = local_time.format("%Y-%m-%d").to_string();
             let time_str = local_time.format("%H:%M").to_string();
-            let duration_str = format_duration(entry.duration_minutes);
+            let duration_str = format_duration(entry.duration_minutes as i64);
             let line = markdown_format!(
                 "📚 {} \\| {} \\| {} — Teacher: {}\n",
                 date_str,

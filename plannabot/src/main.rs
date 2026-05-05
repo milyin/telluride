@@ -21,7 +21,9 @@ use state::BotState;
 use crate::bot::admin::{admin_callback_command_handler, admin_command_handler};
 use crate::bot::filter_callback_by;
 use crate::bot::impersonate::{impersonate_callback_command_handler, impersonate_command_handler};
-use crate::bot::student::{student_callback_command_handler, student_command_handler};
+use crate::bot::student::{
+    inline_query_handler, student_callback_command_handler, student_command_handler,
+};
 use crate::bot::teacher::{teacher_callback_command_handler, teacher_command_handler};
 
 #[tokio::main]
@@ -149,6 +151,8 @@ async fn main() {
                 })
                 .endpoint(admin_callback_command_handler),
         )
+        // Inline query handler (for booking confirmation via switch_inline_query_current_chat).
+        .branch(Update::filter_inline_query().endpoint(inline_query_handler))
         // Plain text messages (non-command) and unhandled commands (e.g. unauthorized users).
         .branch(
             Update::filter_message()

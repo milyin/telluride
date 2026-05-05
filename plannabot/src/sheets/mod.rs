@@ -351,6 +351,25 @@ impl SheetsClient {
         Ok(string_rows)
     }
 
+    /// Appends a new row to `sheet_name` using `INSERT_ROWS` mode.
+    pub async fn append_row(&self, sheet_name: &str, values: Vec<serde_json::Value>) -> Result<()> {
+        let range = format!("{sheet_name}!A1");
+        let value_range = api::ValueRange {
+            range: Some(range.clone()),
+            values: Some(vec![values]),
+            ..Default::default()
+        };
+        self.hub
+            .spreadsheets()
+            .values_append(value_range, &self.spreadsheet_id, &range)
+            .value_input_option("USER_ENTERED")
+            .insert_data_option("INSERT_ROWS")
+            .doit()
+            .await
+            .with_context(|| format!("Failed to append row to sheet '{sheet_name}'"))?;
+        Ok(())
+    }
+
     /// Writes `values` into `range` using the `USER_ENTERED` input option.
     pub async fn update_values(
         &self,

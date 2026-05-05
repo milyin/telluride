@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use std::collections::HashMap;
 
 use super::from_sheet::FromSheetValue;
 use super::{SheetSchema, SheetsClient, SCHEDULE_COLS, SHEET_SCHEDULE};
@@ -90,8 +91,8 @@ impl SheetsClient {
             };
 
             // --- numeric fields -------------------------------------------------
-            let cost: f64 = schema.get_field(row, row_num, ScheduleEntry::COST, &mut errors);
-            let duration_minutes: i64 = schema
+            let cost: i64 = schema.get_field(row, row_num, ScheduleEntry::COST, &mut errors);
+            let duration_minutes: u64 = schema
                 .get_str(row, ScheduleEntry::DURATION_MINUTES)
                 .parse()
                 .unwrap_or(60);
@@ -124,6 +125,42 @@ impl SheetsClient {
             .into_iter()
             .filter(|e| e.student_telegram == normalised)
             .collect())
+    }
+
+    /// Appends a new planned lesson to the Schedule sheet.
+    pub async fn add_schedule_entry(
+        &self,
+        student_telegram: &TelegramName,
+        teacher_telegram: &TelegramName,
+        datetime: DateTime<Utc>,
+        duration_minutes: u64,
+        cost: i64,
+    ) -> Result<()> {
+        let header_range = format!("{SHEET_SCHEDULE}!1:1");
+        let rows = self
+            .get_values(&header_range)
+            .await
+            .context("Failed to read Schedule header row")?;
+        let headers = rows.into_iter().next().unwrap_or_default();
+
+        let datetime_str = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
+        let mut values: HashMap<&str, String> = HashMap::new();
+        values.insert("student_telegram", student_telegram.as_str().to_string());
+        values.insert("teacher_telegram", teacher_telegram.as_str().to_string());
+        values.insert("datetime", datetime_str);
+        values.insert("duration_minutes", duration_minutes.to_string());
+        values.insert("cost", cost.to_string());
+
+        let row: Vec<serde_json::Value> = headers
+            .iter()
+            .map(|h| {
+                serde_json::Value::String(
+                    values.get(h.as_str()).cloned().unwrap_or_default(),
+                )
+            })
+            .collect();
+
+        self.append_row(SHEET_SCHEDULE, row).await
     }
 
     /// Returns only the schedule entries for the given teacher.

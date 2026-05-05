@@ -7,9 +7,11 @@ use telluride::command::{CallbackBitcode, CallbackKey};
 use telluride::data_store::InMemStore;
 use telluride::markdown::MarkdownStringMessage;
 use telluride::{markdown_format, markdown_string};
+use teloxide::payloads::SendMessageSetters;
 use teloxide::prelude::*;
-use teloxide::types::{MessageId, UserId};
+use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, MessageId, UserId};
 
+use crate::api::common::format_duration;
 use crate::api::menus::{show_date_selection, show_slot_selection, show_teacher_selection};
 use crate::api::traits::{BookCommand, BookParams, SelectDate};
 use crate::models::TelegramName;
@@ -35,9 +37,11 @@ pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
             book_2(bot, chat_id, teacher, select, user_id, callback_storage, state, message_id)
                 .await
         }
-        BookParams::L3(teacher, date, hour) => book_3(bot, chat_id, teacher, date, hour).await,
+        BookParams::L3(teacher, date, hour) => {
+            book_3(bot, chat_id, teacher, date, hour, state, student_name).await
+        }
         BookParams::L4(teacher, date, hour, duration) => {
-            book_4(bot, chat_id, teacher, date, hour, duration).await
+            book_4(bot, chat_id, teacher, date, hour, duration, state, student_name).await
         }
     }
 }
@@ -139,19 +143,40 @@ async fn book_3(
     teacher: TelegramName,
     date: NaiveDate,
     hour: NaiveTime,
+    state: &Arc<BotState>,
+    student_name: &TelegramName,
 ) -> Result<()> {
+    let Some(pairing) = state.get_pairing(student_name, &teacher).await else {
+        let text = markdown_string!(
+            "⚠️ No pairing found for this teacher\\. Please contact your teacher\\."
+        );
+        bot.send_markdown_message(chat_id, text).await?;
+        return Ok(());
+    };
+
+    let duration =
+        Duration::from(std::time::Duration::from_secs(pairing.duration_minutes * 60));
+
     let mut text = markdown_string!("📅 *Book a Lesson*\n\n");
     let teacher_str = teacher.as_str();
-    let line = markdown_format!("👨\\-🏫 Teacher: {}\n", teacher_str);
-    text.push(&line);
+    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher_str));
     let date_str = date.to_string();
-    let line = markdown_format!("📆 Date: {}\n", date_str);
-    text.push(&line);
-    let hour_str = hour.to_string();
-    let line = markdown_format!("⏰ Time: {}\n", hour_str);
-    text.push(&line);
+    text.push(&markdown_format!("📆 Date: {}\n", date_str));
+    let hour_str = hour.format("%H:%M").to_string();
+    text.push(&markdown_format!("⏰ Time: {}\n", hour_str));
+    let dur_str = format_duration(pairing.duration_minutes as i64);
+    text.push(&markdown_format!("⏱ Duration: {}\n", dur_str));
+    let cost_str = pairing.cost.to_string();
+    text.push(&markdown_format!("💰 Cost: {}\n", cost_str));
 
-    bot.send_markdown_message(chat_id, text).await?;
+    let l4_params = BookParams::L4(teacher, date, hour, duration).to_string();
+    let button =
+        InlineKeyboardButton::switch_inline_query_current_chat("✏️ Edit & Book", l4_params);
+    let keyboard = InlineKeyboardMarkup::new(vec![vec![button]]);
+
+    bot.send_markdown_message(chat_id, text)
+        .reply_markup(keyboard)
+        .await?;
     Ok(())
 }
 
@@ -162,20 +187,58 @@ async fn book_4(
     date: NaiveDate,
     hour: NaiveTime,
     duration: Duration,
+    state: &Arc<BotState>,
+    student_name: &TelegramName,
 ) -> Result<()> {
-    let mut text = markdown_string!("📅 *Book a Lesson*\n\n");
+    let Some(pairing) = state.get_pairing(student_name, &teacher).await else {
+        let text = markdown_string!(
+            "⚠️ Cannot book: you are not paired with this teacher\\."
+        );
+        bot.send_markdown_message(chat_id, text).await?;
+        return Ok(());
+    };
+
+    let new_start = date.and_time(hour).and_utc();
+    let duration_secs = duration.as_secs() as i64;
+    let new_end = new_start + chrono::Duration::seconds(duration_secs);
+
+    let (all_entries, _) = state.sheets.get_schedule().await?;
+    let has_overlap = all_entries
+        .iter()
+        .filter(|e| e.is_planned())
+        .filter(|e| e.student_telegram == *student_name || e.teacher_telegram == teacher)
+        .any(|e| {
+            let existing_start = e.datetime;
+            let existing_end =
+                existing_start + chrono::Duration::minutes(e.duration_minutes as i64);
+            new_start < existing_end && existing_start < new_end
+        });
+
+    if has_overlap {
+        let text = markdown_string!(
+            "⚠️ Cannot book: this time slot conflicts with an existing lesson\\."
+        );
+        bot.send_markdown_message(chat_id, text).await?;
+        return Ok(());
+    }
+
+    let duration_minutes = duration.as_secs() / 60;
+    state
+        .sheets
+        .add_schedule_entry(student_name, &teacher, new_start, duration_minutes, pairing.cost)
+        .await?;
+
+    let mut text = markdown_string!("✅ *Lesson Booked\\!*\n\n");
     let teacher_str = teacher.as_str();
-    let line = markdown_format!("👨\\-🏫 Teacher: {}\n", teacher_str);
-    text.push(&line);
+    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher_str));
     let date_str = date.to_string();
-    let line = markdown_format!("📆 Date: {}\n", date_str);
-    text.push(&line);
-    let hour_str = hour.to_string();
-    let line = markdown_format!("⏰ Time: {}\n", hour_str);
-    text.push(&line);
-    let duration_str = duration.to_string();
-    let line = markdown_format!("⏱ Duration: {}\n", duration_str);
-    text.push(&line);
+    text.push(&markdown_format!("📆 Date: {}\n", date_str));
+    let hour_str = hour.format("%H:%M").to_string();
+    text.push(&markdown_format!("⏰ Time: {}\n", hour_str));
+    let dur_str = format_duration(duration_minutes as i64);
+    text.push(&markdown_format!("⏱ Duration: {}\n", dur_str));
+    let cost_str = pairing.cost.to_string();
+    text.push(&markdown_format!("💰 Cost: {}\n", cost_str));
 
     bot.send_markdown_message(chat_id, text).await?;
     Ok(())
