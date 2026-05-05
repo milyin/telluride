@@ -215,11 +215,10 @@ where
             let label = if date == today { format!("[{}]", day) } else { format!("{}", day) };
             InlineKeyboardButton::callback_key(label, &date_keys[(day - 1) as usize])
         },
-        |_leading, _trailing| (vec![], vec![]),
     );
 
-    // Insert navigation row (<, year, month, >) after the weekday header row
-    keyboard.inline_keyboard.insert(1, vec![prev_btn, year_btn, month_btn, next_btn]);
+    // Insert navigation row (<, year, month, >) above the calendar
+    keyboard.inline_keyboard.insert(0, vec![prev_btn, year_btn, month_btn, next_btn]);
 
     if let Some(back_cmd) = back {
         let key = CallbackKey::pack(back_cmd, &user_proxy).await;
