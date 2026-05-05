@@ -43,8 +43,8 @@ where
 
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     for name in teacher_names {
-        let label = format!("@{}", name);
-        let cmd = make_cmd(name.parse()?);
+        let label = name.to_string();
+        let cmd = make_cmd(name);
         let key = CallbackKey::pack(cmd, &user_proxy).await;
         let button = InlineKeyboardButton::callback_key(label, &key);
         buttons.push(vec![button]);

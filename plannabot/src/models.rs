@@ -7,11 +7,12 @@ use std::convert::TryFrom;
 
 /// A normalised Telegram username.
 ///
-/// Stored without `'@'`, in lowercase.  Constructed via [`TryFrom<&str>`],
-/// which strips a leading `'@'`, lower-cases the result, and then enforces
-/// the following Telegram username rules:
+/// Stored with `'@'`, in lowercase (e.g. `"@alice"`).  Constructed via
+/// [`TryFrom<&str>`], which strips a leading `'@'` if present, lower-cases
+/// the result, enforces the following Telegram username rules, and then
+/// prepends `'@'` before storing:
 ///
-/// * 5–32 characters long.
+/// * 5–32 characters long (not counting the `'@'`).
 /// * Only ASCII letters (`a-z`), digits (`0-9`), and underscores (`_`).
 /// * Must start with a letter (not a digit or underscore).
 /// * Cannot end with an underscore.
@@ -67,13 +68,13 @@ impl FromStr for TelegramName {
             );
         }
 
-        Ok(TelegramName(s))
+        Ok(TelegramName(format!("@{}", s)))
     }
 }
 
 impl fmt::Display for TelegramName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "@{}", self.0)
+        write!(f, "{}", self.0)
     }
 }
 
@@ -86,7 +87,7 @@ impl TryFrom<&str> for TelegramName {
 }
 
 impl TelegramName {
-    /// Returns the inner username string (without `'@'`, in lowercase).
+    /// Returns the username string including the leading `'@'` (e.g. `"@alice"`).
     pub fn as_str(&self) -> &str {
         &self.0
     }

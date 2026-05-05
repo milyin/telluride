@@ -256,18 +256,20 @@ impl BotState {
         is_teacher && is_student
     }
 
-    /// Returns a sorted list of all registered student telegram names (without '@', lowercase).
-    pub async fn get_student_names(&self) -> Vec<String> {
+    /// Returns a sorted list of all registered student telegram names.
+    pub async fn get_student_names(&self) -> Vec<TelegramName> {
         let students = self.students.read().await;
-        let mut names: Vec<String> = students.keys().cloned().collect();
+        let mut names: Vec<TelegramName> =
+            students.keys().map(|k| k.parse().expect("stored key must be valid")).collect();
         names.sort();
         names
     }
 
-    /// Returns a sorted list of all registered teacher telegram names (without '@', lowercase).
-    pub async fn get_teacher_names(&self) -> Vec<String> {
+    /// Returns a sorted list of all registered teacher telegram names.
+    pub async fn get_teacher_names(&self) -> Vec<TelegramName> {
         let teachers = self.teachers.read().await;
-        let mut names: Vec<String> = teachers.keys().cloned().collect();
+        let mut names: Vec<TelegramName> =
+            teachers.keys().map(|k| k.parse().expect("stored key must be valid")).collect();
         names.sort();
         names
     }

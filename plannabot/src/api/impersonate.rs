@@ -120,8 +120,8 @@ async fn show_student_selection(
 
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     for name in student_names {
-        let label = format!("@{}", name);
-        let key = CallbackKey::pack(TeacherCommand::Impersonate(name), &user_proxy).await;
+        let label = name.to_string();
+        let key = CallbackKey::pack(TeacherCommand::Impersonate(name.to_string()), &user_proxy).await;
         let button = InlineKeyboardButton::callback_key(label, &key);
         buttons.push(vec![button]);
     }

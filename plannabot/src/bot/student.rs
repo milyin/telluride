@@ -117,8 +117,8 @@ pub async fn inline_query_handler(bot: Bot, q: InlineQuery) -> ResponseResult<()
 
     let command = format!("/book {}", params);
     let description = format!(
-        "@{} | {} {} | {}",
-        teacher.as_str(),
+        "{} | {} {} | {}",
+        teacher,
         date,
         hour.format("%H:%M"),
         duration
