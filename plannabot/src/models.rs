@@ -17,7 +17,7 @@ use std::convert::TryFrom;
 /// * Must start with a letter (not a digit or underscore).
 /// * Cannot end with an underscore.
 /// * No consecutive underscores.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, bitcode::Encode, bitcode::Decode)]
 pub struct TelegramName(String);
 
 impl FromStr for TelegramName {

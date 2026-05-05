@@ -19,7 +19,7 @@ use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, UserId};
 pub async fn impersonate(
     bot: &Bot,
     chat_id: ChatId,
-    student_name: Option<&str>,
+    student_name: Option<TelegramName>,
     state: &Arc<BotState>,
     user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, TeacherCommand>>,
@@ -33,14 +33,8 @@ pub async fn impersonate(
         return Ok(());
     }
 
-    let Some(username) = student_name else {
+    let Some(name) = student_name else {
         show_student_selection(bot, chat_id, user_id, callback_storage, state).await?;
-        return Ok(());
-    };
-
-    let Ok(name) = TelegramName::try_from(username) else {
-        bot.send_message(chat_id, "Usage: /impersonate <student_username>")
-            .await?;
         return Ok(());
     };
 
@@ -121,7 +115,7 @@ async fn show_student_selection(
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     for name in student_names {
         let label = name.to_string();
-        let key = CallbackKey::pack(TeacherCommand::Impersonate(name.to_string()), &user_proxy).await;
+        let key = CallbackKey::pack(TeacherCommand::Impersonate(Some(name)), &user_proxy).await;
         let button = InlineKeyboardButton::callback_key(label, &key);
         buttons.push(vec![button]);
     }

@@ -7,7 +7,17 @@ use telluride::command::CallbackKey;
 use telluride::data_store::InMemStore;
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, UserId};
-use teloxide::utils::command::BotCommands;
+use teloxide::utils::command::{BotCommands, ParseError};
+
+fn parse_impersonate_arg(s: String) -> Result<(Option<TelegramName>,), ParseError> {
+    if s.trim().is_empty() {
+        Ok((None,))
+    } else {
+        let name = s.trim().parse::<TelegramName>()
+            .map_err(|e| ParseError::IncorrectFormat(e.into()))?;
+        Ok((Some(name),))
+    }
+}
 
 #[derive(BotCommands, Clone, Debug, Hash, bitcode::Encode, bitcode::Decode)]
 #[command(rename_rule = "lowercase", description = "Teacher commands:")]
@@ -19,9 +29,10 @@ pub enum TeacherCommand {
     #[command(description = "show your planned lessons")]
     Schedule,
     #[command(
-        description = "view the bot as a student (shows student list or impersonates if username provided)"
+        description = "view the bot as a student (shows student list or impersonates if username provided)",
+        parse_with = "parse_impersonate_arg"
     )]
-    Impersonate(String),
+    Impersonate(Option<TelegramName>),
     #[command(description = "enter admin mode")]
     Admin,
     #[command(description = "forcedly refresh the data")]
@@ -71,11 +82,7 @@ pub async fn teacher_command_handler(
             api::impersonate::impersonate(
                 &bot,
                 msg.chat.id,
-                if student_param.is_empty() {
-                    None
-                } else {
-                    Some(student_param.as_str())
-                },
+                student_param.clone(),
                 &state,
                 user_id,
                 callback_storage,
