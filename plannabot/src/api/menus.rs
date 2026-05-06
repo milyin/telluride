@@ -247,6 +247,7 @@ pub async fn show_slot_selection<Cmd, F>(
     chat_id: ChatId,
     message_id: Option<MessageId>,
     teacher: &TelegramName,
+    student: &TelegramName,
     date: NaiveDate,
     user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
@@ -259,7 +260,22 @@ where
     F: Fn(NaiveTime) -> Cmd,
 {
     let (worktime, _) = state.sheets.get_worktime().await?;
-    let slots = available_slots(&worktime, teacher, date);
+    let (schedule, _) = state.sheets.get_schedule().await?;
+    let slots: Vec<NaiveTime> = available_slots(&worktime, teacher, date)
+        .into_iter()
+        .filter(|&slot| {
+            let slot_start = date.and_time(slot).and_utc();
+            let slot_end = slot_start + chrono::Duration::hours(1);
+            !schedule.iter().filter(|e| e.is_planned()).filter(|e| {
+                e.student_telegram == *student || e.teacher_telegram == *teacher
+            }).any(|e| {
+                let existing_start = e.datetime;
+                let existing_end =
+                    existing_start + chrono::Duration::minutes(e.duration_minutes as i64);
+                slot_start < existing_end && existing_start < slot_end
+            })
+        })
+        .collect();
 
     let message = if slots.is_empty() {
         format!("{} on {} — no available slots.", teacher, date)

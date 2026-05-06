@@ -50,7 +50,7 @@ pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
                 .await
         }
         BookParams::L5(teacher, date) => {
-            book_5(bot, chat_id, teacher, date, user_id, callback_storage, state, message_id).await
+            book_5(bot, chat_id, teacher, date, user_id, callback_storage, state, message_id, student_name).await
         }
         BookParams::L6(teacher, date, hour) => {
             book_6(bot, chat_id, teacher, date, hour, state, student_name).await
@@ -190,6 +190,7 @@ async fn book_5<Cmd: BookCommand + CallbackBitcode + 'static>(
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
     state: &Arc<BotState>,
     message_id: Option<MessageId>,
+    student_name: &TelegramName,
 ) -> Result<()> {
     let teacher_for_cmd = teacher.clone();
     let teacher_for_back = teacher.clone();
@@ -198,6 +199,7 @@ async fn book_5<Cmd: BookCommand + CallbackBitcode + 'static>(
         chat_id,
         message_id,
         &teacher,
+        student_name,
         date,
         user_id,
         callback_storage,
