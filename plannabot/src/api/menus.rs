@@ -259,9 +259,19 @@ where
     Cmd: CallbackBitcode + 'static,
     F: Fn(NaiveTime) -> Cmd,
 {
+    let Some(pairing) = state.get_pairing(student, teacher).await else {
+        let message = format!("{} on {} — no available slots.", teacher, date);
+        match message_id {
+            Some(id) => { bot.edit_message_text(chat_id, id, message).await?; }
+            None => { bot.send_message(chat_id, message).await?; }
+        }
+        return Ok(());
+    };
+    let lesson_duration = chrono::Duration::minutes(pairing.duration_minutes as i64);
+
     let (worktime, _) = state.sheets.get_worktime().await?;
     let (schedule, _) = state.sheets.get_schedule().await?;
-    let slots = available_slots(&worktime, &schedule, teacher, student, date);
+    let slots = available_slots(&worktime, &schedule, teacher, student, date, lesson_duration);
 
     let message = if slots.is_empty() {
         format!("{} on {} — no available slots.", teacher, date)
@@ -273,7 +283,8 @@ where
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
 
     for slot in slots {
-        let label = format!("{:02}:00 – {:02}:00", slot.hour(), slot.hour() + 1);
+        let end_time = slot + lesson_duration;
+        let label = format!("{:02}:{:02} – {:02}:{:02}", slot.hour(), slot.minute(), end_time.hour(), end_time.minute());
         let cmd = make_cmd(slot);
         let key = CallbackKey::pack(cmd, &user_proxy).await;
         buttons.push(vec![InlineKeyboardButton::callback_key(label, &key)]);

@@ -201,8 +201,9 @@ impl TimePeriod {
         Some(TimePeriod::new(start, end - start))
     }
 
-    /// Returns the start instants of all 1-hour-aligned slots that fit entirely within this period.
-    pub fn hour_slots(&self) -> Vec<DateTime<Utc>> {
+    /// Returns the start instants of all full-hour-aligned slots of `duration` that fit entirely
+    /// within this period.
+    pub fn hour_slots(&self, duration: chrono::Duration) -> Vec<DateTime<Utc>> {
         let first_h = if self.start.minute() == 0 && self.start.second() == 0 && self.start.nanosecond() == 0 {
             self.start.hour()
         } else {
@@ -215,7 +216,7 @@ impl TimePeriod {
                 break;
             };
             let slot_start = slot_naive.and_utc();
-            let slot_end = slot_start + chrono::Duration::hours(1);
+            let slot_end = slot_start + duration;
             if slot_end > self.end() {
                 break;
             }

@@ -16,6 +16,7 @@ use crate::api::menus::{
     show_date_selection, show_month_selection, show_slot_selection, show_teacher_selection,
     show_year_selection,
 };
+use crate::sheets::worktime::worktime_periods;
 use crate::api::traits::{BookCommand, BookParams};
 use crate::models::{TelegramName, TimePeriod};
 use crate::state::BotState;
@@ -278,6 +279,18 @@ async fn book_7(
 
     let new_start = date.and_time(hour).and_utc();
     let new_period = TimePeriod::new(new_start, chrono::Duration::seconds(duration.as_secs() as i64));
+
+    let (worktime_entries, _) = state.sheets.get_worktime().await?;
+    let fits_in_worktime = worktime_periods(&worktime_entries, &teacher, date)
+        .iter()
+        .any(|wp| wp.contains(&new_period));
+    if !fits_in_worktime {
+        let text = markdown_string!(
+            "⚠️ Cannot book: the lesson extends outside the teacher's working hours\\."
+        );
+        bot.send_markdown_message(chat_id, text).await?;
+        return Ok(());
+    }
 
     let (all_entries, _) = state.sheets.get_schedule().await?;
     let has_overlap = all_entries

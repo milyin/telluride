@@ -50,28 +50,15 @@ impl SheetsClient {
     }
 }
 
-/// Returns the sorted list of free 1-hour time slots for `teacher` / `student` on `date`.
+/// Returns the applicable worktime windows for `teacher` on `date` as [`TimePeriod`]s.
 ///
-/// **Algorithm:**
-/// 1. Select applicable `Worktime` windows (specific-date rows override day-of-week rows).
-/// 2. Convert each window to a [`TimePeriod`].
-/// 3. Subtract all planned `schedule` entries that involve the teacher or student.
-/// 4. Enumerate every 1-hour-aligned slot that fits inside the remaining free windows.
-pub fn available_slots(
-    worktime: &[Worktime],
-    schedule: &[ScheduleEntry],
-    teacher: &TelegramName,
-    student: &TelegramName,
-    date: NaiveDate,
-) -> Vec<NaiveTime> {
+/// Specific-date rows take precedence over day-of-week rows.
+pub fn worktime_periods(worktime: &[Worktime], teacher: &TelegramName, date: NaiveDate) -> Vec<TimePeriod> {
     let weekday: Weekday = date.weekday();
 
-    let for_teacher: Vec<&Worktime> = worktime
-        .iter()
-        .filter(|w| &w.teacher_telegram == teacher)
-        .collect();
+    let for_teacher: Vec<&Worktime> =
+        worktime.iter().filter(|w| &w.teacher_telegram == teacher).collect();
 
-    // Specific-date rows override day-of-week rows.
     let specific: Vec<&Worktime> =
         for_teacher.iter().filter(|w| w.date == Some(date)).copied().collect();
 
@@ -81,8 +68,22 @@ pub fn available_slots(
         for_teacher.iter().filter(|w| w.day_of_week == Some(weekday)).copied().collect()
     };
 
-    // Convert working windows to TimePeriods.
-    let mut free: Vec<TimePeriod> = applicable.iter().map(|w| w.time_period(date)).collect();
+    applicable.iter().map(|w| w.time_period(date)).collect()
+}
+
+/// Returns the sorted list of free slots for `teacher` / `student` on `date`.
+///
+/// Only slots where a lesson of `lesson_duration` fits entirely within the remaining free
+/// worktime (after subtracting existing planned lessons) are returned.
+pub fn available_slots(
+    worktime: &[Worktime],
+    schedule: &[ScheduleEntry],
+    teacher: &TelegramName,
+    student: &TelegramName,
+    date: NaiveDate,
+    lesson_duration: chrono::Duration,
+) -> Vec<NaiveTime> {
+    let mut free = worktime_periods(worktime, teacher, date);
 
     // Subtract planned lessons that block the teacher or student.
     let booked: Vec<TimePeriod> = schedule
@@ -96,9 +97,9 @@ pub fn available_slots(
         free = free.into_iter().flat_map(|p| p.subtract(blocked)).collect();
     }
 
-    // Collect 1-hour-aligned slots from all remaining free windows.
+    // Collect hour-aligned slots of lesson_duration from all remaining free windows.
     let mut slots: Vec<NaiveTime> =
-        free.iter().flat_map(|p| p.hour_slots()).map(|dt| dt.time()).collect();
+        free.iter().flat_map(|p| p.hour_slots(lesson_duration)).map(|dt| dt.time()).collect();
 
     slots.sort();
     slots.dedup();
