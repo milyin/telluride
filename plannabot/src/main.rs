@@ -69,7 +69,7 @@ async fn main() {
                 .filter_async(|msg: Message, state: Arc<BotState>| {
                     bot::filter_message_by(msg, state, bot::student::is_student)
                 })
-                .filter_command::<StudentCommand>()
+                .chain(bot::filter_command_prefixed::<StudentCommand, _>())
                 .endpoint(student_command_handler),
         )
         // Teacher commands (/start, /help, /schedule, /impersonate, /admin, /refresh).
@@ -78,7 +78,7 @@ async fn main() {
                 .filter_async(|msg: Message, state: Arc<BotState>| {
                     bot::filter_message_by(msg, state, bot::teacher::is_teacher)
                 })
-                .filter_command::<TeacherCommand>()
+                .chain(bot::filter_command_prefixed::<TeacherCommand, _>())
                 .endpoint(teacher_command_handler),
         )
         // Impersonation mode commands (/start, /help, /schedule, /book, /quit).
@@ -87,7 +87,7 @@ async fn main() {
                 .filter_async(|msg: Message, state: Arc<BotState>| {
                     bot::filter_message_by(msg, state, bot::impersonate::is_impersonate)
                 })
-                .filter_command::<ImpersonateCommand>()
+                .chain(bot::filter_command_prefixed::<ImpersonateCommand, _>())
                 .endpoint(impersonate_command_handler),
         )
         // Admin mode commands (/start, /help, /status, /refresh, /quit).
@@ -96,7 +96,7 @@ async fn main() {
                 .filter_async(|msg: Message, state: Arc<BotState>| {
                     bot::filter_message_by(msg, state, bot::admin::is_admin)
                 })
-                .filter_command::<AdminCommand>()
+                .chain(bot::filter_command_prefixed::<AdminCommand, _>())
                 .endpoint(admin_command_handler),
         )
         // Student inline keyboard callbacks.
@@ -151,8 +151,6 @@ async fn main() {
                 })
                 .endpoint(admin_callback_command_handler),
         )
-        // Inline query handler (for booking confirmation via switch_inline_query_current_chat).
-        .branch(Update::filter_inline_query().endpoint(inline_query_handler))
         // Plain text messages (non-command) and unhandled commands (e.g. unauthorized users).
         .branch(
             Update::filter_message()

@@ -245,9 +245,9 @@ async fn book_6(
     let cost_str = pairing.cost.to_string();
     text.push(&markdown_format!("💰 Cost: {}\n", cost_str));
 
-    let l7_params = BookParams::L7(teacher, date, hour, duration).to_string();
+    let l7_params = format!("/book {}", BookParams::L7(teacher, date, hour, duration));
     let button =
-        InlineKeyboardButton::switch_inline_query_current_chat("✏️ Edit & Book", l7_params);
+        InlineKeyboardButton::switch_inline_query_current_chat("📅 Book", l7_params);
     let keyboard = InlineKeyboardMarkup::new(vec![vec![button]]);
 
     bot.send_markdown_message(chat_id, text)

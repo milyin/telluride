@@ -9,8 +9,26 @@ use std::future::Future;
 use std::sync::Arc;
 use telluride::command::CallbackKey;
 use telluride::data_store::{InMemStore, UserProxy};
+use teloxide::dispatching::DpHandlerDescription;
 use teloxide::prelude::*;
-use teloxide::types::{ChatId, MessageId};
+use teloxide::types::{ChatId, Me, MessageId};
+use teloxide::utils::command::BotCommands;
+
+pub fn filter_command_prefixed<C, Output>() -> dptree::Handler<'static, Output, DpHandlerDescription>
+where
+    C: BotCommands + Send + Sync + 'static,
+    Output: Send + Sync + 'static,
+{
+    dptree::filter_map(move |message: Message, me: Me| {
+        let bot_name = me.user.username.expect("Bots must have a username");
+        let text = message.text().or_else(|| message.caption())?;
+        C::parse(text, &bot_name).ok().or_else(|| {
+            let prefix = format!("@{} ", bot_name);
+            text.strip_prefix(&prefix)
+                .and_then(|stripped| C::parse(stripped, &bot_name).ok())
+        })
+    })
+}
 
 /// Extracts the Telegram username from a message sender.
 /// Returns the username without '@', converted to lowercase.

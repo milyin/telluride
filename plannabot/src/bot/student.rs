@@ -105,36 +105,6 @@ pub async fn student_command_handler(
     student_handle(bot, msg, cmd, state, callback_storage, None).await
 }
 
-pub async fn inline_query_handler(bot: Bot, q: InlineQuery) -> ResponseResult<()> {
-    let Ok(params) = q.query.parse::<BookParams>() else {
-        bot.answer_inline_query(q.id, vec![]).await?;
-        return Ok(());
-    };
-    let BookParams::L7(ref teacher, ref date, ref hour, ref duration) = params else {
-        bot.answer_inline_query(q.id, vec![]).await?;
-        return Ok(());
-    };
-
-    let command = format!("/book {}", params);
-    let description = format!(
-        "{} | {} {} | {}",
-        teacher,
-        date,
-        hour.format("%H:%M"),
-        duration
-    );
-    let article = InlineQueryResultArticle::new(
-        "book_confirm",
-        "📅 Book this lesson",
-        InputMessageContent::Text(InputMessageContentText::new(command)),
-    )
-    .description(description);
-
-    bot.answer_inline_query(q.id, vec![InlineQueryResult::Article(article)])
-        .await?;
-    Ok(())
-}
-
 pub async fn student_callback_command_handler(
     bot: Bot,
     q: CallbackQuery,
