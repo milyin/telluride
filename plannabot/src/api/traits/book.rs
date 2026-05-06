@@ -55,16 +55,14 @@ impl FromStr for BookParams {
             return Ok(BookParams::L1(teacher));
         };
 
-        // If the second token starts with a letter it is a TelegramName (student).
-        // Digits → year from an old-format callback; dashes → date — both are rejected.
-        let second_first = second_str.chars().next().unwrap_or('0');
-        if !second_first.is_alphabetic() {
-            return Err(anyhow::anyhow!(
+        // Try to parse as TelegramName (handles both bare names and @-prefixed names).
+        // Digits-only (year) or date strings will fail, signalling an old-format callback.
+        let student: TelegramName = second_str.parse().map_err(|_| {
+            anyhow::anyhow!(
                 "unexpected second parameter '{}': expected student TelegramName",
                 second_str
-            ));
-        }
-        let student: TelegramName = second_str.parse()?;
+            )
+        })?;
 
         let Some(third_str) = parts.get(2) else {
             return Ok(BookParams::L2(teacher, student));
