@@ -26,6 +26,7 @@ pub async fn help(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Result<(
         /start \\- Start the bot\n\
         /help \\- Display this help message\n\
         /schedule \\- Show your planned lessons\n\
+        /book \\- Book a lesson for a student\n\
         /impersonate \\- Impersonate a student to make actions on their behalf\n\
         /admin \\- Enter admin mode\n\
         /refresh \\- Forcedly refresh the data\n\n\

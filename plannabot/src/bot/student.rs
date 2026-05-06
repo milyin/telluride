@@ -1,5 +1,5 @@
 use crate::api;
-use crate::api::traits::{BookCommand, BookParams};
+use crate::api::traits::{BookCommand, BookParams, BookingActor};
 use crate::bot::{callback_command_handler, get_username};
 use crate::models::{TelegramName, UserEffectiveRole, UserRole};
 use crate::state::BotState;
@@ -7,10 +7,7 @@ use std::sync::Arc;
 use telluride::command::CallbackKey;
 use telluride::data_store::InMemStore;
 use teloxide::prelude::*;
-use teloxide::types::{
-    ChatId, InlineQueryResult, InlineQueryResultArticle, InputMessageContent,
-    InputMessageContentText, MessageId,
-};
+use teloxide::types::{ChatId, MessageId};
 use teloxide::utils::command::BotCommands;
 
 #[derive(BotCommands, Clone, Debug, Hash, bitcode::Encode, bitcode::Decode)]
@@ -78,7 +75,7 @@ async fn student_handle(
             api::student::schedule(&bot, msg.chat.id, &student, &state).await
         }
         StudentCommand::Book(params) => {
-            api::student::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, callback_storage, message_id, &student.telegram_name).await
+            api::book::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, callback_storage, message_id, &BookingActor::Student(student.telegram_name.clone())).await
         }
     };
 

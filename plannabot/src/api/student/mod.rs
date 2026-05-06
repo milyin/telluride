@@ -1,5 +1,3 @@
-pub mod book;
-
 use crate::api::common::format_duration;
 use crate::models::Student;
 use crate::state::BotState;
@@ -9,8 +7,6 @@ use std::sync::Arc;
 use telluride::markdown::MarkdownStringMessage;
 use telluride::{markdown_format, markdown_string};
 use teloxide::prelude::*;
-
-pub use book::book;
 
 /// Handle the /help command for a student.
 pub async fn help(bot: &Bot, chat_id: ChatId) -> Result<()> {

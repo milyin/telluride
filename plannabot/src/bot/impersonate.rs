@@ -1,5 +1,5 @@
 use crate::api;
-use crate::api::traits::{BookCommand, BookParams};
+use crate::api::traits::{BookCommand, BookParams, BookingActor};
 use crate::bot::{callback_command_handler, get_username};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -70,7 +70,7 @@ async fn impersonate_handle(
         ImpersonateCommand::Help => api::impersonate::help(&bot, msg.chat.id).await,
         ImpersonateCommand::Schedule => api::impersonate::schedule(&bot, msg.chat.id, &state).await,
         ImpersonateCommand::Book(params) => {
-            api::student::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, callback_storage, message_id, &student_name).await
+            api::book::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, callback_storage, message_id, &BookingActor::Student(student_name.clone())).await
         }
         ImpersonateCommand::Quit => {
             api::impersonate::quit(&bot, msg.chat.id, &teacher, &state).await
