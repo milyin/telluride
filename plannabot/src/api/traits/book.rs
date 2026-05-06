@@ -3,10 +3,10 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime};
-use humantime::Duration;
 use telluride::utils::{screen_spaces, split_with_screened_spaces};
 
 use crate::models::TelegramName;
+use crate::types::Duration;
 
 pub enum BookParams {
     L0(),

@@ -4,6 +4,7 @@ mod config;
 mod models;
 mod sheets;
 mod state;
+mod types;
 
 use std::sync::Arc;
 use telluride::command::CallbackKey;

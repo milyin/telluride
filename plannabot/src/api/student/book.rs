@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use chrono::{Datelike, Local, NaiveDate, NaiveTime};
-use humantime::Duration;
+use crate::types::Duration;
 use telluride::command::{CallbackBitcode, CallbackKey};
 use telluride::data_store::InMemStore;
 use telluride::markdown::MarkdownStringMessage;
