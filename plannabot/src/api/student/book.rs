@@ -17,7 +17,7 @@ use crate::api::menus::{
     show_year_selection,
 };
 use crate::api::traits::{BookCommand, BookParams};
-use crate::models::TelegramName;
+use crate::models::{TelegramName, TimePeriod};
 use crate::state::BotState;
 
 pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
@@ -277,20 +277,14 @@ async fn book_7(
     };
 
     let new_start = date.and_time(hour).and_utc();
-    let duration_secs = duration.as_secs() as i64;
-    let new_end = new_start + chrono::Duration::seconds(duration_secs);
+    let new_period = TimePeriod::new(new_start, chrono::Duration::seconds(duration.as_secs() as i64));
 
     let (all_entries, _) = state.sheets.get_schedule().await?;
     let has_overlap = all_entries
         .iter()
         .filter(|e| e.is_planned())
         .filter(|e| e.student_telegram == *student_name || e.teacher_telegram == teacher)
-        .any(|e| {
-            let existing_start = e.datetime;
-            let existing_end =
-                existing_start + chrono::Duration::minutes(e.duration_minutes as i64);
-            new_start < existing_end && existing_start < new_end
-        });
+        .any(|e| e.time_period().overlaps(&new_period));
 
     if has_overlap {
         let text = markdown_string!(

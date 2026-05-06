@@ -1,10 +1,10 @@
 //! Worktime sheet reader and available-slot calculation.
 
 use anyhow::{Context, Result};
-use chrono::{Datelike, NaiveDate, NaiveTime, Timelike, Weekday};
+use chrono::{Datelike, NaiveDate, NaiveTime, Weekday};
 
 use super::{SheetSchema, SheetsClient, SHEET_WORKTIME, WORKTIME_COLS};
-use crate::models::{SheetParseError, TelegramName, Worktime};
+use crate::models::{ScheduleEntry, SheetParseError, TelegramName, TimePeriod, Worktime};
 
 impl SheetsClient {
     /// Reads all rows from the `Worktime` sheet and returns them together with
@@ -50,21 +50,20 @@ impl SheetsClient {
     }
 }
 
-/// Returns the sorted list of 1-hour time slots available for `teacher` on
-/// `date`, derived from the supplied `worktime` rows.
+/// Returns the sorted list of free 1-hour time slots for `teacher` / `student` on `date`.
 ///
-/// A *slot* is identified by its start time (always on a full hour).  A slot
-/// starting at hour `H` spans `H:00–(H+1):00`.
-///
-/// **Slot boundaries from a working window:**
-/// - The first slot starts at the first full hour **≥ `start_time`**.
-///   - `start_time = 11:30` → first slot at `12:00`
-///   - `start_time = 11:00` → first slot at `11:00`
-/// - A slot is included only if its end (`(H+1):00`) is **≤ `end_time`**.
-///
-/// **Override logic:** if any row for this teacher has `date == Some(date)`,
-/// only those rows are used; otherwise rows matching `day_of_week` are used.
-pub fn available_slots(worktime: &[Worktime], teacher: &TelegramName, date: NaiveDate) -> Vec<NaiveTime> {
+/// **Algorithm:**
+/// 1. Select applicable `Worktime` windows (specific-date rows override day-of-week rows).
+/// 2. Convert each window to a [`TimePeriod`].
+/// 3. Subtract all planned `schedule` entries that involve the teacher or student.
+/// 4. Enumerate every 1-hour-aligned slot that fits inside the remaining free windows.
+pub fn available_slots(
+    worktime: &[Worktime],
+    schedule: &[ScheduleEntry],
+    teacher: &TelegramName,
+    student: &TelegramName,
+    date: NaiveDate,
+) -> Vec<NaiveTime> {
     let weekday: Weekday = date.weekday();
 
     let for_teacher: Vec<&Worktime> = worktime
@@ -73,44 +72,33 @@ pub fn available_slots(worktime: &[Worktime], teacher: &TelegramName, date: Naiv
         .collect();
 
     // Specific-date rows override day-of-week rows.
-    let specific: Vec<&Worktime> = for_teacher
-        .iter()
-        .filter(|w| w.date == Some(date))
-        .copied()
-        .collect();
+    let specific: Vec<&Worktime> =
+        for_teacher.iter().filter(|w| w.date == Some(date)).copied().collect();
 
     let applicable: Vec<&Worktime> = if !specific.is_empty() {
         specific
     } else {
-        for_teacher
-            .iter()
-            .filter(|w| w.day_of_week == Some(weekday))
-            .copied()
-            .collect()
+        for_teacher.iter().filter(|w| w.day_of_week == Some(weekday)).copied().collect()
     };
 
-    let mut slots: Vec<NaiveTime> = Vec::new();
+    // Convert working windows to TimePeriods.
+    let mut free: Vec<TimePeriod> = applicable.iter().map(|w| w.time_period(date)).collect();
 
-    for entry in applicable {
-        // First slot starts at the next full hour at or after start_time.
-        let first_h = if entry.start_time.minute() == 0 && entry.start_time.second() == 0 {
-            entry.start_time.hour()
-        } else {
-            entry.start_time.hour() + 1
-        };
+    // Subtract planned lessons that block the teacher or student.
+    let booked: Vec<TimePeriod> = schedule
+        .iter()
+        .filter(|e| e.is_planned())
+        .filter(|e| &e.teacher_telegram == teacher || &e.student_telegram == student)
+        .map(|e| e.time_period())
+        .collect();
 
-        let mut h = first_h;
-        loop {
-            let Some(slot_end) = NaiveTime::from_hms_opt(h + 1, 0, 0) else {
-                break; // h+1 overflows valid hour range (≥24)
-            };
-            if slot_end > entry.end_time {
-                break;
-            }
-            slots.push(NaiveTime::from_hms_opt(h, 0, 0).unwrap());
-            h += 1;
-        }
+    for blocked in &booked {
+        free = free.into_iter().flat_map(|p| p.subtract(blocked)).collect();
     }
+
+    // Collect 1-hour-aligned slots from all remaining free windows.
+    let mut slots: Vec<NaiveTime> =
+        free.iter().flat_map(|p| p.hour_slots()).map(|dt| dt.time()).collect();
 
     slots.sort();
     slots.dedup();

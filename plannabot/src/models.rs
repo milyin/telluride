@@ -1,7 +1,7 @@
 use std::{fmt, str::FromStr};
 
 use anyhow::bail;
-use chrono::{DateTime, NaiveDate, NaiveTime, Utc, Weekday};
+use chrono::{DateTime, NaiveDate, NaiveTime, Timelike, Utc, Weekday};
 use chrono_tz::Tz;
 use std::convert::TryFrom;
 
@@ -152,6 +152,80 @@ sheet_struct! {
     }
 }
 
+/// A contiguous time interval.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimePeriod {
+    pub start: DateTime<Utc>,
+    pub duration: chrono::Duration,
+}
+
+impl TimePeriod {
+    pub fn new(start: DateTime<Utc>, duration: chrono::Duration) -> Self {
+        Self { start, duration }
+    }
+
+    pub fn end(&self) -> DateTime<Utc> {
+        self.start + self.duration
+    }
+
+    pub fn overlaps(&self, other: &TimePeriod) -> bool {
+        self.start < other.end() && other.start < self.end()
+    }
+
+    pub fn contains(&self, other: &TimePeriod) -> bool {
+        self.start <= other.start && other.end() <= self.end()
+    }
+
+    /// Remove `other` from `self`, yielding 0–2 remaining periods.
+    pub fn subtract(&self, other: &TimePeriod) -> Vec<TimePeriod> {
+        if !self.overlaps(other) {
+            return vec![self.clone()];
+        }
+        let mut result = Vec::new();
+        if self.start < other.start {
+            result.push(TimePeriod::new(self.start, other.start - self.start));
+        }
+        if other.end() < self.end() {
+            result.push(TimePeriod::new(other.end(), self.end() - other.end()));
+        }
+        result
+    }
+
+    /// Union of `self` and `other` if they overlap or are adjacent; `None` if disjoint.
+    pub fn join(&self, other: &TimePeriod) -> Option<TimePeriod> {
+        if self.start > other.end() || other.start > self.end() {
+            return None;
+        }
+        let start = self.start.min(other.start);
+        let end = self.end().max(other.end());
+        Some(TimePeriod::new(start, end - start))
+    }
+
+    /// Returns the start instants of all 1-hour-aligned slots that fit entirely within this period.
+    pub fn hour_slots(&self) -> Vec<DateTime<Utc>> {
+        let first_h = if self.start.minute() == 0 && self.start.second() == 0 && self.start.nanosecond() == 0 {
+            self.start.hour()
+        } else {
+            self.start.hour() + 1
+        };
+        let mut slots = Vec::new();
+        let mut h = first_h;
+        loop {
+            let Some(slot_naive) = self.start.date_naive().and_hms_opt(h, 0, 0) else {
+                break;
+            };
+            let slot_start = slot_naive.and_utc();
+            let slot_end = slot_start + chrono::Duration::hours(1);
+            if slot_end > self.end() {
+                break;
+            }
+            slots.push(slot_start);
+            h += 1;
+        }
+        slots
+    }
+}
+
 /// Status of a scheduled lesson.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LessonStatus {
@@ -189,6 +263,13 @@ impl ScheduleEntry {
     pub fn is_planned(&self) -> bool {
         self.status.is_none()
     }
+
+    pub fn time_period(&self) -> TimePeriod {
+        TimePeriod::new(
+            self.datetime,
+            chrono::Duration::minutes(self.duration_minutes as i64),
+        )
+    }
 }
 
 sheet_struct! {
@@ -224,6 +305,14 @@ sheet_struct! {
         pub date: Option<NaiveDate>,
         pub start_time: NaiveTime,
         pub end_time: NaiveTime,
+    }
+}
+
+impl Worktime {
+    pub fn time_period(&self, date: NaiveDate) -> TimePeriod {
+        let start = date.and_time(self.start_time).and_utc();
+        let end = date.and_time(self.end_time).and_utc();
+        TimePeriod::new(start, end - start)
     }
 }
 
