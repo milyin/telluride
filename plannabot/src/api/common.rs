@@ -47,7 +47,7 @@ pub async fn start(
 
 /// Formats a lesson duration in minutes to a human-readable string.
 ///
-/// - `90`  → `"1h 30m"`
+/// - `90`  → `"1h30m"`
 /// - `120` → `"2h"`
 /// - `45`  → `"45m"`
 pub fn format_duration(minutes: i64) -> String {
@@ -56,6 +56,6 @@ pub fn format_duration(minutes: i64) -> String {
     match (hours, mins) {
         (0, m) => format!("{}m", m),
         (h, 0) => format!("{}h", h),
-        (h, m) => format!("{}h {}m", h, m),
+        (h, m) => format!("{}h{}m", h, m),
     }
 }
