@@ -236,6 +236,9 @@ async fn book_6(
     let duration =
         Duration::from(std::time::Duration::from_secs(pairing.duration_minutes * 60));
 
+    let student = state.get_student(student_name).await;
+    let currency = student.as_ref().map(|s| s.currency.as_str()).unwrap_or("");
+
     let mut text = markdown_string!("📅 *Book a Lesson*\n\n");
     let teacher_str = teacher.to_string();
     text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher_str));
@@ -245,7 +248,11 @@ async fn book_6(
     text.push(&markdown_format!("⏰ Time: {}\n", hour_str));
     let dur_str = format_duration(pairing.duration_minutes as i64);
     text.push(&markdown_format!("⏱ Duration: {}\n", dur_str));
-    let cost_str = pairing.cost.to_string();
+    let cost_str = if currency.is_empty() {
+        pairing.cost.to_string()
+    } else {
+        format!("{} {}", pairing.cost, currency)
+    };
     text.push(&markdown_format!("💰 Cost: {}\n", cost_str));
 
     let l7_params = format!("/book {}", BookParams::L7(teacher, date, hour, duration));
@@ -308,9 +315,18 @@ async fn book_7(
     }
 
     let duration_minutes = duration.as_secs() / 60;
+    let actual_cost = if pairing.duration_minutes > 0 {
+        pairing.cost * duration_minutes as i64 / pairing.duration_minutes as i64
+    } else {
+        pairing.cost
+    };
+
+    let student = state.get_student(student_name).await;
+    let currency = student.as_ref().map(|s| s.currency.as_str()).unwrap_or("");
+
     state
         .sheets
-        .add_schedule_entry(student_name, &teacher, new_start, duration_minutes, pairing.cost)
+        .add_schedule_entry(student_name, &teacher, new_start, duration_minutes, actual_cost)
         .await?;
 
     let mut text = markdown_string!("✅ *Lesson Booked\\!*\n\n");
@@ -322,7 +338,11 @@ async fn book_7(
     text.push(&markdown_format!("⏰ Time: {}\n", hour_str));
     let dur_str = format_duration(duration_minutes as i64);
     text.push(&markdown_format!("⏱ Duration: {}\n", dur_str));
-    let cost_str = pairing.cost.to_string();
+    let cost_str = if currency.is_empty() {
+        actual_cost.to_string()
+    } else {
+        format!("{} {}", actual_cost, currency)
+    };
     text.push(&markdown_format!("💰 Cost: {}\n", cost_str));
 
     bot.send_markdown_message(chat_id, text).await?;

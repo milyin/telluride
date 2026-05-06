@@ -249,10 +249,15 @@ impl FromSheet for f64 {
     }
 }
 
-/// Parses as i64; returns 0 on failure without logging an error.
+/// Parses as i64; falls back to f64-then-round to handle CURRENCY-formatted cells
+/// (e.g. "100.00" returned by the Sheets API when a column has `#,##0.00` format);
+/// returns 0 on failure without logging an error.
 impl FromSheet for i64 {
     fn from_sheet(schema: &SheetSchema, row: &[String], _row_num: usize, col_name: &str, _errors: &mut Vec<SheetParseError>) -> Self {
-        i64::from_sheet_value(schema.get_str(row, col_name)).unwrap_or(0)
+        let s = schema.get_str(row, col_name);
+        i64::from_sheet_value(s)
+            .or_else(|_| f64::from_sheet_value(s).map(|f| f.round() as i64))
+            .unwrap_or(0)
     }
 }
 
