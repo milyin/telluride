@@ -144,9 +144,11 @@ async fn book_C1<Cmd: BookCommand + CallbackBitcode + 'static>(
             }
             let t = teacher.clone();
             let names = pairings.into_iter().map(|p| p.student_telegram).collect();
+            let mut msg = MarkdownString::from(&BookParams::C1(teacher));
+            msg.push(&markdown_string!("Select a student:"));
             show_name_list(
                 ctx,
-                markdown_string!("📅 Select a student to book a lesson:"),
+                msg,
                 markdown_string!("No paired students found\\."),
                 names,
                 move |s| Cmd::book(BookParams::C2(t.clone(), s)),
@@ -172,8 +174,11 @@ async fn book_C3<Cmd: BookCommand + CallbackBitcode + 'static>(
     student: TelegramName,
     year: i32,
 ) -> Result<()> {
+    let mut message = MarkdownString::from(&BookParams::C3(teacher.clone(), student.clone(), year));
+    message.push(&markdown_string!("Select a year:"));
     show_year_selection(
         ctx,
+        message,
         year,
         move |y| Cmd::book(BookParams::C5(teacher.clone(), student.clone(), y, 1, 1)),
     )
@@ -187,8 +192,11 @@ async fn book_C4<Cmd: BookCommand + CallbackBitcode + 'static>(
     year: i32,
     _month: u32,
 ) -> Result<()> {
+    let mut message = MarkdownString::from(&BookParams::C4(teacher.clone(), student.clone(), year, _month));
+    message.push(&markdown_format!("Select a month for {}:", year.to_string()));
     show_month_selection(
         ctx,
+        message,
         year,
         move |m| Cmd::book(BookParams::C5(teacher.clone(), student.clone(), year, m, 1)),
     )
@@ -243,11 +251,13 @@ async fn book_C6<Cmd: BookCommand + CallbackBitcode + 'static>(
     let s_cmd  = student.clone();
     let t_back = teacher.clone();
     let s_back = student.clone();
+    let header = MarkdownString::from(&BookParams::C6(teacher.clone(), student.clone(), date));
     show_slot_selection(
         ctx,
         &teacher,
         &student,
         date,
+        header,
         move |time| Cmd::book(BookParams::C7(t_cmd.clone(), s_cmd.clone(), date, time)),
         Some(Cmd::book(BookParams::C5(
             t_back,
@@ -652,11 +662,13 @@ async fn book_R2<Cmd: BookCommand + CallbackBitcode + 'static>(
     let s_cmd  = student.clone();
     let t_back = teacher.clone();
     let s_back = student.clone();
+    let header = MarkdownString::from(&BookParams::R2(teacher.clone(), student.clone(), od, ot, nd));
     show_slot_selection(
         ctx,
         &teacher,
         &student,
         nd,
+        header,
         move |new_time| {
             Cmd::book(BookParams::R3(t_cmd.clone(), s_cmd.clone(), od, ot, nd, new_time))
         },
