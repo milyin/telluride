@@ -158,12 +158,9 @@ async fn book_C3<Cmd: BookCommand + CallbackBitcode + 'static>(
 ) -> Result<()> {
     let mut message = MarkdownString::from(&BookParams::C3(teacher.clone(), student.clone(), year));
     message.push(&markdown_string!("Select a year:"));
-    show_year_selection(
-        ctx,
-        message,
-        year,
-        move |y| Cmd::book(BookParams::C5(teacher.clone(), student.clone(), y, 1, 1)),
-    )
+    show_year_selection(ctx, message, year, move |y| {
+        Cmd::book(BookParams::C5(teacher.clone(), student.clone(), y, 1, 1))
+    })
     .await
 }
 
@@ -174,14 +171,19 @@ async fn book_C4<Cmd: BookCommand + CallbackBitcode + 'static>(
     year: i32,
     _month: u32,
 ) -> Result<()> {
-    let mut message = MarkdownString::from(&BookParams::C4(teacher.clone(), student.clone(), year, _month));
-    message.push(&markdown_format!("Select a month for {}:", year.to_string()));
-    show_month_selection(
-        ctx,
-        message,
+    let mut message = MarkdownString::from(&BookParams::C4(
+        teacher.clone(),
+        student.clone(),
         year,
-        move |m| Cmd::book(BookParams::C5(teacher.clone(), student.clone(), year, m, 1)),
-    )
+        _month,
+    ));
+    message.push(&markdown_format!(
+        "Select a month for {}:",
+        year.to_string()
+    ));
+    show_month_selection(ctx, message, year, move |m| {
+        Cmd::book(BookParams::C5(teacher.clone(), student.clone(), year, m, 1))
+    })
     .await
 }
 
@@ -197,25 +199,29 @@ async fn book_C5<Cmd: BookCommand + CallbackBitcode + 'static>(
         let (worktime, _) = ctx.state.sheets.get_worktime().await?;
         let (schedule, _) = ctx.state.sheets.get_schedule().await?;
         let duration = chrono::Duration::minutes(pairing.duration_minutes as i64);
-        month_availability(&worktime, &schedule, &teacher, &student, year, month, duration)
+        month_availability(
+            &worktime, &schedule, &teacher, &student, year, month, duration,
+        )
     } else {
         HashMap::new()
     };
 
-    let t_date  = teacher.clone();
-    let s_date  = student.clone();
-    let t_prev  = teacher.clone();
-    let s_prev  = student.clone();
-    let t_next  = teacher.clone();
-    let s_next  = student.clone();
-    let t_year  = teacher.clone();
-    let s_year  = student.clone();
+    let t_date = teacher.clone();
+    let s_date = student.clone();
+    let t_prev = teacher.clone();
+    let s_prev = student.clone();
+    let t_next = teacher.clone();
+    let s_next = student.clone();
+    let t_year = teacher.clone();
+    let s_year = student.clone();
     let t_month = teacher.clone();
     let s_month = student.clone();
-    let t_back  = teacher.clone();
-    let s_back  = student.clone();
+    let t_back = teacher.clone();
+    let s_back = student.clone();
     let mut message = markdown_string!("📅 Book a Lesson\n\n");
-    message.push(&MarkdownString::from(&BookParams::C5(teacher, student, year, month, _day)));
+    message.push(&MarkdownString::from(&BookParams::C5(
+        teacher, student, year, month, _day,
+    )));
     message.push(&markdown_string!("Select a date:"));
     show_date_selection(
         ctx,
@@ -226,7 +232,14 @@ async fn book_C5<Cmd: BookCommand + CallbackBitcode + 'static>(
         move |py, pm| Cmd::book(BookParams::C5(t_prev.clone(), s_prev.clone(), py, pm, 1)),
         move |ny, nm| Cmd::book(BookParams::C5(t_next.clone(), s_next.clone(), ny, nm, 1)),
         move || Cmd::book(BookParams::C3(t_year.clone(), s_year.clone(), year)),
-        move || Cmd::book(BookParams::C4(t_month.clone(), s_month.clone(), year, month)),
+        move || {
+            Cmd::book(BookParams::C4(
+                t_month.clone(),
+                s_month.clone(),
+                year,
+                month,
+            ))
+        },
         Some(Cmd::book(BookParams::C2(t_back, s_back))),
         &day_availability,
     )
@@ -239,8 +252,8 @@ async fn book_C6<Cmd: BookCommand + CallbackBitcode + 'static>(
     student: TelegramName,
     date: NaiveDate,
 ) -> Result<()> {
-    let t_cmd  = teacher.clone();
-    let s_cmd  = student.clone();
+    let t_cmd = teacher.clone();
+    let s_cmd = student.clone();
     let t_back = teacher.clone();
     let s_back = student.clone();
     let header = MarkdownString::from(&BookParams::C6(teacher.clone(), student.clone(), date));
@@ -272,9 +285,12 @@ async fn book_C7<Cmd: BookCommand + CallbackBitcode + 'static>(
 ) -> Result<()> {
     let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await else {
         ctx.update_markdown_message(
-            markdown_string!("⚠️ No pairing found for this teacher\\. Please contact your teacher\\."),
+            markdown_string!(
+                "⚠️ No pairing found for this teacher\\. Please contact your teacher\\."
+            ),
             None,
-        ).await?;
+        )
+        .await?;
         return Ok(());
     };
     let duration = Duration::from(std::time::Duration::from_secs(
@@ -292,13 +308,19 @@ async fn book_C8<Cmd: BookCommand + CallbackBitcode + 'static>(
     duration: Duration,
 ) -> Result<()> {
     let student_data = ctx.state.get_student(&student).await;
-    let currency = student_data.as_ref().map(|s| s.currency.as_str()).unwrap_or("");
+    let currency = student_data
+        .as_ref()
+        .map(|s| s.currency.as_str())
+        .unwrap_or("");
 
     let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await else {
         ctx.update_markdown_message(
-            markdown_string!("⚠️ No pairing found for this teacher\\. Please contact your teacher\\."),
+            markdown_string!(
+                "⚠️ No pairing found for this teacher\\. Please contact your teacher\\."
+            ),
             None,
-        ).await?;
+        )
+        .await?;
         return Ok(());
     };
 
@@ -310,7 +332,13 @@ async fn book_C8<Cmd: BookCommand + CallbackBitcode + 'static>(
     };
 
     let mut text = markdown_string!("📅 *Book a Lesson*\n\n");
-    text.push(&MarkdownString::from(&BookParams::C8(teacher.clone(), student.clone(), date, hour, duration.clone())));
+    text.push(&MarkdownString::from(&BookParams::C8(
+        teacher.clone(),
+        student.clone(),
+        date,
+        hour,
+        duration.clone(),
+    )));
     let cost_str = if currency.is_empty() {
         actual_cost.to_string()
     } else {
@@ -319,10 +347,17 @@ async fn book_C8<Cmd: BookCommand + CallbackBitcode + 'static>(
     text.push(&markdown_format!("💰 Cost: {}\n", cost_str));
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key = CallbackKey::pack(Cmd::book(BookParams::C6(teacher.clone(), student.clone(), date)), &user_proxy).await;
-    let cf_params = format!("/book {}", BookParams::CF(teacher, student, date, hour, duration));
+    let back_key = CallbackKey::pack(
+        Cmd::book(BookParams::C6(teacher.clone(), student.clone(), date)),
+        &user_proxy,
+    )
+    .await;
+    let cf_params = format!(
+        "/book {}",
+        BookParams::CF(teacher, student, date, hour, duration)
+    );
     let keyboard = InlineKeyboardMarkup::new(vec![vec![
-        InlineKeyboardButton::callback_key("← Back", &back_key),
+        InlineKeyboardButton::callback_key("↩ Back", &back_key),
         InlineKeyboardButton::switch_inline_query_current_chat("📅 Book", cf_params),
     ]]);
 
@@ -342,7 +377,8 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot book: you are not paired with this teacher\\."),
             None,
-        ).await?;
+        )
+        .await?;
         return Ok(());
     };
 
@@ -358,9 +394,12 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
         .any(|wp| wp.contains(&new_period));
     if !fits_in_worktime {
         ctx.update_markdown_message(
-            markdown_string!("⚠️ Cannot book: the lesson extends outside the teacher's working hours\\."),
+            markdown_string!(
+                "⚠️ Cannot book: the lesson extends outside the teacher's working hours\\."
+            ),
             None,
-        ).await?;
+        )
+        .await?;
         return Ok(());
     }
 
@@ -374,7 +413,8 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot book: this time slot conflicts with an existing lesson\\."),
             None,
-        ).await?;
+        )
+        .await?;
         return Ok(());
     }
 
@@ -386,7 +426,10 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
     };
 
     let student_data = ctx.state.get_student(&student).await;
-    let currency = student_data.as_ref().map(|s| s.currency.as_str()).unwrap_or("");
+    let currency = student_data
+        .as_ref()
+        .map(|s| s.currency.as_str())
+        .unwrap_or("");
 
     ctx.state
         .sheets
@@ -394,7 +437,13 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
         .await?;
 
     let mut text = markdown_string!("✅ *Lesson Booked\\!*\n\n");
-    text.push(&MarkdownString::from(&BookParams::CF(teacher.clone(), student.clone(), date, hour, duration)));
+    text.push(&MarkdownString::from(&BookParams::CF(
+        teacher.clone(),
+        student.clone(),
+        date,
+        hour,
+        duration,
+    )));
     let cost_str = if currency.is_empty() {
         actual_cost.to_string()
     } else {
@@ -425,9 +474,8 @@ async fn book_L0<Cmd: BookCommand + CallbackBitcode + 'static>(
 ) -> Result<()> {
     let today = Local::now().date_naive();
     let days_since_monday = today.weekday().num_days_from_monday() as i64;
-    let week_monday = today
-        - ChronoDuration::days(days_since_monday)
-        + ChronoDuration::weeks(week_offset as i64);
+    let week_monday =
+        today - ChronoDuration::days(days_since_monday) + ChronoDuration::weeks(week_offset as i64);
     let week_sunday = week_monday + ChronoDuration::days(6);
 
     let (all_entries, _) = ctx.state.sheets.get_schedule().await?;
@@ -451,7 +499,10 @@ async fn book_L0<Cmd: BookCommand + CallbackBitcode + 'static>(
     let next_key = CallbackKey::pack(Cmd::book(BookParams::L0(week_offset + 1)), &user_proxy).await;
 
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
-    buttons.push(vec![InlineKeyboardButton::callback_key("📅 Create", &create_key)]);
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "📅 Create",
+        &create_key,
+    )]);
 
     for entry in entries {
         let dt = entry.datetime;
@@ -462,7 +513,13 @@ async fn book_L0<Cmd: BookCommand + CallbackBitcode + 'static>(
             BookingActor::Teacher(_) => entry.student_telegram.to_string(),
         };
         let icon = status_label(&entry.status);
-        let label = format!("{} {} {} ↔ {}", icon, date.format("%Y-%m-%d"), time.format("%H:%M"), other);
+        let label = format!(
+            "{} {} {} ↔ {}",
+            icon,
+            date.format("%Y-%m-%d"),
+            time.format("%H:%M"),
+            other
+        );
         let cmd = Cmd::book(BookParams::L1(
             entry.teacher_telegram,
             entry.student_telegram,
@@ -519,8 +576,17 @@ async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
     };
 
     let mut text = markdown_string!("📋 *Lesson Details*\n\n");
-    text.push(&MarkdownString::from(&BookParams::L1(teacher.clone(), student.clone(), date, time, week_offset)));
-    text.push(&markdown_format!("⏱ Duration: {}\n", format_duration(duration_minutes as i64)));
+    text.push(&MarkdownString::from(&BookParams::L1(
+        teacher.clone(),
+        student.clone(),
+        date,
+        time,
+        week_offset,
+    )));
+    text.push(&markdown_format!(
+        "⏱ Duration: {}\n",
+        format_duration(duration_minutes as i64)
+    ));
     text.push(&markdown_format!("📊 Status: {}\n", status_str));
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
@@ -529,18 +595,31 @@ async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
     let mut rows: Vec<Vec<InlineKeyboardButton>> = Vec::new();
 
     if is_planned {
-        let delete_params = format!("/book {}", BookParams::D0(teacher.clone(), student.clone(), date, time));
+        let delete_params = format!(
+            "/book {}",
+            BookParams::D0(teacher.clone(), student.clone(), date, time)
+        );
         rows.push(vec![
             InlineKeyboardButton::switch_inline_query_current_chat("🗑️ Delete", delete_params),
         ]);
 
         let now = Local::now();
         let reschedule_key = CallbackKey::pack(
-            Cmd::book(BookParams::R1(teacher.clone(), student.clone(), date, time, now.year(), now.month())),
+            Cmd::book(BookParams::R1(
+                teacher.clone(),
+                student.clone(),
+                date,
+                time,
+                now.year(),
+                now.month(),
+            )),
             &user_proxy,
         )
         .await;
-        rows.push(vec![InlineKeyboardButton::callback_key("📅 Reschedule", &reschedule_key)]);
+        rows.push(vec![InlineKeyboardButton::callback_key(
+            "📅 Reschedule",
+            &reschedule_key,
+        )]);
     }
 
     if matches!(actor, BookingActor::Teacher(_)) {
@@ -549,10 +628,15 @@ async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
             &user_proxy,
         )
         .await;
-        rows.push(vec![InlineKeyboardButton::callback_key("✏️ Change Status", &s0_key)]);
+        rows.push(vec![InlineKeyboardButton::callback_key(
+            "✏️ Change Status",
+            &s0_key,
+        )]);
     }
 
-    rows.push(vec![InlineKeyboardButton::callback_key("← Back", &back_key)]);
+    rows.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back", &back_key,
+    )]);
     let keyboard = InlineKeyboardMarkup::new(rows);
 
     ctx.update_markdown_message(text, Some(keyboard)).await?;
@@ -571,13 +655,28 @@ async fn book_D0<Cmd: BookCommand + CallbackBitcode + 'static>(
     time: NaiveTime,
 ) -> Result<()> {
     let mut text = markdown_string!("🗑️ *Delete Lesson*\n\nDelete this lesson?\n\n");
-    text.push(&MarkdownString::from(&BookParams::D0(teacher.clone(), student.clone(), date, time)));
+    text.push(&MarkdownString::from(&BookParams::D0(
+        teacher.clone(),
+        student.clone(),
+        date,
+        time,
+    )));
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key = CallbackKey::pack(Cmd::book(BookParams::L1(teacher.clone(), student.clone(), date, time, 0)), &user_proxy).await;
+    let back_key = CallbackKey::pack(
+        Cmd::book(BookParams::L1(
+            teacher.clone(),
+            student.clone(),
+            date,
+            time,
+            0,
+        )),
+        &user_proxy,
+    )
+    .await;
     let df_params = format!("/book {}", BookParams::DF(teacher, student, date, time));
     let keyboard = InlineKeyboardMarkup::new(vec![vec![
-        InlineKeyboardButton::callback_key("← Back", &back_key),
+        InlineKeyboardButton::callback_key("↩ Back", &back_key),
         InlineKeyboardButton::switch_inline_query_current_chat("🗑️ Yes, delete it", df_params),
     ]]);
 
@@ -598,7 +697,9 @@ async fn book_DF<Cmd: Send + Sync + Clone>(
         .await?;
 
     let mut text = markdown_string!("✅ *Lesson Deleted*\n\n");
-    text.push(&MarkdownString::from(&BookParams::DF(teacher, student, date, time)));
+    text.push(&MarkdownString::from(&BookParams::DF(
+        teacher, student, date, time,
+    )));
 
     ctx.update_markdown_message(text, None).await?;
     Ok(())
@@ -621,26 +722,30 @@ async fn book_R1<Cmd: BookCommand + CallbackBitcode + 'static>(
         let (worktime, _) = ctx.state.sheets.get_worktime().await?;
         let (schedule, _) = ctx.state.sheets.get_schedule().await?;
         let duration = chrono::Duration::minutes(pairing.duration_minutes as i64);
-        month_availability(&worktime, &schedule, &teacher, &student, year, month, duration)
+        month_availability(
+            &worktime, &schedule, &teacher, &student, year, month, duration,
+        )
     } else {
         HashMap::new()
     };
 
-    let t_date   = teacher.clone();
-    let s_date   = student.clone();
-    let t_prev   = teacher.clone();
-    let s_prev   = student.clone();
-    let t_next   = teacher.clone();
-    let s_next   = student.clone();
-    let t_year   = teacher.clone();
-    let s_year   = student.clone();
-    let t_month  = teacher.clone();
-    let s_month  = student.clone();
-    let t_l1     = teacher.clone();
-    let s_l1     = student.clone();
+    let t_date = teacher.clone();
+    let s_date = student.clone();
+    let t_prev = teacher.clone();
+    let s_prev = student.clone();
+    let t_next = teacher.clone();
+    let s_next = student.clone();
+    let t_year = teacher.clone();
+    let s_year = student.clone();
+    let t_month = teacher.clone();
+    let s_month = student.clone();
+    let t_l1 = teacher.clone();
+    let s_l1 = student.clone();
 
     let mut message = markdown_string!("📅 Reschedule\n\n");
-    message.push(&MarkdownString::from(&BookParams::R1(teacher, student, od, ot, year, month)));
+    message.push(&MarkdownString::from(&BookParams::R1(
+        teacher, student, od, ot, year, month,
+    )));
     message.push(&markdown_string!("Select a new date:"));
     show_date_selection(
         ctx,
@@ -648,15 +753,55 @@ async fn book_R1<Cmd: BookCommand + CallbackBitcode + 'static>(
         year,
         month,
         move |date| Cmd::book(BookParams::R2(t_date.clone(), s_date.clone(), od, ot, date)),
-        move |py, pm| Cmd::book(BookParams::R1(t_prev.clone(), s_prev.clone(), od, ot, py, pm)),
-        move |ny, nm| Cmd::book(BookParams::R1(t_next.clone(), s_next.clone(), od, ot, ny, nm)),
-        move || {
-            let (prev_y, prev_m) = if month > 1 { (year, month - 1) } else { (year - 1, 12) };
-            Cmd::book(BookParams::R1(t_year.clone(), s_year.clone(), od, ot, prev_y, prev_m))
+        move |py, pm| {
+            Cmd::book(BookParams::R1(
+                t_prev.clone(),
+                s_prev.clone(),
+                od,
+                ot,
+                py,
+                pm,
+            ))
+        },
+        move |ny, nm| {
+            Cmd::book(BookParams::R1(
+                t_next.clone(),
+                s_next.clone(),
+                od,
+                ot,
+                ny,
+                nm,
+            ))
         },
         move || {
-            let (prev_y, prev_m) = if month > 1 { (year, month - 1) } else { (year - 1, 12) };
-            Cmd::book(BookParams::R1(t_month.clone(), s_month.clone(), od, ot, prev_y, prev_m))
+            let (prev_y, prev_m) = if month > 1 {
+                (year, month - 1)
+            } else {
+                (year - 1, 12)
+            };
+            Cmd::book(BookParams::R1(
+                t_year.clone(),
+                s_year.clone(),
+                od,
+                ot,
+                prev_y,
+                prev_m,
+            ))
+        },
+        move || {
+            let (prev_y, prev_m) = if month > 1 {
+                (year, month - 1)
+            } else {
+                (year - 1, 12)
+            };
+            Cmd::book(BookParams::R1(
+                t_month.clone(),
+                s_month.clone(),
+                od,
+                ot,
+                prev_y,
+                prev_m,
+            ))
         },
         Some(Cmd::book(BookParams::L1(t_l1, s_l1, od, ot, 0))),
         &day_availability,
@@ -672,11 +817,17 @@ async fn book_R2<Cmd: BookCommand + CallbackBitcode + 'static>(
     ot: NaiveTime,
     nd: NaiveDate,
 ) -> Result<()> {
-    let t_cmd  = teacher.clone();
-    let s_cmd  = student.clone();
+    let t_cmd = teacher.clone();
+    let s_cmd = student.clone();
     let t_back = teacher.clone();
     let s_back = student.clone();
-    let header = MarkdownString::from(&BookParams::R2(teacher.clone(), student.clone(), od, ot, nd));
+    let header = MarkdownString::from(&BookParams::R2(
+        teacher.clone(),
+        student.clone(),
+        od,
+        ot,
+        nd,
+    ));
     show_slot_selection(
         ctx,
         &teacher,
@@ -684,7 +835,14 @@ async fn book_R2<Cmd: BookCommand + CallbackBitcode + 'static>(
         nd,
         header,
         move |new_time| {
-            Cmd::book(BookParams::R3(t_cmd.clone(), s_cmd.clone(), od, ot, nd, new_time))
+            Cmd::book(BookParams::R3(
+                t_cmd.clone(),
+                s_cmd.clone(),
+                od,
+                ot,
+                nd,
+                new_time,
+            ))
         },
         Some(Cmd::book(BookParams::R1(
             t_back,
@@ -708,13 +866,24 @@ async fn book_R3<Cmd: BookCommand + CallbackBitcode + 'static>(
     nt: NaiveTime,
 ) -> Result<()> {
     let mut text = markdown_string!("📅 *Reschedule Lesson*\n\n");
-    text.push(&MarkdownString::from(&BookParams::R3(teacher.clone(), student.clone(), od, ot, nd, nt)));
+    text.push(&MarkdownString::from(&BookParams::R3(
+        teacher.clone(),
+        student.clone(),
+        od,
+        ot,
+        nd,
+        nt,
+    )));
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key = CallbackKey::pack(Cmd::book(BookParams::R2(teacher.clone(), student.clone(), od, ot, nd)), &user_proxy).await;
+    let back_key = CallbackKey::pack(
+        Cmd::book(BookParams::R2(teacher.clone(), student.clone(), od, ot, nd)),
+        &user_proxy,
+    )
+    .await;
     let rf_params = format!("/book {}", BookParams::RF(teacher, student, od, ot, nd, nt));
     let keyboard = InlineKeyboardMarkup::new(vec![vec![
-        InlineKeyboardButton::callback_key("← Back", &back_key),
+        InlineKeyboardButton::callback_key("↩ Back", &back_key),
         InlineKeyboardButton::switch_inline_query_current_chat("✅ Confirm reschedule", rf_params),
     ]]);
 
@@ -735,7 +904,8 @@ async fn book_RF<Cmd: Send + Sync + Clone>(
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot reschedule: pairing not found\\."),
             None,
-        ).await?;
+        )
+        .await?;
         return Ok(());
     };
 
@@ -752,9 +922,12 @@ async fn book_RF<Cmd: Send + Sync + Clone>(
         .any(|wp| wp.contains(&new_period));
     if !fits_in_worktime {
         ctx.update_markdown_message(
-            markdown_string!("⚠️ Cannot reschedule: new time extends outside the teacher's working hours\\."),
+            markdown_string!(
+                "⚠️ Cannot reschedule: new time extends outside the teacher's working hours\\."
+            ),
             None,
-        ).await?;
+        )
+        .await?;
         return Ok(());
     }
 
@@ -769,7 +942,8 @@ async fn book_RF<Cmd: Send + Sync + Clone>(
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot reschedule: new time conflicts with an existing lesson\\."),
             None,
-        ).await?;
+        )
+        .await?;
         return Ok(());
     }
 
@@ -780,11 +954,19 @@ async fn book_RF<Cmd: Send + Sync + Clone>(
 
     ctx.state
         .sheets
-        .add_schedule_entry(&student, &teacher, new_start, pairing.duration_minutes, pairing.cost)
+        .add_schedule_entry(
+            &student,
+            &teacher,
+            new_start,
+            pairing.duration_minutes,
+            pairing.cost,
+        )
         .await?;
 
     let mut text = markdown_string!("✅ *Lesson Rescheduled\\!*\n\n");
-    text.push(&MarkdownString::from(&BookParams::RF(teacher, student, od, ot, nd, nt)));
+    text.push(&MarkdownString::from(&BookParams::RF(
+        teacher, student, od, ot, nd, nt,
+    )));
 
     ctx.update_markdown_message(text, None).await?;
     Ok(())
@@ -806,28 +988,56 @@ async fn book_S0<Cmd: BookCommand + CallbackBitcode + 'static>(
         ctx.update_markdown_message(
             markdown_string!("⚠️ Only teachers can change the lesson status\\."),
             None,
-        ).await?;
+        )
+        .await?;
         return Ok(());
     }
 
     let mut text = markdown_string!("✏️ *Change Lesson Status*\n\n");
-    text.push(&MarkdownString::from(&BookParams::S0(teacher.clone(), student.clone(), date, time)));
+    text.push(&MarkdownString::from(&BookParams::S0(
+        teacher.clone(),
+        student.clone(),
+        date,
+        time,
+    )));
     text.push(&markdown_string!("\nSelect new status:"));
 
     let passed_params = format!(
         "/book {}",
-        BookParams::SF(teacher.clone(), student.clone(), date, time, LessonStatus::Passed)
+        BookParams::SF(
+            teacher.clone(),
+            student.clone(),
+            date,
+            time,
+            LessonStatus::Passed
+        )
     );
     let absent_params = format!(
         "/book {}",
-        BookParams::SF(teacher.clone(), student.clone(), date, time, LessonStatus::Absent)
+        BookParams::SF(
+            teacher.clone(),
+            student.clone(),
+            date,
+            time,
+            LessonStatus::Absent
+        )
     );
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key = CallbackKey::pack(Cmd::book(BookParams::L1(teacher.clone(), student.clone(), date, time, 0)), &user_proxy).await;
+    let back_key = CallbackKey::pack(
+        Cmd::book(BookParams::L1(
+            teacher.clone(),
+            student.clone(),
+            date,
+            time,
+            0,
+        )),
+        &user_proxy,
+    )
+    .await;
 
     let keyboard = InlineKeyboardMarkup::new(vec![vec![
-        InlineKeyboardButton::callback_key("← Back", &back_key),
+        InlineKeyboardButton::callback_key("↩ Back", &back_key),
         InlineKeyboardButton::switch_inline_query_current_chat("✅ Passed", passed_params),
         InlineKeyboardButton::switch_inline_query_current_chat("🚫 Absent", absent_params),
     ]]);
@@ -850,7 +1060,9 @@ async fn book_SF<Cmd: Send + Sync + Clone>(
         .await?;
 
     let mut text = markdown_string!("✅ *Status Updated*\n\n");
-    text.push(&MarkdownString::from(&BookParams::SF(teacher, student, date, time, status)));
+    text.push(&MarkdownString::from(&BookParams::SF(
+        teacher, student, date, time, status,
+    )));
 
     ctx.update_markdown_message(text, None).await?;
     Ok(())

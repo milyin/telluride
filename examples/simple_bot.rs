@@ -56,9 +56,9 @@ async fn main() {
         .branch(
             Update::filter_callback_query()
                 .filter(|q: teloxide::types::CallbackQuery| {
-                    q.data.as_ref().map_or(false, |data| 
-                        CallbackKey::is_packed_data(data)
-                    )
+                    q.data
+                        .as_ref()
+                        .map_or(false, |data| CallbackKey::is_packed_data(data))
                 })
                 .endpoint(action_handler),
         )
@@ -124,7 +124,7 @@ async fn main() {
     // Use in-memory storage for global user registry
     // It will use UserId(0) as namespace in InMemStore
     let global_user_storage = CommonProxy::new(InMemStore::<UserId, User>::new());
-    let global_user_storage : Arc<dyn DataStoreTrait<UserId, User>> = Arc::new(global_user_storage);
+    let global_user_storage: Arc<dyn DataStoreTrait<UserId, User>> = Arc::new(global_user_storage);
 
     // Per-user callback action storage (uses PackedValue keys)
     let callback_storage = Arc::new(InMemStore::<CallbackKey, Action>::new());
@@ -223,7 +223,8 @@ async fn show_user_selection(
     if user_ids.is_empty() {
         let text = markdown_string!("No users have registered yet\\.");
         if let Some(msg_id) = message_id {
-            bot.edit_markdown_message_text(chat_id, msg_id, text).await?;
+            bot.edit_markdown_message_text(chat_id, msg_id, text)
+                .await?;
         } else {
             bot.send_markdown_message(chat_id, text).await?;
         }
@@ -240,7 +241,7 @@ async fn show_user_selection(
         }
         let keyboard = InlineKeyboardMarkup::new(buttons);
         let text = markdown_string!("Select a user to see their messages:");
-        
+
         if let Some(msg_id) = message_id {
             bot.edit_markdown_message_text(chat_id, msg_id, text)
                 .reply_markup(keyboard)
@@ -379,10 +380,7 @@ async fn action_handler(
                 .unwrap_or_else(|| target_user_id.0.to_string());
 
             let text = if messages.is_empty() {
-                markdown_format!(
-                    "No messages saved for user {}",
-                    user_name
-                )
+                markdown_format!("No messages saved for user {}", user_name)
             } else {
                 let list = messages
                     .iter()
@@ -390,17 +388,13 @@ async fn action_handler(
                     .map(|(i, m)| format!("{}. {}", i + 1, m))
                     .collect::<Vec<_>>()
                     .join("\n");
-                markdown_format!(
-                    "Saved messages for user {}:\n{}",
-                    user_name,
-                    list
-                )
+                markdown_format!("Saved messages for user {}:\n{}", user_name, list)
             };
 
             // Add back button
             let user_proxy = UserProxy::new(callback_storage.clone(), q.from.id);
             let back_key = CallbackKey::pack(Action::Back, &user_proxy).await;
-            let back_button = InlineKeyboardButton::callback_key("← Back", &back_key);
+            let back_button = InlineKeyboardButton::callback_key("↩ Back", &back_key);
             let keyboard = InlineKeyboardMarkup::new(vec![vec![back_button]]);
 
             if let Some(msg) = q.message {
