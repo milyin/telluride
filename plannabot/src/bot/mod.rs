@@ -1,5 +1,6 @@
 pub mod admin;
 pub mod impersonate;
+pub mod impersonate_teacher;
 pub mod student;
 pub mod teacher;
 

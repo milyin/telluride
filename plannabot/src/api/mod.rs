@@ -3,6 +3,7 @@ pub mod book;
 pub mod common;
 pub mod context;
 pub mod impersonate;
+pub mod impersonate_teacher;
 pub mod menus;
 pub mod payment;
 pub mod student;

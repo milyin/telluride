@@ -41,6 +41,10 @@ pub struct BotState {
     /// currently impersonating.  Entries are inserted by `/impersonate` and
     /// removed by `/quit`.
     impersonations: RwLock<HashMap<ChatId, TelegramName>>,
+    /// Maps a teacher's ChatId to the telegram name of the teacher they are
+    /// currently impersonating.  Entries are inserted by `/impersonate teacher`
+    /// and removed by `/quit`.
+    teacher_impersonations: RwLock<HashMap<ChatId, TelegramName>>,
 
     // --- Admin mode ----------------------------------------------------------
     /// The set of chat IDs currently in admin mode.  Entries are inserted by
@@ -79,6 +83,7 @@ impl BotState {
             // Subtract CHECK_INTERVAL so the very first command fires a check.
             last_checked: Mutex::new(Instant::now() - CHECK_INTERVAL),
             impersonations: RwLock::new(HashMap::new()),
+            teacher_impersonations: RwLock::new(HashMap::new()),
             admin_modes: RwLock::new(HashSet::new()),
             last_errors: RwLock::new(Vec::new()),
             notified_teachers: RwLock::new(HashSet::new()),
@@ -201,6 +206,8 @@ impl BotState {
             UserRole::Teacher(teacher) => {
                 if self.is_in_admin_mode(chat_id).await {
                     Some(UserEffectiveRole::Admin(teacher))
+                } else if let Some(teacher_name) = self.get_teacher_impersonation(chat_id).await {
+                    Some(UserEffectiveRole::ImpersonateTeacher(teacher, teacher_name))
                 } else if let Some(student_name) = self.get_impersonation(chat_id).await {
                     Some(UserEffectiveRole::Impersonate(teacher, student_name))
                 } else {
@@ -356,6 +363,34 @@ impl BotState {
     /// normal mode.
     pub async fn clear_impersonation(&self, chat_id: ChatId) {
         self.impersonations.write().await.remove(&chat_id);
+    }
+
+    // -----------------------------------------------------------------------
+    // Teacher impersonation API
+    // -----------------------------------------------------------------------
+
+    /// Records that the admin chatting in `chat_id` is now impersonating `teacher_name`.
+    pub async fn impersonate_teacher(&self, chat_id: ChatId, teacher_name: TelegramName) {
+        self.teacher_impersonations
+            .write()
+            .await
+            .insert(chat_id, teacher_name);
+    }
+
+    /// Returns the telegram name of the teacher being impersonated in this
+    /// chat, or `None` if not in teacher-impersonation mode.
+    pub async fn get_teacher_impersonation(&self, chat_id: ChatId) -> Option<TelegramName> {
+        self.teacher_impersonations.read().await.get(&chat_id).cloned()
+    }
+
+    /// Removes the teacher-impersonation entry for `chat_id`.
+    pub async fn clear_teacher_impersonation(&self, chat_id: ChatId) {
+        self.teacher_impersonations.write().await.remove(&chat_id);
+    }
+
+    /// Looks up a teacher directly by telegram name.
+    pub async fn get_teacher(&self, telegram_name: &TelegramName) -> Option<crate::models::Teacher> {
+        self.teachers.read().await.get(telegram_name.as_str()).cloned()
     }
 
     // -----------------------------------------------------------------------

@@ -48,12 +48,27 @@ pub async fn impersonate<Cmd: ImpersonateCommand + CallbackBitcode + 'static>(
             }
             Ok(())
         }
-        ImpersonateParams::Teacher(_) => {
-            ctx.update_markdown_message(
-                markdown_string!("Impersonating a teacher is not implemented yet\\."),
-                None,
-            )
-            .await?;
+        ImpersonateParams::Teacher(None) => show_teacher_selection(ctx).await,
+        ImpersonateParams::Teacher(Some(name)) => {
+            match ctx.state.get_teacher(&name).await {
+                Some(_) => {
+                    ctx.state.exit_admin_mode(ctx.chat_id).await;
+                    ctx.state.impersonate_teacher(ctx.chat_id, name.clone()).await;
+                    let text = markdown_format!(
+                        "Now impersonating teacher {}\\. All commands will behave as if you were that teacher\\. \
+                         Use /help to see available commands, use /quit to exit",
+                        name.to_string()
+                    );
+                    ctx.update_markdown_message(text, None).await?;
+                }
+                None => {
+                    let text = markdown_format!(
+                        "Teacher {} was not found in the spreadsheet\\.",
+                        name.to_string()
+                    );
+                    ctx.update_markdown_message(text, None).await?;
+                }
+            }
             Ok(())
         }
     }
@@ -123,6 +138,47 @@ async fn show_student_selection<Cmd: ImpersonateCommand + CallbackBitcode + 'sta
 
     ctx.update_markdown_message(
         markdown_string!("Select the student you want to impersonate:"),
+        Some(InlineKeyboardMarkup::new(buttons)),
+    )
+    .await
+}
+
+async fn show_teacher_selection<Cmd: ImpersonateCommand + CallbackBitcode + 'static>(
+    ctx: &BotCtx<Cmd>,
+) -> Result<()> {
+    let teacher_names = ctx.state.get_teacher_names().await;
+
+    if teacher_names.is_empty() {
+        ctx.update_markdown_message(
+            markdown_string!("No teachers are registered in the spreadsheet yet\\."),
+            None,
+        )
+        .await?;
+        return Ok(());
+    }
+
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
+
+    let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+    for name in teacher_names {
+        let label = name.to_string();
+        let key = CallbackKey::pack(
+            Cmd::impersonate(ImpersonateParams::Teacher(Some(name))),
+            &user_proxy,
+        )
+        .await;
+        buttons.push(vec![InlineKeyboardButton::callback_key(label, &key)]);
+    }
+
+    let back_key = CallbackKey::pack(
+        Cmd::impersonate(ImpersonateParams::I0),
+        &user_proxy,
+    )
+    .await;
+    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back".to_string(), &back_key)]);
+
+    ctx.update_markdown_message(
+        markdown_string!("Select the teacher you want to impersonate:"),
         Some(InlineKeyboardMarkup::new(buttons)),
     )
     .await
