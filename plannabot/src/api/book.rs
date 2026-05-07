@@ -326,7 +326,7 @@ async fn book_C8<Cmd: Send + Sync + Clone>(
     Ok(())
 }
 
-async fn book_CF<Cmd: Send + Sync + Clone>(
+async fn book_CF<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
@@ -334,10 +334,14 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
     hour: NaiveTime,
     duration: Duration,
 ) -> Result<()> {
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
+    let back_key = CallbackKey::pack(Cmd::book(BookParams::L0(0)), &user_proxy).await;
+    let back_button = vec![InlineKeyboardButton::callback_key("← Back", &back_key)];
+
     let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await else {
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot book: you are not paired with this teacher\\."),
-            None,
+            Some(InlineKeyboardMarkup::new(vec![back_button])),
         ).await?;
         return Ok(());
     };
@@ -355,7 +359,7 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
     if !fits_in_worktime {
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot book: the lesson extends outside the teacher's working hours\\."),
-            None,
+            Some(InlineKeyboardMarkup::new(vec![back_button])),
         ).await?;
         return Ok(());
     }
@@ -369,7 +373,7 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
     if has_overlap {
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot book: this time slot conflicts with an existing lesson\\."),
-            None,
+            Some(InlineKeyboardMarkup::new(vec![back_button])),
         ).await?;
         return Ok(());
     }
@@ -398,7 +402,7 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
     };
     text.push(&markdown_format!("💰 Cost: {}\n", cost_str));
 
-    ctx.update_markdown_message(text, None).await?;
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(vec![back_button]))).await?;
     Ok(())
 }
 
@@ -577,7 +581,7 @@ async fn book_D0<Cmd: Send + Sync + Clone>(
     Ok(())
 }
 
-async fn book_DF<Cmd: Send + Sync + Clone>(
+async fn book_DF<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
@@ -592,7 +596,11 @@ async fn book_DF<Cmd: Send + Sync + Clone>(
     let mut text = markdown_string!("✅ *Lesson Deleted*\n\n");
     text.push(&MarkdownString::from(&BookParams::DF(teacher, student, date, time)));
 
-    ctx.update_markdown_message(text, None).await?;
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
+    let back_key = CallbackKey::pack(Cmd::book(BookParams::L0(0)), &user_proxy).await;
+    let keyboard = InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback_key("← Back", &back_key)]]);
+
+    ctx.update_markdown_message(text, Some(keyboard)).await?;
     Ok(())
 }
 
@@ -710,7 +718,7 @@ async fn book_R3<Cmd: Send + Sync + Clone>(
     Ok(())
 }
 
-async fn book_RF<Cmd: Send + Sync + Clone>(
+async fn book_RF<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
@@ -719,10 +727,14 @@ async fn book_RF<Cmd: Send + Sync + Clone>(
     nd: NaiveDate,
     nt: NaiveTime,
 ) -> Result<()> {
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
+    let back_key = CallbackKey::pack(Cmd::book(BookParams::L0(0)), &user_proxy).await;
+    let back_button = vec![InlineKeyboardButton::callback_key("← Back", &back_key)];
+
     let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await else {
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot reschedule: pairing not found\\."),
-            None,
+            Some(InlineKeyboardMarkup::new(vec![back_button])),
         ).await?;
         return Ok(());
     };
@@ -741,7 +753,7 @@ async fn book_RF<Cmd: Send + Sync + Clone>(
     if !fits_in_worktime {
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot reschedule: new time extends outside the teacher's working hours\\."),
-            None,
+            Some(InlineKeyboardMarkup::new(vec![back_button])),
         ).await?;
         return Ok(());
     }
@@ -756,7 +768,7 @@ async fn book_RF<Cmd: Send + Sync + Clone>(
     if has_overlap {
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot reschedule: new time conflicts with an existing lesson\\."),
-            None,
+            Some(InlineKeyboardMarkup::new(vec![back_button])),
         ).await?;
         return Ok(());
     }
@@ -774,7 +786,7 @@ async fn book_RF<Cmd: Send + Sync + Clone>(
     let mut text = markdown_string!("✅ *Lesson Rescheduled\\!*\n\n");
     text.push(&MarkdownString::from(&BookParams::RF(teacher, student, od, ot, nd, nt)));
 
-    ctx.update_markdown_message(text, None).await?;
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(vec![back_button]))).await?;
     Ok(())
 }
 
@@ -820,7 +832,7 @@ async fn book_S0<Cmd: BookCommand + CallbackBitcode + 'static>(
     Ok(())
 }
 
-async fn book_SF<Cmd: Send + Sync + Clone>(
+async fn book_SF<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
@@ -834,8 +846,12 @@ async fn book_SF<Cmd: Send + Sync + Clone>(
         .await?;
 
     let mut text = markdown_string!("✅ *Status Updated*\n\n");
-    text.push(&MarkdownString::from(&BookParams::SF(teacher, student, date, time, status)));
+    text.push(&MarkdownString::from(&BookParams::SF(teacher.clone(), student.clone(), date, time, status)));
 
-    ctx.update_markdown_message(text, None).await?;
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
+    let back_key = CallbackKey::pack(Cmd::book(BookParams::L1(teacher, student, date, time, 0)), &user_proxy).await;
+    let keyboard = InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback_key("← Back", &back_key)]]);
+
+    ctx.update_markdown_message(text, Some(keyboard)).await?;
     Ok(())
 }
