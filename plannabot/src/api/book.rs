@@ -84,7 +84,8 @@ async fn book_0<Cmd: BookCommand + CallbackBitcode + 'static>(
             let names = pairings.into_iter().map(|p| p.teacher_telegram).collect();
             show_name_list(
                 bot, chat_id, message_id,
-                "📅 Select a teacher to book a lesson:", "No paired teachers found.",
+                markdown_string!("📅 Select a teacher to book a lesson:"),
+                markdown_string!("No paired teachers found\\."),
                 user_id, callback_storage,
                 names,
                 |t| Cmd::book(BookParams::L1(t)),
@@ -123,7 +124,8 @@ async fn book_1<Cmd: BookCommand + CallbackBitcode + 'static>(
             let names = pairings.into_iter().map(|p| p.student_telegram).collect();
             show_name_list(
                 bot, chat_id, message_id,
-                "📅 Select a student to book a lesson:", "No paired students found.",
+                markdown_string!("📅 Select a student to book a lesson:"),
+                markdown_string!("No paired students found\\."),
                 user_id, callback_storage,
                 names,
                 move |s| Cmd::book(BookParams::L2(t.clone(), s)),
@@ -203,9 +205,9 @@ async fn book_5<Cmd: BookCommand + CallbackBitcode + 'static>(
     let s_month = student.clone();
     let t_back = teacher.clone();
     let s_back = student.clone();
-    let message = format!("📅 Book a Lesson\n{} ↔ {} — select a date:", teacher, student);
+    let message = markdown_format!("📅 Book a Lesson\n{} ↔ {} — select a date:", teacher.to_string(), student.to_string());
     show_date_selection(
-        bot, chat_id, message_id, &message, year, month, user_id, callback_storage,
+        bot, chat_id, message_id, message, year, month, user_id, callback_storage,
         move |date| Cmd::book(BookParams::L6(t_date.clone(), s_date.clone(), date)),
         move |py, pm| Cmd::book(BookParams::L5(t_prev.clone(), s_prev.clone(), py, pm, 1)),
         move |ny, nm| Cmd::book(BookParams::L5(t_next.clone(), s_next.clone(), ny, nm, 1)),

@@ -5,6 +5,8 @@ use chrono::{Datelike, Local, NaiveDate, NaiveTime, Timelike};
 use telluride::calendar::build_month_calendar;
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::{InMemStore, UserProxy};
+use telluride::markdown::{MarkdownString, MarkdownStringMessage};
+use telluride::{markdown_format, markdown_string};
 use teloxide::prelude::*;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, MessageId, UserId};
 
@@ -18,8 +20,8 @@ pub(crate) async fn show_name_list<Cmd, F>(
     bot: &Bot,
     chat_id: ChatId,
     message_id: Option<MessageId>,
-    message: &str,
-    empty_msg: &str,
+    message: MarkdownString,
+    empty_msg: MarkdownString,
     user_id: UserId,
     callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
     names: Vec<TelegramName>,
@@ -31,7 +33,7 @@ where
     F: Fn(TelegramName) -> Cmd,
 {
     if names.is_empty() {
-        bot.send_message(chat_id, empty_msg).await?;
+        bot.send_markdown_message(chat_id, empty_msg).await?;
         return Ok(());
     }
 
@@ -53,12 +55,12 @@ where
     let keyboard = InlineKeyboardMarkup::new(buttons);
     match message_id {
         Some(id) => {
-            bot.edit_message_text(chat_id, id, message)
+            bot.edit_markdown_message_text(chat_id, id, message)
                 .reply_markup(keyboard)
                 .await?;
         }
         None => {
-            bot.send_message(chat_id, message)
+            bot.send_markdown_message(chat_id, message)
                 .reply_markup(keyboard)
                 .await?;
         }
@@ -91,13 +93,13 @@ where
     }
 
     let keyboard = InlineKeyboardMarkup::new(buttons);
-    let text = "Select a year:";
+    let text = markdown_string!("Select a year:");
     match message_id {
         Some(id) => {
-            bot.edit_message_text(chat_id, id, text).reply_markup(keyboard).await?;
+            bot.edit_markdown_message_text(chat_id, id, text).reply_markup(keyboard).await?;
         }
         None => {
-            bot.send_message(chat_id, text).reply_markup(keyboard).await?;
+            bot.send_markdown_message(chat_id, text).reply_markup(keyboard).await?;
         }
     }
     Ok(())
@@ -131,13 +133,13 @@ where
     }
 
     let keyboard = InlineKeyboardMarkup::new(buttons);
-    let text = format!("Select a month for {}:", year);
+    let text = markdown_format!("Select a month for {}:", year.to_string());
     match message_id {
         Some(id) => {
-            bot.edit_message_text(chat_id, id, &text).reply_markup(keyboard).await?;
+            bot.edit_markdown_message_text(chat_id, id, text).reply_markup(keyboard).await?;
         }
         None => {
-            bot.send_message(chat_id, &text).reply_markup(keyboard).await?;
+            bot.send_markdown_message(chat_id, text).reply_markup(keyboard).await?;
         }
     }
     Ok(())
@@ -147,7 +149,7 @@ pub async fn show_date_selection<Cmd, FDate, FPrev, FNext, FYear, FMonth>(
     bot: &Bot,
     chat_id: ChatId,
     message_id: Option<MessageId>,
-    message: &str,
+    message: MarkdownString,
     year: i32,
     month: u32,
     user_id: UserId,
@@ -224,12 +226,12 @@ where
 
     match message_id {
         Some(id) => {
-            bot.edit_message_text(chat_id, id, message)
+            bot.edit_markdown_message_text(chat_id, id, message)
                 .reply_markup(keyboard)
                 .await?;
         }
         None => {
-            bot.send_message(chat_id, message)
+            bot.send_markdown_message(chat_id, message)
                 .reply_markup(keyboard)
                 .await?;
         }
@@ -256,10 +258,10 @@ where
     F: Fn(NaiveTime) -> Cmd,
 {
     let Some(pairing) = state.get_pairing(student, teacher).await else {
-        let message = format!("{} on {} — no available slots.", teacher, date);
+        let message = markdown_format!("{} on {} — no available slots\\.", teacher.to_string(), date.to_string());
         match message_id {
-            Some(id) => { bot.edit_message_text(chat_id, id, message).await?; }
-            None => { bot.send_message(chat_id, message).await?; }
+            Some(id) => { bot.edit_markdown_message_text(chat_id, id, message).await?; }
+            None => { bot.send_markdown_message(chat_id, message).await?; }
         }
         return Ok(());
     };
@@ -270,9 +272,9 @@ where
     let slots = available_slots(&worktime, &schedule, teacher, student, date, lesson_duration);
 
     let message = if slots.is_empty() {
-        format!("{} on {} — no available slots.", teacher, date)
+        markdown_format!("{} on {} — no available slots\\.", teacher.to_string(), date.to_string())
     } else {
-        format!("{} on {} — select a time slot:", teacher, date)
+        markdown_format!("{} on {} — select a time slot:", teacher.to_string(), date.to_string())
     };
 
     let user_proxy = UserProxy::new(callback_storage, user_id);
@@ -294,12 +296,12 @@ where
     let keyboard = InlineKeyboardMarkup::new(buttons);
     match message_id {
         Some(id) => {
-            bot.edit_message_text(chat_id, id, message)
+            bot.edit_markdown_message_text(chat_id, id, message)
                 .reply_markup(keyboard)
                 .await?;
         }
         None => {
-            bot.send_message(chat_id, message)
+            bot.send_markdown_message(chat_id, message)
                 .reply_markup(keyboard)
                 .await?;
         }
