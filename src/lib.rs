@@ -53,4 +53,5 @@ pub mod data_store {
 
 pub mod utils {
     pub use crate::api::utils::{screen_spaces, split_with_screened_spaces};
+    pub use crate::format_screen_spaces;
 }

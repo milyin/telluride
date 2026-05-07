@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use chrono::{Datelike, NaiveDate, NaiveTime};
-use telluride::{format_screen_spaces, utils::split_with_screened_spaces};
+use telluride::utils::{format_screen_spaces, split_with_screened_spaces};
 
 use crate::models::{LessonStatus, TelegramName};
 use crate::types::Duration;
