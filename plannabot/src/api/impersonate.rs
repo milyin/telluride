@@ -1,4 +1,3 @@
-use crate::api;
 use crate::api::context::BotCtx;
 use crate::api::traits::{ImpersonateCommand, ImpersonateParams};
 use crate::models::Teacher;
@@ -13,7 +12,9 @@ pub async fn impersonate<Cmd: ImpersonateCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     params: &str,
 ) -> Result<()> {
-    if ctx.state.get_impersonation(ctx.chat_id).await.is_some() {
+    if ctx.state.get_impersonation(ctx.chat_id).await.is_some()
+        || ctx.state.get_teacher_impersonation(ctx.chat_id).await.is_some()
+    {
         ctx.update_markdown_message(
             markdown_string!("You are already in impersonation mode\\. Use /quit first\\."),
             None,
@@ -195,22 +196,6 @@ pub async fn help(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
     );
     ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
     Ok(())
-}
-
-pub async fn schedule(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
-    let Some(student_name) = ctx.state.get_impersonation(ctx.chat_id).await else {
-        return Ok(());
-    };
-    let Some(student) = ctx.state.get_student(&student_name).await else {
-        ctx.state.clear_impersonation(ctx.chat_id).await;
-        let text = markdown_format!(
-            "Student {} was not found in the spreadsheet\\. Impersonation mode has been deactivated\\.",
-            student_name.to_string()
-        );
-        ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
-        return Ok(());
-    };
-    api::student::schedule(ctx, &student).await
 }
 
 pub async fn quit(ctx: &BotCtx<impl Send + Sync + Clone>, teacher: &Teacher) -> Result<()> {

@@ -7,6 +7,8 @@ use crate::state::BotState;
 use std::sync::Arc;
 use telluride::command::CallbackKey;
 use telluride::data_store::InMemStore;
+use telluride::markdown::MarkdownStringMessage;
+use telluride::markdown_format;
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, MessageId};
 use teloxide::utils::command::BotCommands;
@@ -69,10 +71,20 @@ async fn impersonate_handle(
     let user_id = msg.from.as_ref().unwrap().id;
     let ctx = BotCtx { bot, chat_id: msg.chat.id, state, user_id, callback_storage, message_id };
 
+    let Some(student) = ctx.state.get_student(&student_name).await else {
+        ctx.state.clear_impersonation(ctx.chat_id).await;
+        let text = markdown_format!(
+            "Student {} was not found in the spreadsheet\\. Impersonation mode has been deactivated\\.",
+            student_name.to_string()
+        );
+        ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
+        return Ok(());
+    };
+
     let result = match &cmd {
         ImpersonateCommand::Start => api::common::start(&ctx, &username).await,
         ImpersonateCommand::Help => api::impersonate::help(&ctx).await,
-        ImpersonateCommand::Schedule => api::impersonate::schedule(&ctx).await,
+        ImpersonateCommand::Schedule => api::student::schedule(&ctx, &student).await,
         ImpersonateCommand::Book(params) => {
             api::book::book(&ctx, params, &BookingActor::Student(student_name.clone())).await
         }

@@ -7,6 +7,8 @@ use crate::state::BotState;
 use std::sync::Arc;
 use telluride::command::CallbackKey;
 use telluride::data_store::InMemStore;
+use telluride::markdown::MarkdownStringMessage;
+use telluride::markdown_format;
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, MessageId};
 use teloxide::utils::command::BotCommands;
@@ -83,13 +85,11 @@ async fn impersonate_teacher_handle(
 
     let Some(impersonated_teacher) = ctx.state.get_teacher(&impersonated_name).await else {
         ctx.state.clear_teacher_impersonation(ctx.chat_id).await;
-        let _ = ctx.bot.send_message(
-            ctx.chat_id,
-            format!(
-                "Teacher {} was not found in the spreadsheet. Impersonation mode has been deactivated.",
-                impersonated_name
-            ),
-        ).await;
+        let text = markdown_format!(
+            "Teacher {} was not found in the spreadsheet\\. Impersonation mode has been deactivated\\.",
+            impersonated_name.to_string()
+        );
+        ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
         return Ok(());
     };
 
