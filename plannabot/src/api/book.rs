@@ -215,11 +215,9 @@ async fn book_C5<Cmd: BookCommand + CallbackBitcode + 'static>(
     let s_month = student.clone();
     let t_back  = teacher.clone();
     let s_back  = student.clone();
-    let message = markdown_format!(
-        "📅 Book a Lesson\n{} ↔ {} — select a date:",
-        teacher.to_string(),
-        student.to_string()
-    );
+    let mut message = markdown_string!("📅 Book a Lesson\n\n");
+    message.push(&MarkdownString::from(&BookParams::C5(teacher, student, year, month, _day)));
+    message.push(&markdown_string!("Select a date:"));
     show_date_selection(
         ctx,
         message,
@@ -618,11 +616,9 @@ async fn book_R1<Cmd: BookCommand + CallbackBitcode + 'static>(
     let t_l1     = teacher.clone();
     let s_l1     = student.clone();
 
-    let message = markdown_format!(
-        "📅 Reschedule\n{} ↔ {} — select a new date:",
-        teacher.to_string(),
-        student.to_string()
-    );
+    let mut message = markdown_string!("📅 Reschedule\n\n");
+    message.push(&MarkdownString::from(&BookParams::R1(teacher, student, od, ot, year, month)));
+    message.push(&markdown_string!("Select a new date:"));
     show_date_selection(
         ctx,
         message,
