@@ -14,6 +14,7 @@ use crate::types::Duration;
 pub enum BookSubcmd {
     Create(bool),
     Delete(bool),
+    List,
     Reschedule(bool),
     Status(bool),
 }
@@ -25,6 +26,7 @@ impl fmt::Display for BookSubcmd {
             BookSubcmd::Create(true)     => write!(f, "create!"),
             BookSubcmd::Delete(false)    => write!(f, "delete"),
             BookSubcmd::Delete(true)     => write!(f, "delete!"),
+            BookSubcmd::List             => write!(f, "list"),
             BookSubcmd::Reschedule(false) => write!(f, "reschedule"),
             BookSubcmd::Reschedule(true)  => write!(f, "reschedule!"),
             BookSubcmd::Status(false)    => write!(f, "status"),
@@ -41,6 +43,7 @@ impl FromStr for BookSubcmd {
             "create!"     => Ok(BookSubcmd::Create(true)),
             "delete"      => Ok(BookSubcmd::Delete(false)),
             "delete!"     => Ok(BookSubcmd::Delete(true)),
+            "list"        => Ok(BookSubcmd::List),
             "reschedule"  => Ok(BookSubcmd::Reschedule(false)),
             "reschedule!" => Ok(BookSubcmd::Reschedule(true)),
             "status"      => Ok(BookSubcmd::Status(false)),
@@ -96,6 +99,7 @@ impl fmt::Display for BookParams {
         let cf = BookSubcmd::Create(true);
         let d  = BookSubcmd::Delete(false);
         let df = BookSubcmd::Delete(true);
+        let l  = BookSubcmd::List;
         let r  = BookSubcmd::Reschedule(false);
         let rf = BookSubcmd::Reschedule(true);
         let s  = BookSubcmd::Status(false);
@@ -112,8 +116,8 @@ impl fmt::Display for BookParams {
             BookParams::C7(t, s2, date, time) => write!(f, "{c} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string())),
             BookParams::C8(t, s2, date, time, dur) => write!(f, "{c} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string()), screen_spaces(&dur.to_string())),
             BookParams::CF(t, s2, date, time, dur) => write!(f, "{cf} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string()), screen_spaces(&dur.to_string())),
-            BookParams::L0 => write!(f, "list"),
-            BookParams::L1(t, s2, date, time) => write!(f, "list {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string())),
+            BookParams::L0 => write!(f, "{l}"),
+            BookParams::L1(t, s2, date, time) => write!(f, "{l} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string())),
             BookParams::D0(t, s2, date, time) => write!(f, "{d} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string())),
             BookParams::DF(t, s2, date, time) => write!(f, "{df} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string())),
             BookParams::R1(t, s2, od, ot, ny, nm) => write!(f, "{r} {} {} {} {} {ny} {nm}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&od.to_string()), screen_spaces(&ot.to_string())),
@@ -168,7 +172,6 @@ impl FromStr for BookParams {
 
         match first.as_str() {
             "m0" => return Ok(BookParams::M0),
-            "list" => return parse_list(&parts[1..]),
             _ => {}
         }
 
@@ -264,6 +267,7 @@ impl FromStr for BookParams {
                 p.finish()?;
                 Ok(BookParams::SF(teacher, student, date, time, status))
             }
+            BookSubcmd::List => parse_list(&parts[1..]),
         }
     }
 }
