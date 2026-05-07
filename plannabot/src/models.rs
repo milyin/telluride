@@ -203,7 +203,7 @@ pub enum UserEffectiveRole {
     /// Teacher currently in admin mode.
     Admin(Teacher),
     /// Teacher currently impersonating a student.
-    Impersonate(Teacher, TelegramName),
+    ImpersonateStudent(Teacher, TelegramName),
     /// Teacher (admin) currently impersonating another teacher.
     ImpersonateTeacher(Teacher, TelegramName),
 }
@@ -214,7 +214,7 @@ impl UserEffectiveRole {
             UserEffectiveRole::Student(s) => &s.name,
             UserEffectiveRole::Teacher(t) => &t.name,
             UserEffectiveRole::Admin(t) => &t.name,
-            UserEffectiveRole::Impersonate(t, _) => &t.name,
+            UserEffectiveRole::ImpersonateStudent(t, _) => &t.name,
             UserEffectiveRole::ImpersonateTeacher(t, _) => &t.name,
         }
     }

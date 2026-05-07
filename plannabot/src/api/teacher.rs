@@ -78,7 +78,7 @@ pub async fn admin(ctx: &BotCtx<impl Send + Sync + Clone>, teacher: &Teacher) ->
             .await?;
         return Ok(());
     }
-    ctx.state.clear_impersonation(ctx.chat_id).await;
+    ctx.state.clear_student_impersonation(ctx.chat_id).await;
     ctx.state.enter_admin_mode(ctx.chat_id).await;
     ctx.bot.send_message(
         ctx.chat_id,

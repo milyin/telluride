@@ -12,7 +12,7 @@ use telluride::data_store::InMemStore;
 use teloxide::prelude::*;
 
 use bot::admin::AdminCommand;
-use bot::impersonate::ImpersonateCommand;
+use bot::impersonate_student::ImpersonateStudentCommand;
 use bot::impersonate_teacher::ImpersonateTeacherCommand;
 use bot::student::StudentCommand;
 use bot::teacher::TeacherCommand;
@@ -22,7 +22,9 @@ use state::BotState;
 
 use crate::bot::admin::{admin_callback_command_handler, admin_command_handler};
 use crate::bot::filter_callback_by;
-use crate::bot::impersonate::{impersonate_callback_command_handler, impersonate_command_handler};
+use crate::bot::impersonate_student::{
+    impersonate_student_callback_command_handler, impersonate_student_command_handler,
+};
 use crate::bot::impersonate_teacher::{
     impersonate_teacher_callback_command_handler, impersonate_teacher_command_handler,
 };
@@ -62,7 +64,8 @@ async fn main() {
     // Per-command-type callback storages for inline keyboard buttons.
     let student_callbacks = Arc::new(InMemStore::<CallbackKey, StudentCommand>::new());
     let teacher_callbacks = Arc::new(InMemStore::<CallbackKey, TeacherCommand>::new());
-    let impersonate_callbacks = Arc::new(InMemStore::<CallbackKey, ImpersonateCommand>::new());
+    let impersonate_student_callbacks =
+        Arc::new(InMemStore::<CallbackKey, ImpersonateStudentCommand>::new());
     let impersonate_teacher_callbacks =
         Arc::new(InMemStore::<CallbackKey, ImpersonateTeacherCommand>::new());
     let admin_callbacks = Arc::new(InMemStore::<CallbackKey, AdminCommand>::new());
@@ -90,10 +93,14 @@ async fn main() {
         .branch(
             Update::filter_message()
                 .filter_async(|msg: Message, state: Arc<BotState>| {
-                    bot::filter_message_by(msg, state, bot::impersonate::is_impersonate)
+                    bot::filter_message_by(
+                        msg,
+                        state,
+                        bot::impersonate_student::is_impersonate_student,
+                    )
                 })
-                .chain(bot::filter_command_prefixed::<ImpersonateCommand, _>())
-                .endpoint(impersonate_command_handler),
+                .chain(bot::filter_command_prefixed::<ImpersonateStudentCommand, _>())
+                .endpoint(impersonate_student_command_handler),
         )
         // Teacher impersonation mode commands (/start, /help, /schedule, /book, /payment, /quit).
         .branch(
@@ -152,9 +159,9 @@ async fn main() {
                         .is_some_and(|d| CallbackKey::is_packed_data(d))
                 })
                 .filter_async(|q: CallbackQuery, state: Arc<BotState>| {
-                    filter_callback_by(q, state, bot::impersonate::is_impersonate)
+                    filter_callback_by(q, state, bot::impersonate_student::is_impersonate_student)
                 })
-                .endpoint(impersonate_callback_command_handler),
+                .endpoint(impersonate_student_callback_command_handler),
         )
         // Teacher impersonation mode inline keyboard callbacks.
         .branch(
@@ -199,7 +206,7 @@ async fn main() {
             state,
             student_callbacks,
             teacher_callbacks,
-            impersonate_callbacks,
+            impersonate_student_callbacks,
             impersonate_teacher_callbacks,
             admin_callbacks
         ])

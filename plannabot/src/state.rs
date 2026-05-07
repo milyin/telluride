@@ -38,9 +38,9 @@ pub struct BotState {
 
     // --- Impersonation -------------------------------------------------------
     /// Maps a teacher's ChatId to the telegram name of the student they are
-    /// currently impersonating.  Entries are inserted by `/impersonate` and
-    /// removed by `/quit`.
-    impersonations: RwLock<HashMap<ChatId, TelegramName>>,
+    /// currently impersonating.  Entries are inserted by `/impersonate student`
+    /// and removed by `/quit`.
+    student_impersonations: RwLock<HashMap<ChatId, TelegramName>>,
     /// Maps a teacher's ChatId to the telegram name of the teacher they are
     /// currently impersonating.  Entries are inserted by `/impersonate teacher`
     /// and removed by `/quit`.
@@ -82,7 +82,7 @@ impl BotState {
             last_modified: Mutex::new(None),
             // Subtract CHECK_INTERVAL so the very first command fires a check.
             last_checked: Mutex::new(Instant::now() - CHECK_INTERVAL),
-            impersonations: RwLock::new(HashMap::new()),
+            student_impersonations: RwLock::new(HashMap::new()),
             teacher_impersonations: RwLock::new(HashMap::new()),
             admin_modes: RwLock::new(HashSet::new()),
             last_errors: RwLock::new(Vec::new()),
@@ -195,7 +195,8 @@ impl BotState {
     /// Combines the persistent identity from [`get_role`] with the current
     /// session mode (admin or impersonation) stored by `chat_id`:
     /// - A teacher in admin mode → `UserEffectiveRole::Admin`
-    /// - A teacher in impersonation mode → `UserEffectiveRole::Impersonate`
+    /// - A teacher impersonating a student → `UserEffectiveRole::ImpersonateStudent`
+    /// - A teacher impersonating a teacher → `UserEffectiveRole::ImpersonateTeacher`
     /// - Otherwise → `UserEffectiveRole::Teacher` or `UserEffectiveRole::Student` unchanged
     pub async fn get_effective_role(
         &self,
@@ -208,8 +209,8 @@ impl BotState {
                     Some(UserEffectiveRole::Admin(teacher))
                 } else if let Some(teacher_name) = self.get_teacher_impersonation(chat_id).await {
                     Some(UserEffectiveRole::ImpersonateTeacher(teacher, teacher_name))
-                } else if let Some(student_name) = self.get_impersonation(chat_id).await {
-                    Some(UserEffectiveRole::Impersonate(teacher, student_name))
+                } else if let Some(student_name) = self.get_student_impersonation(chat_id).await {
+                    Some(UserEffectiveRole::ImpersonateStudent(teacher, student_name))
                 } else {
                     Some(UserEffectiveRole::Teacher(teacher))
                 }
@@ -341,28 +342,27 @@ impl BotState {
     }
 
     // -----------------------------------------------------------------------
-    // Impersonation API
+    // Student impersonation API
     // -----------------------------------------------------------------------
 
     /// Records that the teacher chatting in `chat_id` is now impersonating
     /// `student_name` (without '@', lowercase).
-    pub async fn impersonate(&self, chat_id: ChatId, student_name: TelegramName) {
-        self.impersonations
+    pub async fn impersonate_student(&self, chat_id: ChatId, student_name: TelegramName) {
+        self.student_impersonations
             .write()
             .await
             .insert(chat_id, student_name);
     }
 
     /// Returns the telegram name of the student being impersonated in this
-    /// chat, or `None` if the chat is not in impersonation mode.
-    pub async fn get_impersonation(&self, chat_id: ChatId) -> Option<TelegramName> {
-        self.impersonations.read().await.get(&chat_id).cloned()
+    /// chat, or `None` if the chat is not in student impersonation mode.
+    pub async fn get_student_impersonation(&self, chat_id: ChatId) -> Option<TelegramName> {
+        self.student_impersonations.read().await.get(&chat_id).cloned()
     }
 
-    /// Removes the impersonation entry for `chat_id`, returning the teacher to
-    /// normal mode.
-    pub async fn clear_impersonation(&self, chat_id: ChatId) {
-        self.impersonations.write().await.remove(&chat_id);
+    /// Removes the student impersonation entry for `chat_id`.
+    pub async fn clear_student_impersonation(&self, chat_id: ChatId) {
+        self.student_impersonations.write().await.remove(&chat_id);
     }
 
     // -----------------------------------------------------------------------

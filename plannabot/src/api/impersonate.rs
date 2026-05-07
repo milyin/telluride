@@ -1,10 +1,8 @@
 use crate::api::context::BotCtx;
 use crate::api::traits::{ImpersonateCommand, ImpersonateParams};
-use crate::models::Teacher;
 use anyhow::Result;
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::UserProxy;
-use telluride::markdown::MarkdownStringMessage;
 use telluride::{markdown_format, markdown_string};
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
@@ -12,7 +10,7 @@ pub async fn impersonate<Cmd: ImpersonateCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     params: &str,
 ) -> Result<()> {
-    if ctx.state.get_impersonation(ctx.chat_id).await.is_some()
+    if ctx.state.get_student_impersonation(ctx.chat_id).await.is_some()
         || ctx.state.get_teacher_impersonation(ctx.chat_id).await.is_some()
     {
         ctx.update_markdown_message(
@@ -31,7 +29,7 @@ pub async fn impersonate<Cmd: ImpersonateCommand + CallbackBitcode + 'static>(
             match ctx.state.get_student(&name).await {
                 Some(_) => {
                     ctx.state.exit_admin_mode(ctx.chat_id).await;
-                    ctx.state.impersonate(ctx.chat_id, name.clone()).await;
+                    ctx.state.impersonate_student(ctx.chat_id, name.clone()).await;
                     let text = markdown_format!(
                         "Now impersonating {}\\. All commands will behave as if you were that student\\. \
                          Use /help to see available commands, use /quit to exit",
@@ -130,11 +128,7 @@ async fn show_student_selection<Cmd: ImpersonateCommand + CallbackBitcode + 'sta
         buttons.push(vec![InlineKeyboardButton::callback_key(label, &key)]);
     }
 
-    let back_key = CallbackKey::pack(
-        Cmd::impersonate(ImpersonateParams::I0),
-        &user_proxy,
-    )
-    .await;
+    let back_key = CallbackKey::pack(Cmd::impersonate(ImpersonateParams::I0), &user_proxy).await;
     buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back".to_string(), &back_key)]);
 
     ctx.update_markdown_message(
@@ -171,11 +165,7 @@ async fn show_teacher_selection<Cmd: ImpersonateCommand + CallbackBitcode + 'sta
         buttons.push(vec![InlineKeyboardButton::callback_key(label, &key)]);
     }
 
-    let back_key = CallbackKey::pack(
-        Cmd::impersonate(ImpersonateParams::I0),
-        &user_proxy,
-    )
-    .await;
+    let back_key = CallbackKey::pack(Cmd::impersonate(ImpersonateParams::I0), &user_proxy).await;
     buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back".to_string(), &back_key)]);
 
     ctx.update_markdown_message(
@@ -183,27 +173,4 @@ async fn show_teacher_selection<Cmd: ImpersonateCommand + CallbackBitcode + 'sta
         Some(InlineKeyboardMarkup::new(buttons)),
     )
     .await
-}
-
-pub async fn help(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
-    let text = markdown_string!(
-        "*Available Commands \\(Impersonation Mode\\):*\n\n\
-        /start \\- Exit impersonation and restart the bot\n\
-        /help \\- Display this help message\n\
-        /schedule \\- Show the impersonated student's planned lessons\n\
-        /book \\- Book a lesson as the impersonated student\n\
-        /quit \\- Exit impersonation mode"
-    );
-    ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
-    Ok(())
-}
-
-pub async fn quit(ctx: &BotCtx<impl Send + Sync + Clone>, teacher: &Teacher) -> Result<()> {
-    ctx.state.clear_impersonation(ctx.chat_id).await;
-    let text = markdown_format!(
-        "Exited impersonation mode\\. You are back as {} \\(teacher\\)\\.",
-        teacher.telegram_name.to_string()
-    );
-    ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
-    Ok(())
 }

@@ -5,7 +5,8 @@ use telluride::markdown::MarkdownStringMessage;
 use telluride::{markdown_format, markdown_string};
 
 pub async fn start(ctx: &BotCtx<impl Send + Sync + Clone>, username: &str) -> Result<()> {
-    ctx.state.clear_impersonation(ctx.chat_id).await;
+    ctx.state.clear_student_impersonation(ctx.chat_id).await;
+    ctx.state.clear_teacher_impersonation(ctx.chat_id).await;
     ctx.state.exit_admin_mode(ctx.chat_id).await;
 
     let role = ctx.state.get_role(username).await;
