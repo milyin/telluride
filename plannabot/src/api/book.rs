@@ -262,7 +262,7 @@ async fn book_C6<Cmd: BookCommand + CallbackBitcode + 'static>(
     .await
 }
 
-async fn book_C7<Cmd: Send + Sync + Clone>(
+async fn book_C7<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
@@ -283,7 +283,7 @@ async fn book_C7<Cmd: Send + Sync + Clone>(
     book_C8(ctx, teacher, student, date, hour, duration).await
 }
 
-async fn book_C8<Cmd: Send + Sync + Clone>(
+async fn book_C8<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
@@ -318,15 +318,19 @@ async fn book_C8<Cmd: Send + Sync + Clone>(
     };
     text.push(&markdown_format!("💰 Cost: {}\n", cost_str));
 
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
+    let back_key = CallbackKey::pack(Cmd::book(BookParams::C6(teacher.clone(), student.clone(), date)), &user_proxy).await;
     let cf_params = format!("/book {}", BookParams::CF(teacher, student, date, hour, duration));
-    let button = InlineKeyboardButton::switch_inline_query_current_chat("📅 Book", cf_params);
-    let keyboard = InlineKeyboardMarkup::new(vec![vec![button]]);
+    let keyboard = InlineKeyboardMarkup::new(vec![vec![
+        InlineKeyboardButton::callback_key("← Back", &back_key),
+        InlineKeyboardButton::switch_inline_query_current_chat("📅 Book", cf_params),
+    ]]);
 
     ctx.update_markdown_message(text, Some(keyboard)).await?;
     Ok(())
 }
 
-async fn book_CF<Cmd: BookCommand + CallbackBitcode + 'static>(
+async fn book_CF<Cmd: Send + Sync + Clone>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
@@ -334,14 +338,10 @@ async fn book_CF<Cmd: BookCommand + CallbackBitcode + 'static>(
     hour: NaiveTime,
     duration: Duration,
 ) -> Result<()> {
-    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key = CallbackKey::pack(Cmd::book(BookParams::L0(0)), &user_proxy).await;
-    let back_button = vec![InlineKeyboardButton::callback_key("← Back", &back_key)];
-
     let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await else {
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot book: you are not paired with this teacher\\."),
-            Some(InlineKeyboardMarkup::new(vec![back_button])),
+            None,
         ).await?;
         return Ok(());
     };
@@ -359,7 +359,7 @@ async fn book_CF<Cmd: BookCommand + CallbackBitcode + 'static>(
     if !fits_in_worktime {
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot book: the lesson extends outside the teacher's working hours\\."),
-            Some(InlineKeyboardMarkup::new(vec![back_button])),
+            None,
         ).await?;
         return Ok(());
     }
@@ -373,7 +373,7 @@ async fn book_CF<Cmd: BookCommand + CallbackBitcode + 'static>(
     if has_overlap {
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot book: this time slot conflicts with an existing lesson\\."),
-            Some(InlineKeyboardMarkup::new(vec![back_button])),
+            None,
         ).await?;
         return Ok(());
     }
@@ -402,7 +402,7 @@ async fn book_CF<Cmd: BookCommand + CallbackBitcode + 'static>(
     };
     text.push(&markdown_format!("💰 Cost: {}\n", cost_str));
 
-    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(vec![back_button]))).await?;
+    ctx.update_markdown_message(text, None).await?;
     Ok(())
 }
 
@@ -563,7 +563,7 @@ async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
 // Delete flow (D0, DF)
 // ---------------------------------------------------------------------------
 
-async fn book_D0<Cmd: Send + Sync + Clone>(
+async fn book_D0<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
@@ -573,15 +573,19 @@ async fn book_D0<Cmd: Send + Sync + Clone>(
     let mut text = markdown_string!("🗑️ *Delete Lesson*\n\nDelete this lesson?\n\n");
     text.push(&MarkdownString::from(&BookParams::D0(teacher.clone(), student.clone(), date, time)));
 
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
+    let back_key = CallbackKey::pack(Cmd::book(BookParams::L1(teacher.clone(), student.clone(), date, time, 0)), &user_proxy).await;
     let df_params = format!("/book {}", BookParams::DF(teacher, student, date, time));
-    let button = InlineKeyboardButton::switch_inline_query_current_chat("🗑️ Yes, delete it", df_params);
-    let keyboard = InlineKeyboardMarkup::new(vec![vec![button]]);
+    let keyboard = InlineKeyboardMarkup::new(vec![vec![
+        InlineKeyboardButton::callback_key("← Back", &back_key),
+        InlineKeyboardButton::switch_inline_query_current_chat("🗑️ Yes, delete it", df_params),
+    ]]);
 
     ctx.update_markdown_message(text, Some(keyboard)).await?;
     Ok(())
 }
 
-async fn book_DF<Cmd: BookCommand + CallbackBitcode + 'static>(
+async fn book_DF<Cmd: Send + Sync + Clone>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
@@ -596,11 +600,7 @@ async fn book_DF<Cmd: BookCommand + CallbackBitcode + 'static>(
     let mut text = markdown_string!("✅ *Lesson Deleted*\n\n");
     text.push(&MarkdownString::from(&BookParams::DF(teacher, student, date, time)));
 
-    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key = CallbackKey::pack(Cmd::book(BookParams::L0(0)), &user_proxy).await;
-    let keyboard = InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback_key("← Back", &back_key)]]);
-
-    ctx.update_markdown_message(text, Some(keyboard)).await?;
+    ctx.update_markdown_message(text, None).await?;
     Ok(())
 }
 
@@ -698,7 +698,7 @@ async fn book_R2<Cmd: BookCommand + CallbackBitcode + 'static>(
     .await
 }
 
-async fn book_R3<Cmd: Send + Sync + Clone>(
+async fn book_R3<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
@@ -710,15 +710,19 @@ async fn book_R3<Cmd: Send + Sync + Clone>(
     let mut text = markdown_string!("📅 *Reschedule Lesson*\n\n");
     text.push(&MarkdownString::from(&BookParams::R3(teacher.clone(), student.clone(), od, ot, nd, nt)));
 
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
+    let back_key = CallbackKey::pack(Cmd::book(BookParams::R2(teacher.clone(), student.clone(), od, ot, nd)), &user_proxy).await;
     let rf_params = format!("/book {}", BookParams::RF(teacher, student, od, ot, nd, nt));
-    let button = InlineKeyboardButton::switch_inline_query_current_chat("✅ Confirm reschedule", rf_params);
-    let keyboard = InlineKeyboardMarkup::new(vec![vec![button]]);
+    let keyboard = InlineKeyboardMarkup::new(vec![vec![
+        InlineKeyboardButton::callback_key("← Back", &back_key),
+        InlineKeyboardButton::switch_inline_query_current_chat("✅ Confirm reschedule", rf_params),
+    ]]);
 
     ctx.update_markdown_message(text, Some(keyboard)).await?;
     Ok(())
 }
 
-async fn book_RF<Cmd: BookCommand + CallbackBitcode + 'static>(
+async fn book_RF<Cmd: Send + Sync + Clone>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
@@ -727,14 +731,10 @@ async fn book_RF<Cmd: BookCommand + CallbackBitcode + 'static>(
     nd: NaiveDate,
     nt: NaiveTime,
 ) -> Result<()> {
-    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key = CallbackKey::pack(Cmd::book(BookParams::L0(0)), &user_proxy).await;
-    let back_button = vec![InlineKeyboardButton::callback_key("← Back", &back_key)];
-
     let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await else {
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot reschedule: pairing not found\\."),
-            Some(InlineKeyboardMarkup::new(vec![back_button])),
+            None,
         ).await?;
         return Ok(());
     };
@@ -753,7 +753,7 @@ async fn book_RF<Cmd: BookCommand + CallbackBitcode + 'static>(
     if !fits_in_worktime {
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot reschedule: new time extends outside the teacher's working hours\\."),
-            Some(InlineKeyboardMarkup::new(vec![back_button])),
+            None,
         ).await?;
         return Ok(());
     }
@@ -768,7 +768,7 @@ async fn book_RF<Cmd: BookCommand + CallbackBitcode + 'static>(
     if has_overlap {
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot reschedule: new time conflicts with an existing lesson\\."),
-            Some(InlineKeyboardMarkup::new(vec![back_button])),
+            None,
         ).await?;
         return Ok(());
     }
@@ -786,7 +786,7 @@ async fn book_RF<Cmd: BookCommand + CallbackBitcode + 'static>(
     let mut text = markdown_string!("✅ *Lesson Rescheduled\\!*\n\n");
     text.push(&MarkdownString::from(&BookParams::RF(teacher, student, od, ot, nd, nt)));
 
-    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(vec![back_button]))).await?;
+    ctx.update_markdown_message(text, None).await?;
     Ok(())
 }
 
@@ -823,7 +823,11 @@ async fn book_S0<Cmd: BookCommand + CallbackBitcode + 'static>(
         BookParams::SF(teacher.clone(), student.clone(), date, time, LessonStatus::Absent)
     );
 
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
+    let back_key = CallbackKey::pack(Cmd::book(BookParams::L1(teacher.clone(), student.clone(), date, time, 0)), &user_proxy).await;
+
     let keyboard = InlineKeyboardMarkup::new(vec![vec![
+        InlineKeyboardButton::callback_key("← Back", &back_key),
         InlineKeyboardButton::switch_inline_query_current_chat("✅ Passed", passed_params),
         InlineKeyboardButton::switch_inline_query_current_chat("🚫 Absent", absent_params),
     ]]);
@@ -832,7 +836,7 @@ async fn book_S0<Cmd: BookCommand + CallbackBitcode + 'static>(
     Ok(())
 }
 
-async fn book_SF<Cmd: BookCommand + CallbackBitcode + 'static>(
+async fn book_SF<Cmd: Send + Sync + Clone>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
@@ -846,12 +850,8 @@ async fn book_SF<Cmd: BookCommand + CallbackBitcode + 'static>(
         .await?;
 
     let mut text = markdown_string!("✅ *Status Updated*\n\n");
-    text.push(&MarkdownString::from(&BookParams::SF(teacher.clone(), student.clone(), date, time, status)));
+    text.push(&MarkdownString::from(&BookParams::SF(teacher, student, date, time, status)));
 
-    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key = CallbackKey::pack(Cmd::book(BookParams::L1(teacher, student, date, time, 0)), &user_proxy).await;
-    let keyboard = InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback_key("← Back", &back_key)]]);
-
-    ctx.update_markdown_message(text, Some(keyboard)).await?;
+    ctx.update_markdown_message(text, None).await?;
     Ok(())
 }
