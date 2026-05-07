@@ -104,7 +104,7 @@ async fn book_C0<Cmd: BookCommand + CallbackBitcode + 'static>(
                 markdown_string!("No paired teachers found\\."),
                 names,
                 |t| Cmd::book(BookParams::C1(t)),
-                None,
+                Some(Cmd::book(BookParams::L0(0))),
             )
             .await
         }
@@ -134,7 +134,7 @@ async fn book_C1<Cmd: BookCommand + CallbackBitcode + 'static>(
                 markdown_string!("No paired students found\\."),
                 names,
                 move |s| Cmd::book(BookParams::C2(t.clone(), s)),
-                None,
+                Some(Cmd::book(BookParams::L0(0))),
             )
             .await
         }
