@@ -24,12 +24,20 @@ where
     Cmd: CallbackBitcode + 'static,
     F: Fn(TelegramName) -> Cmd,
 {
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
+
     if names.is_empty() {
-        ctx.update_markdown_message(empty_msg, None).await?;
+        let keyboard = if let Some(back_cmd) = back {
+            let key = CallbackKey::pack(back_cmd, &user_proxy).await;
+            Some(InlineKeyboardMarkup::new(vec![vec![
+                InlineKeyboardButton::callback_key("↩ Back", &key),
+            ]]))
+        } else {
+            None
+        };
+        ctx.update_markdown_message(empty_msg, keyboard).await?;
         return Ok(());
     }
-
-    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
 
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     for name in names {

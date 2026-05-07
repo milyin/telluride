@@ -17,7 +17,7 @@ use crate::api::menus::{
 };
 use crate::api::traits::{BookCommand, BookParams, BookingActor};
 use crate::models::{TelegramName, TimePeriod};
-use crate::sheets::worktime::{month_availability, worktime_periods};
+use crate::sheets::worktime::{month_availability, worktime_periods, DayAvailability};
 use std::collections::HashMap;
 
 pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
@@ -49,9 +49,11 @@ pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
             book_CF(ctx, teacher, student, date, hour, duration).await
         }
         BookParams::L0(w) => book_L0(ctx, actor, w).await,
-        BookParams::L1(teacher, student, date, time, w) => {
-            book_L1(ctx, teacher, student, date, time, w, actor).await
+        BookParams::L1(teacher, student, date, time) => {
+            book_L1(ctx, teacher, student, date, time, actor).await
         }
+        BookParams::U0(year, month) => book_U0(ctx, actor, year, month).await,
+        BookParams::U1(date) => book_U1(ctx, actor, date).await,
         BookParams::D0(teacher, student, date, time) => {
             book_D0(ctx, teacher, student, date, time).await
         }
@@ -94,9 +96,6 @@ async fn book_C0<Cmd: BookCommand + CallbackBitcode + 'static>(
     match actor {
         BookingActor::Student(student) => {
             let pairings = ctx.state.get_pairings_for_student(student).await;
-            if pairings.len() == 1 {
-                return book_C1(ctx, pairings[0].teacher_telegram.clone(), actor).await;
-            }
             let names = pairings.into_iter().map(|p| p.teacher_telegram).collect();
             show_name_list(
                 ctx,
@@ -121,9 +120,6 @@ async fn book_C1<Cmd: BookCommand + CallbackBitcode + 'static>(
         BookingActor::Student(student) => book_C2(ctx, teacher, student.clone(), actor).await,
         BookingActor::Teacher(teacher_actor) => {
             let pairings = ctx.state.get_pairings_for_teacher(teacher_actor).await;
-            if pairings.len() == 1 {
-                return book_C2(ctx, teacher, pairings[0].student_telegram.clone(), actor).await;
-            }
             let t = teacher.clone();
             let names = pairings.into_iter().map(|p| p.student_telegram).collect();
             let mut msg = MarkdownString::from(&BookParams::C1(teacher));
@@ -474,15 +470,65 @@ fn status_label(status: &Option<LessonStatus>) -> &'static str {
 
 async fn book_L0<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
+    _actor: &BookingActor,
+    _week_offset: i32,
+) -> Result<()> {
+    let now = Local::now();
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
+    let create_key = CallbackKey::pack(Cmd::book(BookParams::C0()), &user_proxy).await;
+    let update_key = CallbackKey::pack(
+        Cmd::book(BookParams::U0(now.year(), now.month())),
+        &user_proxy,
+    )
+    .await;
+    let keyboard = InlineKeyboardMarkup::new(vec![vec![
+        InlineKeyboardButton::callback_key("📅 Create", &create_key),
+        InlineKeyboardButton::callback_key("✏️ Update", &update_key),
+    ]]);
+    ctx.update_markdown_message(markdown_string!("📋 *Lessons*"), Some(keyboard)).await?;
+    Ok(())
+}
+
+async fn book_U0<Cmd: BookCommand + CallbackBitcode + 'static>(
+    ctx: &BotCtx<Cmd>,
     actor: &BookingActor,
-    week_offset: i32,
+    year: i32,
+    month: u32,
+) -> Result<()> {
+    let (all_entries, _) = ctx.state.sheets.get_schedule().await?;
+    let lesson_days: HashMap<NaiveDate, DayAvailability> = all_entries
+        .into_iter()
+        .filter(|e| match actor {
+            BookingActor::Student(s) => &e.student_telegram == s,
+            BookingActor::Teacher(t) => &e.teacher_telegram == t,
+        })
+        .map(|e| e.datetime.date_naive())
+        .filter(|d| d.year() == year && d.month() == month)
+        .map(|d| (d, DayAvailability::Free))
+        .collect();
+
+    show_date_selection(
+        ctx,
+        markdown_string!("📋 *Select a day:*"),
+        year,
+        month,
+        |date| Cmd::book(BookParams::U1(date)),
+        |py, pm| Cmd::book(BookParams::U0(py, pm)),
+        |ny, nm| Cmd::book(BookParams::U0(ny, nm)),
+        || Cmd::book(BookParams::U0(year, month)),
+        || Cmd::book(BookParams::U0(year, month)),
+        Some(Cmd::book(BookParams::M0)),
+        &lesson_days,
+    )
+    .await
+}
+
+async fn book_U1<Cmd: BookCommand + CallbackBitcode + 'static>(
+    ctx: &BotCtx<Cmd>,
+    actor: &BookingActor,
+    date: NaiveDate,
 ) -> Result<()> {
     let today = Local::now().date_naive();
-    let days_since_monday = today.weekday().num_days_from_monday() as i64;
-    let week_monday =
-        today - ChronoDuration::days(days_since_monday) + ChronoDuration::weeks(week_offset as i64);
-    let week_sunday = week_monday + ChronoDuration::days(6);
-
     let (all_entries, _) = ctx.state.sheets.get_schedule().await?;
     let mut entries: Vec<_> = all_entries
         .into_iter()
@@ -490,47 +536,42 @@ async fn book_L0<Cmd: BookCommand + CallbackBitcode + 'static>(
             BookingActor::Student(s) => &e.student_telegram == s,
             BookingActor::Teacher(t) => &e.teacher_telegram == t,
         })
-        .filter(|e| {
-            let d = e.datetime.date_naive();
-            d >= week_monday && d <= week_sunday
-        })
+        .filter(|e| e.datetime.date_naive() == date)
         .collect();
     entries.sort_by_key(|e| e.datetime);
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let create_key = CallbackKey::pack(Cmd::book(BookParams::C0()), &user_proxy).await;
-    let prev_key = CallbackKey::pack(Cmd::book(BookParams::L0(week_offset - 1)), &user_proxy).await;
-    let curr_key = CallbackKey::pack(Cmd::book(BookParams::L0(0)), &user_proxy).await;
-    let next_key = CallbackKey::pack(Cmd::book(BookParams::L0(week_offset + 1)), &user_proxy).await;
+    let prev_key = CallbackKey::pack(
+        Cmd::book(BookParams::U1(date - ChronoDuration::days(1))),
+        &user_proxy,
+    )
+    .await;
+    let today_key = CallbackKey::pack(Cmd::book(BookParams::U1(today)), &user_proxy).await;
+    let next_key = CallbackKey::pack(
+        Cmd::book(BookParams::U1(date + ChronoDuration::days(1))),
+        &user_proxy,
+    )
+    .await;
+    let back_key = CallbackKey::pack(
+        Cmd::book(BookParams::U0(date.year(), date.month())),
+        &user_proxy,
+    )
+    .await;
 
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
-    buttons.push(vec![InlineKeyboardButton::callback_key(
-        "📅 Create",
-        &create_key,
-    )]);
-
     for entry in entries {
-        let dt = entry.datetime;
-        let date = dt.date_naive();
-        let time = dt.time();
+        let time = entry.datetime.time();
         let other = match actor {
             BookingActor::Student(_) => entry.teacher_telegram.to_string(),
             BookingActor::Teacher(_) => entry.student_telegram.to_string(),
         };
         let icon = status_label(&entry.status);
-        let label = format!(
-            "{} {} {} ↔ {}",
-            icon,
-            date.format("%Y-%m-%d"),
-            time.format("%H:%M"),
-            other
-        );
+        let label = format!("{} {} ↔ {}", icon, time.format("%H:%M"), other);
         let cmd = Cmd::book(BookParams::L1(
             entry.teacher_telegram,
             entry.student_telegram,
             date,
             time,
-            week_offset,
         ));
         let key = CallbackKey::pack(cmd, &user_proxy).await;
         buttons.push(vec![InlineKeyboardButton::callback_key(label, &key)]);
@@ -538,16 +579,12 @@ async fn book_L0<Cmd: BookCommand + CallbackBitcode + 'static>(
 
     buttons.push(vec![
         InlineKeyboardButton::callback_key("<", &prev_key),
-        InlineKeyboardButton::callback_key("This week", &curr_key),
+        InlineKeyboardButton::callback_key("Today", &today_key),
         InlineKeyboardButton::callback_key(">", &next_key),
     ]);
+    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
 
-    let week_label = format!(
-        "{} - {}",
-        week_monday.format("%d %b"),
-        week_sunday.format("%d %b %Y")
-    );
-    let text = markdown_format!("📋 *Your Lessons*\n{}", week_label);
+    let text = markdown_format!("📋 *Lessons for {}*", date.format("%d %b %Y").to_string());
     let keyboard = InlineKeyboardMarkup::new(buttons);
     ctx.update_markdown_message(text, Some(keyboard)).await?;
     Ok(())
@@ -559,10 +596,8 @@ async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
     student: TelegramName,
     date: NaiveDate,
     time: NaiveTime,
-    week_offset: i32,
     actor: &BookingActor,
 ) -> Result<()> {
-    // Look up the live entry to get status and duration.
     let (all_entries, _) = ctx.state.sheets.get_schedule().await?;
     let target_dt = date.and_time(time).and_utc();
     let entry = all_entries.into_iter().find(|e| {
@@ -586,7 +621,6 @@ async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
         student.clone(),
         date,
         time,
-        week_offset,
     )));
     text.push(&markdown_format!(
         "⏱ Duration: {}\n",
@@ -595,7 +629,7 @@ async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
     text.push(&markdown_format!("📊 Status: {}\n", status_str));
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key = CallbackKey::pack(Cmd::book(BookParams::L0(week_offset)), &user_proxy).await;
+    let back_key = CallbackKey::pack(Cmd::book(BookParams::U1(date)), &user_proxy).await;
 
     let mut rows: Vec<Vec<InlineKeyboardButton>> = Vec::new();
 
@@ -674,7 +708,6 @@ async fn book_D0<Cmd: BookCommand + CallbackBitcode + 'static>(
             student.clone(),
             date,
             time,
-            0,
         )),
         &user_proxy,
     )
@@ -808,7 +841,7 @@ async fn book_R1<Cmd: BookCommand + CallbackBitcode + 'static>(
                 prev_m,
             ))
         },
-        Some(Cmd::book(BookParams::L1(t_l1, s_l1, od, ot, 0))),
+        Some(Cmd::book(BookParams::L1(t_l1, s_l1, od, ot))),
         &day_availability,
     )
     .await
@@ -1035,7 +1068,6 @@ async fn book_S0<Cmd: BookCommand + CallbackBitcode + 'static>(
             student.clone(),
             date,
             time,
-            0,
         )),
         &user_proxy,
     )
