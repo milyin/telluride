@@ -1,5 +1,5 @@
 pub mod book;
-pub use book::{BookParams, BookingActor};
+pub use book::{BookParams, BookSubcmd, BookingActor};
 
 /// Trait for commands that can emit a book command.
 /// StudentCommand, ImpersonateCommand, and TeacherCommand implement this trait,

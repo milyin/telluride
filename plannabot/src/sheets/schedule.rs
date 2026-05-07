@@ -1,11 +1,11 @@
 //! Schedule data reader for the `Schedule` sheet tab.
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use std::collections::HashMap;
 
 use super::from_sheet::FromSheetValue;
-use super::{SheetSchema, SheetsClient, SCHEDULE_COLS, SHEET_SCHEDULE};
+use super::{col_index_to_letter, SheetSchema, SheetsClient, SCHEDULE_COLS, SHEET_SCHEDULE};
 use crate::models::{LessonStatus, ScheduleEntry, SheetParseError, TelegramName};
 
 // ---------------------------------------------------------------------------
@@ -161,6 +161,84 @@ impl SheetsClient {
             .collect();
 
         self.append_row(SHEET_SCHEDULE, row).await
+    }
+
+    /// Marks a planned lesson as cancelled by writing "cancelled" to its status cell.
+    /// Matches by teacher_telegram, student_telegram, and the date+time of the lesson.
+    /// Returns an error if no matching planned lesson is found.
+    pub async fn cancel_schedule_entry(
+        &self,
+        teacher: &TelegramName,
+        student: &TelegramName,
+        old_date: NaiveDate,
+        old_time: NaiveTime,
+    ) -> Result<()> {
+        let target_dt = old_date.and_time(old_time).and_utc();
+
+        let range = format!("{SHEET_SCHEDULE}!A:Z");
+        let rows = self
+            .get_values(&range)
+            .await
+            .context("Failed to get Schedule sheet data")?;
+
+        if rows.is_empty() {
+            return Err(anyhow::anyhow!("Schedule sheet is empty"));
+        }
+
+        let schema = SheetSchema::new(SHEET_SCHEDULE.to_string(), rows[0].clone());
+
+        let status_col_idx = schema
+            .get_col(ScheduleEntry::STATUS)
+            .ok_or_else(|| anyhow::anyhow!("Schedule sheet has no 'status' column"))?;
+        let status_col_letter = col_index_to_letter(status_col_idx);
+
+        for (row_idx, row) in rows.iter().enumerate().skip(1) {
+            if row.is_empty() || row.iter().all(|c| c.is_empty()) {
+                continue;
+            }
+
+            let row_teacher = schema.get_str(row, ScheduleEntry::TEACHER_TELEGRAM);
+            let row_student = schema.get_str(row, ScheduleEntry::STUDENT_TELEGRAM);
+            if row_teacher != teacher.as_str() || row_student != student.as_str() {
+                continue;
+            }
+
+            // Reconstruct datetime the same way get_schedule does.
+            let date_str = schema.get_str(row, "date");
+            let time_str = schema.get_str(row, "time");
+            let row_dt: Option<DateTime<Utc>> = if !date_str.is_empty() && !time_str.is_empty() {
+                let combined = format!("{} {}", date_str.trim(), time_str.trim());
+                DateTime::<Utc>::from_sheet_value(&combined).ok()
+            } else {
+                let combined = schema.get_str(row, ScheduleEntry::DATETIME).to_string();
+                DateTime::<Utc>::from_sheet_value(&combined).ok()
+            };
+
+            let Some(row_dt) = row_dt else { continue };
+            if row_dt != target_dt {
+                continue;
+            }
+
+            let status_str = schema.get_str(row, ScheduleEntry::STATUS);
+            if LessonStatus::from_str(status_str).is_some() {
+                continue; // already done or cancelled
+            }
+
+            // Found the matching planned lesson — mark it cancelled.
+            let row_num = row_idx + 1;
+            let cell_range = format!("{SHEET_SCHEDULE}!{status_col_letter}{row_num}");
+            self.update_values(&cell_range, vec![vec![serde_json::json!("cancelled")]])
+                .await
+                .context("Failed to write cancelled status")?;
+            return Ok(());
+        }
+
+        Err(anyhow::anyhow!(
+            "No planned lesson found for {} ↔ {} at {}",
+            teacher,
+            student,
+            target_dt
+        ))
     }
 
     /// Returns only the schedule entries for the given teacher.
