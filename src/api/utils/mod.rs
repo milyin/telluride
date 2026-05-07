@@ -41,6 +41,7 @@ pub fn screen_spaces(s: &str) -> String {
 /// Formats multiple `Display` values by wrapping each with [`screen_spaces`] and joining with spaces.
 #[macro_export]
 macro_rules! format_screen_spaces {
+    () => { String::new() };
     ($($arg:expr),+) => {{
         let parts: Vec<String> = vec![
             $( $crate::utils::screen_spaces(&$arg.to_string()) ),+
