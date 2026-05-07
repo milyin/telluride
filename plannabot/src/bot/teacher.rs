@@ -1,4 +1,5 @@
 use crate::api;
+use crate::api::context::BotCtx;
 use crate::api::traits::{BookCommand, BookParams, BookingActor};
 use crate::bot::{callback_command_handler, get_username};
 use crate::models::{TelegramName, UserEffectiveRole};
@@ -83,33 +84,22 @@ async fn teacher_handle(
         .await;
 
     let user_id: UserId = msg.from.as_ref().unwrap().id;
+    let ctx = BotCtx { bot, chat_id: msg.chat.id, state, user_id, callback_storage, message_id };
 
     let result = match cmd {
-        TeacherCommand::Start => api::common::start(&bot, msg.chat.id, &username, &state).await,
-        TeacherCommand::Help => api::teacher::help(&bot, msg.chat.id, &state).await,
+        TeacherCommand::Start => api::common::start(&ctx.bot, ctx.chat_id, &username, &ctx.state).await,
+        TeacherCommand::Help => api::teacher::help(&ctx.bot, ctx.chat_id, &ctx.state).await,
         TeacherCommand::Schedule => {
-            api::teacher::schedule(&bot, msg.chat.id, &teacher, &state).await
+            api::teacher::schedule(&ctx.bot, ctx.chat_id, &teacher, &ctx.state).await
         }
         TeacherCommand::Book(ref params) => {
-            api::book::book(
-                &bot, msg.chat.id, params, &state,
-                user_id, callback_storage, message_id,
-                &BookingActor::Teacher(teacher.telegram_name),
-            ).await
+            api::book::book(&ctx, params, &BookingActor::Teacher(teacher.telegram_name)).await
         }
         TeacherCommand::Impersonate(ref student_param) => {
-            api::impersonate::impersonate(
-                &bot,
-                msg.chat.id,
-                student_param.clone(),
-                &state,
-                user_id,
-                callback_storage,
-            )
-            .await
+            api::impersonate::impersonate(&ctx, student_param.clone()).await
         }
-        TeacherCommand::Admin => api::teacher::admin(&bot, msg.chat.id, &teacher, &state).await,
-        TeacherCommand::Refresh => api::admin::refresh(&bot, msg.chat.id, &state).await,
+        TeacherCommand::Admin => api::teacher::admin(&ctx.bot, ctx.chat_id, &teacher, &ctx.state).await,
+        TeacherCommand::Refresh => api::admin::refresh(&ctx.bot, ctx.chat_id, &ctx.state).await,
     };
 
     result.map_err(|e| {

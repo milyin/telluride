@@ -1,4 +1,5 @@
 use crate::api;
+use crate::api::context::BotCtx;
 use crate::api::traits::{BookCommand, BookParams, BookingActor};
 use crate::bot::{callback_command_handler, get_username};
 use crate::models::{TelegramName, UserEffectiveRole, UserRole};
@@ -68,14 +69,17 @@ async fn student_handle(
         return Ok(());
     };
 
+    let user_id = msg.from.as_ref().unwrap().id;
+    let ctx = BotCtx { bot, chat_id: msg.chat.id, state, user_id, callback_storage, message_id };
+
     let result = match &cmd {
-        StudentCommand::Start => api::common::start(&bot, msg.chat.id, &username, &state).await,
-        StudentCommand::Help => api::student::help(&bot, msg.chat.id).await,
+        StudentCommand::Start => api::common::start(&ctx.bot, ctx.chat_id, &username, &ctx.state).await,
+        StudentCommand::Help => api::student::help(&ctx.bot, ctx.chat_id).await,
         StudentCommand::Schedule => {
-            api::student::schedule(&bot, msg.chat.id, &student, &state).await
+            api::student::schedule(&ctx.bot, ctx.chat_id, &student, &ctx.state).await
         }
         StudentCommand::Book(params) => {
-            api::book::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, callback_storage, message_id, &BookingActor::Student(student.telegram_name.clone())).await
+            api::book::book(&ctx, params, &BookingActor::Student(student.telegram_name.clone())).await
         }
     };
 

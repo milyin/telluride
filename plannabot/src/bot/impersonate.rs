@@ -1,4 +1,5 @@
 use crate::api;
+use crate::api::context::BotCtx;
 use crate::api::traits::{BookCommand, BookParams, BookingActor};
 use crate::bot::{callback_command_handler, get_username};
 use crate::models::{TelegramName, UserEffectiveRole};
@@ -65,15 +66,18 @@ async fn impersonate_handle(
         .try_send_errors_to_teacher(&bot, msg.chat.id, &teacher.telegram_name)
         .await;
 
+    let user_id = msg.from.as_ref().unwrap().id;
+    let ctx = BotCtx { bot, chat_id: msg.chat.id, state, user_id, callback_storage, message_id };
+
     let result = match &cmd {
-        ImpersonateCommand::Start => api::common::start(&bot, msg.chat.id, &username, &state).await,
-        ImpersonateCommand::Help => api::impersonate::help(&bot, msg.chat.id).await,
-        ImpersonateCommand::Schedule => api::impersonate::schedule(&bot, msg.chat.id, &state).await,
+        ImpersonateCommand::Start => api::common::start(&ctx.bot, ctx.chat_id, &username, &ctx.state).await,
+        ImpersonateCommand::Help => api::impersonate::help(&ctx.bot, ctx.chat_id).await,
+        ImpersonateCommand::Schedule => api::impersonate::schedule(&ctx.bot, ctx.chat_id, &ctx.state).await,
         ImpersonateCommand::Book(params) => {
-            api::book::book(&bot, msg.chat.id, params, &state, msg.from.unwrap().id, callback_storage, message_id, &BookingActor::Student(student_name.clone())).await
+            api::book::book(&ctx, params, &BookingActor::Student(student_name.clone())).await
         }
         ImpersonateCommand::Quit => {
-            api::impersonate::quit(&bot, msg.chat.id, &teacher, &state).await
+            api::impersonate::quit(&ctx.bot, ctx.chat_id, &teacher, &ctx.state).await
         }
     };
 

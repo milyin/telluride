@@ -1,29 +1,21 @@
-use std::sync::Arc;
-
 use anyhow::Result;
 use chrono::{Datelike, Local, NaiveDate, NaiveTime, Timelike};
 use telluride::calendar::build_month_calendar;
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
-use telluride::data_store::{InMemStore, UserProxy};
+use telluride::data_store::UserProxy;
 use telluride::markdown::{MarkdownString, MarkdownStringMessage};
 use telluride::{markdown_format, markdown_string};
 use teloxide::prelude::*;
-use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, MessageId, UserId};
+use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
+use crate::api::context::BotCtx;
 use crate::models::TelegramName;
 use crate::sheets::worktime::available_slots;
-use crate::state::BotState;
 
-/// Core list-of-names keyboard: builds inline buttons for each name and sends or edits a message.
-/// Callers supply pre-filtered names; empty-list handling uses `empty_msg`.
 pub(crate) async fn show_name_list<Cmd, F>(
-    bot: &Bot,
-    chat_id: ChatId,
-    message_id: Option<MessageId>,
+    ctx: &BotCtx<Cmd>,
     message: MarkdownString,
     empty_msg: MarkdownString,
-    user_id: UserId,
-    callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
     names: Vec<TelegramName>,
     make_cmd: F,
     back: Option<Cmd>,
@@ -33,11 +25,11 @@ where
     F: Fn(TelegramName) -> Cmd,
 {
     if names.is_empty() {
-        bot.send_markdown_message(chat_id, empty_msg).await?;
+        ctx.bot.send_markdown_message(ctx.chat_id, empty_msg).await?;
         return Ok(());
     }
 
-    let user_proxy = UserProxy::new(callback_storage, user_id);
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
 
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     for name in names {
@@ -53,14 +45,16 @@ where
     }
 
     let keyboard = InlineKeyboardMarkup::new(buttons);
-    match message_id {
+    match ctx.message_id {
         Some(id) => {
-            bot.edit_markdown_message_text(chat_id, id, message)
+            ctx.bot
+                .edit_markdown_message_text(ctx.chat_id, id, message)
                 .reply_markup(keyboard)
                 .await?;
         }
         None => {
-            bot.send_markdown_message(chat_id, message)
+            ctx.bot
+                .send_markdown_message(ctx.chat_id, message)
                 .reply_markup(keyboard)
                 .await?;
         }
@@ -69,21 +63,16 @@ where
     Ok(())
 }
 
-
 pub async fn show_year_selection<Cmd, F>(
-    bot: &Bot,
-    chat_id: ChatId,
-    message_id: Option<MessageId>,
+    ctx: &BotCtx<Cmd>,
     current_year: i32,
-    user_id: UserId,
-    callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
     make_cmd: F,
 ) -> Result<()>
 where
     Cmd: CallbackBitcode + 'static,
     F: Fn(i32) -> Cmd,
 {
-    let user_proxy = UserProxy::new(callback_storage, user_id);
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
 
     for year in (current_year - 1)..=(current_year + 3) {
@@ -94,24 +83,26 @@ where
 
     let keyboard = InlineKeyboardMarkup::new(buttons);
     let text = markdown_string!("Select a year:");
-    match message_id {
+    match ctx.message_id {
         Some(id) => {
-            bot.edit_markdown_message_text(chat_id, id, text).reply_markup(keyboard).await?;
+            ctx.bot
+                .edit_markdown_message_text(ctx.chat_id, id, text)
+                .reply_markup(keyboard)
+                .await?;
         }
         None => {
-            bot.send_markdown_message(chat_id, text).reply_markup(keyboard).await?;
+            ctx.bot
+                .send_markdown_message(ctx.chat_id, text)
+                .reply_markup(keyboard)
+                .await?;
         }
     }
     Ok(())
 }
 
 pub async fn show_month_selection<Cmd, F>(
-    bot: &Bot,
-    chat_id: ChatId,
-    message_id: Option<MessageId>,
+    ctx: &BotCtx<Cmd>,
     year: i32,
-    user_id: UserId,
-    callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
     make_cmd: F,
 ) -> Result<()>
 where
@@ -123,7 +114,7 @@ where
         "July", "August", "September", "October", "November", "December",
     ];
 
-    let user_proxy = UserProxy::new(callback_storage, user_id);
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
 
     for (i, name) in MONTH_NAMES.iter().enumerate() {
@@ -134,26 +125,28 @@ where
 
     let keyboard = InlineKeyboardMarkup::new(buttons);
     let text = markdown_format!("Select a month for {}:", year.to_string());
-    match message_id {
+    match ctx.message_id {
         Some(id) => {
-            bot.edit_markdown_message_text(chat_id, id, text).reply_markup(keyboard).await?;
+            ctx.bot
+                .edit_markdown_message_text(ctx.chat_id, id, text)
+                .reply_markup(keyboard)
+                .await?;
         }
         None => {
-            bot.send_markdown_message(chat_id, text).reply_markup(keyboard).await?;
+            ctx.bot
+                .send_markdown_message(ctx.chat_id, text)
+                .reply_markup(keyboard)
+                .await?;
         }
     }
     Ok(())
 }
 
 pub async fn show_date_selection<Cmd, FDate, FPrev, FNext, FYear, FMonth>(
-    bot: &Bot,
-    chat_id: ChatId,
-    message_id: Option<MessageId>,
+    ctx: &BotCtx<Cmd>,
     message: MarkdownString,
     year: i32,
     month: u32,
-    user_id: UserId,
-    callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
     make_date_cmd: FDate,
     make_prev_month: FPrev,
     make_next_month: FNext,
@@ -169,7 +162,7 @@ where
     FYear: FnOnce() -> Cmd,
     FMonth: FnOnce() -> Cmd,
 {
-    let user_proxy = UserProxy::new(callback_storage, user_id);
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
 
     let num_days = {
         let next_first = if month == 12 {
@@ -216,7 +209,6 @@ where
         },
     );
 
-    // Insert navigation row (<, year, month, >) above the calendar
     keyboard.inline_keyboard.insert(0, vec![prev_btn, year_btn, month_btn, next_btn]);
 
     if let Some(back_cmd) = back {
@@ -224,14 +216,16 @@ where
         keyboard.inline_keyboard.push(vec![InlineKeyboardButton::callback_key("↩ Back", &key)]);
     }
 
-    match message_id {
+    match ctx.message_id {
         Some(id) => {
-            bot.edit_markdown_message_text(chat_id, id, message)
+            ctx.bot
+                .edit_markdown_message_text(ctx.chat_id, id, message)
                 .reply_markup(keyboard)
                 .await?;
         }
         None => {
-            bot.send_markdown_message(chat_id, message)
+            ctx.bot
+                .send_markdown_message(ctx.chat_id, message)
                 .reply_markup(keyboard)
                 .await?;
         }
@@ -241,15 +235,10 @@ where
 }
 
 pub async fn show_slot_selection<Cmd, F>(
-    bot: &Bot,
-    chat_id: ChatId,
-    message_id: Option<MessageId>,
+    ctx: &BotCtx<Cmd>,
     teacher: &TelegramName,
     student: &TelegramName,
     date: NaiveDate,
-    user_id: UserId,
-    callback_storage: Arc<InMemStore<CallbackKey, Cmd>>,
-    state: &Arc<BotState>,
     make_cmd: F,
     back: Option<Cmd>,
 ) -> Result<()>
@@ -257,18 +246,18 @@ where
     Cmd: CallbackBitcode + 'static,
     F: Fn(NaiveTime) -> Cmd,
 {
-    let Some(pairing) = state.get_pairing(student, teacher).await else {
+    let Some(pairing) = ctx.state.get_pairing(student, teacher).await else {
         let message = markdown_format!("{} on {} — no available slots\\.", teacher.to_string(), date.to_string());
-        match message_id {
-            Some(id) => { bot.edit_markdown_message_text(chat_id, id, message).await?; }
-            None => { bot.send_markdown_message(chat_id, message).await?; }
+        match ctx.message_id {
+            Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, message).await?; }
+            None => { ctx.bot.send_markdown_message(ctx.chat_id, message).await?; }
         }
         return Ok(());
     };
     let lesson_duration = chrono::Duration::minutes(pairing.duration_minutes as i64);
 
-    let (worktime, _) = state.sheets.get_worktime().await?;
-    let (schedule, _) = state.sheets.get_schedule().await?;
+    let (worktime, _) = ctx.state.sheets.get_worktime().await?;
+    let (schedule, _) = ctx.state.sheets.get_schedule().await?;
     let slots = available_slots(&worktime, &schedule, teacher, student, date, lesson_duration);
 
     let message = if slots.is_empty() {
@@ -277,7 +266,7 @@ where
         markdown_format!("{} on {} — select a time slot:", teacher.to_string(), date.to_string())
     };
 
-    let user_proxy = UserProxy::new(callback_storage, user_id);
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
 
     for slot in slots {
@@ -294,14 +283,16 @@ where
     }
 
     let keyboard = InlineKeyboardMarkup::new(buttons);
-    match message_id {
+    match ctx.message_id {
         Some(id) => {
-            bot.edit_markdown_message_text(chat_id, id, message)
+            ctx.bot
+                .edit_markdown_message_text(ctx.chat_id, id, message)
                 .reply_markup(keyboard)
                 .await?;
         }
         None => {
-            bot.send_markdown_message(chat_id, message)
+            ctx.bot
+                .send_markdown_message(ctx.chat_id, message)
                 .reply_markup(keyboard)
                 .await?;
         }
