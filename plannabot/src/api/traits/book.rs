@@ -3,7 +3,9 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use chrono::{Datelike, NaiveDate, NaiveTime};
+use telluride::markdown::MarkdownString;
 use telluride::utils::{format_screen_spaces, split_with_screened_spaces};
+use telluride::markdown_format;
 
 use crate::models::{LessonStatus, TelegramName};
 use crate::types::Duration;
@@ -278,6 +280,85 @@ fn parse_list(parts: &[String]) -> Result<BookParams> {
     let time: NaiveTime       = p.next("time")?.parse()?;
     p.finish()?;
     Ok(BookParams::L1(teacher, student, date, time))
+}
+
+impl From<&BookParams> for MarkdownString {
+    fn from(p: &BookParams) -> MarkdownString {
+        let mut s = MarkdownString::new();
+        match p {
+            BookParams::M0 | BookParams::C0() | BookParams::L0 => {}
+
+            BookParams::C1(t) => {
+                s.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", t.to_string()));
+            }
+
+            BookParams::C2(t, st)
+            | BookParams::C3(t, st, _)
+            | BookParams::C4(t, st, _, _)
+            | BookParams::C5(t, st, _, _, _) => {
+                s.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", t.to_string()));
+                s.push(&markdown_format!("👨\\-🎓 Student: {}\n", st.to_string()));
+            }
+
+            BookParams::C6(t, st, date) => {
+                s.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", t.to_string()));
+                s.push(&markdown_format!("👨\\-🎓 Student: {}\n", st.to_string()));
+                s.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
+            }
+
+            BookParams::C7(t, st, date, time)
+            | BookParams::L1(t, st, date, time)
+            | BookParams::D0(t, st, date, time)
+            | BookParams::DF(t, st, date, time)
+            | BookParams::S0(t, st, date, time) => {
+                s.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", t.to_string()));
+                s.push(&markdown_format!("👨\\-🎓 Student: {}\n", st.to_string()));
+                s.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
+                s.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
+            }
+
+            BookParams::C8(t, st, date, time, dur) | BookParams::CF(t, st, date, time, dur) => {
+                s.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", t.to_string()));
+                s.push(&markdown_format!("👨\\-🎓 Student: {}\n", st.to_string()));
+                s.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
+                s.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
+                s.push(&markdown_format!("⏱ Duration: {}\n", dur.to_string()));
+            }
+
+            BookParams::R1(t, st, od, ot, _, _) => {
+                s.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", t.to_string()));
+                s.push(&markdown_format!("👨\\-🎓 Student: {}\n", st.to_string()));
+                s.push(&markdown_format!("📆 Date: {}\n", od.to_string()));
+                s.push(&markdown_format!("⏰ Time: {}\n", ot.format("%H:%M").to_string()));
+            }
+
+            BookParams::R2(t, st, od, ot, nd) => {
+                s.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", t.to_string()));
+                s.push(&markdown_format!("👨\\-🎓 Student: {}\n", st.to_string()));
+                s.push(&markdown_format!("📆 Old date: {}\n", od.to_string()));
+                s.push(&markdown_format!("⏰ Old time: {}\n", ot.format("%H:%M").to_string()));
+                s.push(&markdown_format!("📆 New date: {}\n", nd.to_string()));
+            }
+
+            BookParams::R3(t, st, od, ot, nd, nt) | BookParams::RF(t, st, od, ot, nd, nt) => {
+                s.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", t.to_string()));
+                s.push(&markdown_format!("👨\\-🎓 Student: {}\n", st.to_string()));
+                s.push(&markdown_format!("📆 Old date: {}\n", od.to_string()));
+                s.push(&markdown_format!("⏰ Old time: {}\n", ot.format("%H:%M").to_string()));
+                s.push(&markdown_format!("📆 New date: {}\n", nd.to_string()));
+                s.push(&markdown_format!("⏰ New time: {}\n", nt.format("%H:%M").to_string()));
+            }
+
+            BookParams::SF(t, st, date, time, status) => {
+                s.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", t.to_string()));
+                s.push(&markdown_format!("👨\\-🎓 Student: {}\n", st.to_string()));
+                s.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
+                s.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
+                s.push(&markdown_format!("📊 Status: {}\n", status.to_string()));
+            }
+        }
+        s
+    }
 }
 
 fn parse_create(parts: &[String]) -> Result<BookParams> {

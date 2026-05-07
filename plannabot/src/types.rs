@@ -7,6 +7,7 @@ use chrono::{DateTime, Timelike, Utc};
 // ── Duration ─────────────────────────────────────────────────────────────────
 
 /// Wraps `humantime::Duration` with compact `Display` formatting (`"1h30m"` instead of `"1h 30m"`).
+#[derive(Clone)]
 pub struct Duration(humantime::Duration);
 
 impl fmt::Display for Duration {

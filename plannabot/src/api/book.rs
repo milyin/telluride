@@ -5,7 +5,7 @@ use anyhow::Result;
 use chrono::{Datelike, Local, NaiveDate, NaiveTime};
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::UserProxy;
-use telluride::markdown::MarkdownStringMessage;
+use telluride::markdown::{MarkdownString, MarkdownStringMessage};
 use telluride::{markdown_format, markdown_string};
 use teloxide::payloads::SendMessageSetters;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
@@ -89,7 +89,7 @@ async fn book_M0<Cmd: BookCommand + CallbackBitcode + 'static>(ctx: &BotCtx<Cmd>
     let list_key   = CallbackKey::pack(Cmd::book(BookParams::L0), &user_proxy).await;
     let keyboard = InlineKeyboardMarkup::new(vec![vec![
         InlineKeyboardButton::callback_key("📅 Create", &create_key),
-        InlineKeyboardButton::callback_key("📋 List", &list_key),
+        InlineKeyboardButton::callback_key("📋 Update", &list_key),
     ]]);
     ctx.bot
         .send_markdown_message(
@@ -314,11 +314,7 @@ async fn book_C8<Cmd: Send + Sync + Clone>(
     };
 
     let mut text = markdown_string!("📅 *Book a Lesson*\n\n");
-    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
-    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
-    text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
-    text.push(&markdown_format!("⏰ Time: {}\n", hour.format("%H:%M").to_string()));
-    text.push(&markdown_format!("⏱ Duration: {}\n", format_duration(duration_minutes as i64)));
+    text.push(&MarkdownString::from(&BookParams::C8(teacher.clone(), student.clone(), date, hour, duration.clone())));
     let cost_str = if currency.is_empty() {
         actual_cost.to_string()
     } else {
@@ -407,11 +403,7 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
         .await?;
 
     let mut text = markdown_string!("✅ *Lesson Booked\\!*\n\n");
-    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
-    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
-    text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
-    text.push(&markdown_format!("⏰ Time: {}\n", hour.format("%H:%M").to_string()));
-    text.push(&markdown_format!("⏱ Duration: {}\n", format_duration(duration_minutes as i64)));
+    text.push(&MarkdownString::from(&BookParams::CF(teacher.clone(), student.clone(), date, hour, duration)));
     let cost_str = if currency.is_empty() {
         actual_cost.to_string()
     } else {
@@ -513,10 +505,7 @@ async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
     };
 
     let mut text = markdown_string!("📋 *Lesson Details*\n\n");
-    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
-    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
-    text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
-    text.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
+    text.push(&MarkdownString::from(&BookParams::L1(teacher.clone(), student.clone(), date, time)));
     text.push(&markdown_format!("⏱ Duration: {}\n", format_duration(duration_minutes as i64)));
     text.push(&markdown_format!("📊 Status: {}\n", status_str));
 
@@ -571,10 +560,7 @@ async fn book_D0<Cmd: Send + Sync + Clone>(
     time: NaiveTime,
 ) -> Result<()> {
     let mut text = markdown_string!("🗑️ *Delete Lesson*\n\nDelete this lesson?\n\n");
-    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
-    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
-    text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
-    text.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
+    text.push(&MarkdownString::from(&BookParams::D0(teacher.clone(), student.clone(), date, time)));
 
     let df_params = format!("/book {}", BookParams::DF(teacher, student, date, time));
     let button = InlineKeyboardButton::switch_inline_query_current_chat("🗑️ Yes, delete it", df_params);
@@ -600,10 +586,7 @@ async fn book_DF<Cmd: Send + Sync + Clone>(
         .await?;
 
     let mut text = markdown_string!("✅ *Lesson Deleted*\n\n");
-    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
-    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
-    text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
-    text.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
+    text.push(&MarkdownString::from(&BookParams::DF(teacher, student, date, time)));
 
     ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
     Ok(())
@@ -703,12 +686,7 @@ async fn book_R3<Cmd: Send + Sync + Clone>(
     nt: NaiveTime,
 ) -> Result<()> {
     let mut text = markdown_string!("📅 *Reschedule Lesson*\n\n");
-    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
-    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
-    text.push(&markdown_format!("📆 Old date: {}\n", od.to_string()));
-    text.push(&markdown_format!("⏰ Old time: {}\n", ot.format("%H:%M").to_string()));
-    text.push(&markdown_format!("📆 New date: {}\n", nd.to_string()));
-    text.push(&markdown_format!("⏰ New time: {}\n", nt.format("%H:%M").to_string()));
+    text.push(&MarkdownString::from(&BookParams::R3(teacher.clone(), student.clone(), od, ot, nd, nt)));
 
     let rf_params = format!("/book {}", BookParams::RF(teacher, student, od, ot, nd, nt));
     let button = InlineKeyboardButton::switch_inline_query_current_chat("✅ Confirm reschedule", rf_params);
@@ -786,10 +764,7 @@ async fn book_RF<Cmd: Send + Sync + Clone>(
         .await?;
 
     let mut text = markdown_string!("✅ *Lesson Rescheduled\\!*\n\n");
-    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
-    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
-    text.push(&markdown_format!("📆 New date: {}\n", nd.to_string()));
-    text.push(&markdown_format!("⏰ New time: {}\n", nt.format("%H:%M").to_string()));
+    text.push(&MarkdownString::from(&BookParams::RF(teacher, student, od, ot, nd, nt)));
 
     ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
     Ok(())
@@ -818,10 +793,7 @@ async fn book_S0<Cmd: BookCommand + CallbackBitcode + 'static>(
     }
 
     let mut text = markdown_string!("✏️ *Change Lesson Status*\n\n");
-    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
-    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
-    text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
-    text.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
+    text.push(&MarkdownString::from(&BookParams::S0(teacher.clone(), student.clone(), date, time)));
     text.push(&markdown_string!("\nSelect new status:"));
 
     let passed_params = format!(
@@ -858,13 +830,8 @@ async fn book_SF<Cmd: Send + Sync + Clone>(
         .update_schedule_status(&teacher, &student, date, time, &status)
         .await?;
 
-    let status_str = status.to_string();
     let mut text = markdown_string!("✅ *Status Updated*\n\n");
-    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
-    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
-    text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
-    text.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
-    text.push(&markdown_format!("📊 New status: {}\n", status_str));
+    text.push(&MarkdownString::from(&BookParams::SF(teacher, student, date, time, status)));
 
     ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
     Ok(())
