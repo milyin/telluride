@@ -30,13 +30,13 @@ pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
         BookParams::M0 => book_L0(ctx, actor, 0).await,
         BookParams::C0() => book_C0(ctx, actor).await,
         BookParams::C1(teacher) => book_C1(ctx, teacher, actor).await,
-        BookParams::C2(teacher, student) => book_C2(ctx, teacher, student).await,
+        BookParams::C2(teacher, student) => book_C2(ctx, teacher, student, actor).await,
         BookParams::C3(teacher, student, year) => book_C3(ctx, teacher, student, year).await,
         BookParams::C4(teacher, student, year, month) => {
             book_C4(ctx, teacher, student, year, month).await
         }
         BookParams::C5(teacher, student, year, month, day) => {
-            book_C5(ctx, teacher, student, year, month, day).await
+            book_C5(ctx, teacher, student, year, month, day, actor).await
         }
         BookParams::C6(teacher, student, date) => book_C6(ctx, teacher, student, date).await,
         BookParams::C7(teacher, student, date, hour) => {
@@ -118,11 +118,11 @@ async fn book_C1<Cmd: BookCommand + CallbackBitcode + 'static>(
     actor: &BookingActor,
 ) -> Result<()> {
     match actor {
-        BookingActor::Student(student) => book_C2(ctx, teacher, student.clone()).await,
+        BookingActor::Student(student) => book_C2(ctx, teacher, student.clone(), actor).await,
         BookingActor::Teacher(teacher_actor) => {
             let pairings = ctx.state.get_pairings_for_teacher(teacher_actor).await;
             if pairings.len() == 1 {
-                return book_C2(ctx, teacher, pairings[0].student_telegram.clone()).await;
+                return book_C2(ctx, teacher, pairings[0].student_telegram.clone(), actor).await;
             }
             let t = teacher.clone();
             let names = pairings.into_iter().map(|p| p.student_telegram).collect();
@@ -145,9 +145,10 @@ async fn book_C2<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
+    actor: &BookingActor,
 ) -> Result<()> {
     let now = Local::now();
-    book_C5(ctx, teacher, student, now.year(), now.month(), now.day()).await
+    book_C5(ctx, teacher, student, now.year(), now.month(), now.day(), actor).await
 }
 
 async fn book_C3<Cmd: BookCommand + CallbackBitcode + 'static>(
@@ -194,6 +195,7 @@ async fn book_C5<Cmd: BookCommand + CallbackBitcode + 'static>(
     year: i32,
     month: u32,
     _day: u32,
+    actor: &BookingActor,
 ) -> Result<()> {
     let day_availability = if let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await {
         let (worktime, _) = ctx.state.sheets.get_worktime().await?;
@@ -217,7 +219,10 @@ async fn book_C5<Cmd: BookCommand + CallbackBitcode + 'static>(
     let t_month = teacher.clone();
     let s_month = student.clone();
     let t_back = teacher.clone();
-    let s_back = student.clone();
+    let back_cmd = match actor {
+        BookingActor::Student(_) => Cmd::book(BookParams::C0()),
+        BookingActor::Teacher(_) => Cmd::book(BookParams::C1(t_back)),
+    };
     let mut message = markdown_string!("📅 Book a Lesson\n\n");
     message.push(&MarkdownString::from(&BookParams::C5(
         teacher, student, year, month, _day,
@@ -240,7 +245,7 @@ async fn book_C5<Cmd: BookCommand + CallbackBitcode + 'static>(
                 month,
             ))
         },
-        Some(Cmd::book(BookParams::C2(t_back, s_back))),
+        Some(back_cmd),
         &day_availability,
     )
     .await
