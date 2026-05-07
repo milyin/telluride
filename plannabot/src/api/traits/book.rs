@@ -111,6 +111,40 @@ impl fmt::Display for BookParams {
     }
 }
 
+/// Sequential token consumer used by `BookParams::from_str`.
+/// Eliminates magic count checks: each field is named, missing fields and
+/// extra fields are both detected without hardcoding a total count.
+struct ParamParser<'a> {
+    parts: &'a [String],
+    pos: usize,
+}
+
+impl<'a> ParamParser<'a> {
+    fn new(parts: &'a [String], start: usize) -> Self {
+        Self { parts, pos: start }
+    }
+    fn is_empty(&self) -> bool {
+        self.pos >= self.parts.len()
+    }
+    /// Consume and return the next token, or error with the field name.
+    fn next(&mut self, name: &str) -> Result<&str> {
+        self.parts
+            .get(self.pos)
+            .map(|s| {
+                self.pos += 1;
+                s.as_str()
+            })
+            .ok_or_else(|| anyhow::anyhow!("missing parameter: {}", name))
+    }
+    /// Error if any tokens remain unconsumed.
+    fn finish(&self) -> Result<()> {
+        match self.parts.get(self.pos) {
+            None => Ok(()),
+            Some(extra) => Err(anyhow::anyhow!("extra parameter: {}", extra)),
+        }
+    }
+}
+
 impl FromStr for BookParams {
     type Err = anyhow::Error;
 
@@ -138,96 +172,75 @@ impl FromStr for BookParams {
         match subcmd {
             BookSubcmd::Create(false) => parse_create(&parts[1..]),
             BookSubcmd::Create(true) => {
-                if parts.len() != 6 {
-                    return Err(anyhow::anyhow!(
-                        "'/book create!' requires full parameters: teacher student date time duration"
-                    ));
-                }
-                let teacher: TelegramName = parts[1].parse()?;
-                let student: TelegramName = parts[2].parse()?;
-                let date: NaiveDate = parts[3].parse()?;
-                let time: NaiveTime = parts[4].parse()?;
-                let dur: Duration = parts[5].parse()?;
+                let mut p = ParamParser::new(&parts, 1);
+                let teacher: TelegramName = p.next("teacher")?.parse()?;
+                let student: TelegramName = p.next("student")?.parse()?;
+                let date: NaiveDate      = p.next("date")?.parse()?;
+                let time: NaiveTime      = p.next("time")?.parse()?;
+                let dur: Duration        = p.next("duration")?.parse()?;
+                p.finish()?;
                 Ok(BookParams::CF(teacher, student, date, time, dur))
             }
-            BookSubcmd::Delete(false) => match parts.len() {
-                1 => Ok(BookParams::D0()),
-                5 => {
-                    let teacher: TelegramName = parts[1].parse()?;
-                    let student: TelegramName = parts[2].parse()?;
-                    let od: NaiveDate = parts[3].parse()?;
-                    let ot: NaiveTime = parts[4].parse()?;
-                    Ok(BookParams::D1(teacher, student, od, ot))
+            BookSubcmd::Delete(false) => {
+                let mut p = ParamParser::new(&parts, 1);
+                if p.is_empty() {
+                    return Ok(BookParams::D0());
                 }
-                _ => Err(anyhow::anyhow!("invalid delete parameters")),
-            },
+                let teacher: TelegramName = p.next("teacher")?.parse()?;
+                let student: TelegramName = p.next("student")?.parse()?;
+                let od: NaiveDate         = p.next("date")?.parse()?;
+                let ot: NaiveTime         = p.next("time")?.parse()?;
+                p.finish()?;
+                Ok(BookParams::D1(teacher, student, od, ot))
+            }
             BookSubcmd::Delete(true) => {
-                if parts.len() != 5 {
-                    return Err(anyhow::anyhow!(
-                        "'/book delete!' requires full parameters: teacher student date time"
-                    ));
-                }
-                let teacher: TelegramName = parts[1].parse()?;
-                let student: TelegramName = parts[2].parse()?;
-                let od: NaiveDate = parts[3].parse()?;
-                let ot: NaiveTime = parts[4].parse()?;
+                let mut p = ParamParser::new(&parts, 1);
+                let teacher: TelegramName = p.next("teacher")?.parse()?;
+                let student: TelegramName = p.next("student")?.parse()?;
+                let od: NaiveDate         = p.next("date")?.parse()?;
+                let ot: NaiveTime         = p.next("time")?.parse()?;
+                p.finish()?;
                 Ok(BookParams::DF(teacher, student, od, ot))
             }
             BookSubcmd::Edit(false) => {
-                if parts.len() == 1 {
+                let mut p = ParamParser::new(&parts, 1);
+                if p.is_empty() {
                     return Ok(BookParams::E0());
                 }
-                let teacher: TelegramName = parts[1].parse()?;
-                let student: TelegramName = parts[2].parse().map_err(|_| {
-                    anyhow::anyhow!(
-                        "unexpected second parameter '{}': expected student TelegramName",
-                        parts[2]
-                    )
+                let teacher: TelegramName = p.next("teacher")?.parse()?;
+                let student: TelegramName = p.next("student")?.parse().map_err(|_| {
+                    anyhow::anyhow!("expected student TelegramName")
                 })?;
-                let od: NaiveDate = parts
-                    .get(3)
-                    .ok_or_else(|| anyhow::anyhow!("missing old date"))?
-                    .parse()?;
-                let ot: NaiveTime = parts
-                    .get(4)
-                    .ok_or_else(|| anyhow::anyhow!("missing old time"))?
-                    .parse()?;
+                let od: NaiveDate = p.next("old-date")?.parse()?;
+                let ot: NaiveTime = p.next("old-time")?.parse()?;
 
-                let Some(fifth) = parts.get(5) else {
-                    return Err(anyhow::anyhow!("invalid edit parameters"));
-                };
-
+                // Distinguish new-date (YYYY-MM-DD, ≥2 dashes) from year (integer, no dashes).
+                let fifth = p.next("new-date or year")?;
                 let fifth_dashes = fifth.chars().filter(|c| *c == '-').count();
                 if fifth_dashes >= 2 {
                     let nd: NaiveDate = fifth.parse()?;
-                    match parts.get(6) {
-                        None => Ok(BookParams::E2(teacher, student, od, ot, nd)),
-                        Some(nt_str) => {
-                            let nt: NaiveTime = nt_str.parse()?;
-                            Ok(BookParams::E3(teacher, student, od, ot, nd, nt))
-                        }
+                    if p.is_empty() {
+                        return Ok(BookParams::E2(teacher, student, od, ot, nd));
                     }
+                    let nt: NaiveTime = p.next("new-time")?.parse()?;
+                    p.finish()?;
+                    Ok(BookParams::E3(teacher, student, od, ot, nd, nt))
                 } else {
-                    let ny: i32 = fifth.parse()?;
-                    let nm: u32 = parts
-                        .get(6)
-                        .ok_or_else(|| anyhow::anyhow!("missing month for E1"))?
-                        .parse()?;
+                    let ny: i32  = fifth.parse()?;
+                    let nm: u32  = p.next("month")?.parse()?;
+                    p.finish()?;
                     Ok(BookParams::E1(teacher, student, od, ot, ny, nm))
                 }
             }
             BookSubcmd::Edit(true) => {
-                if parts.len() != 7 {
-                    return Err(anyhow::anyhow!(
-                        "'/book edit!' requires full parameters: teacher student old-date old-time new-date new-time"
-                    ));
-                }
-                let teacher: TelegramName = parts[1].parse()?;
-                let student: TelegramName = parts[2].parse()?;
-                let od: NaiveDate = parts[3].parse()?;
-                let ot: NaiveTime = parts[4].parse()?;
-                let nd: NaiveDate = parts[5].parse()?;
-                let nt: NaiveTime = parts[6].parse()?;
+                let mut p = ParamParser::new(&parts, 1);
+                let teacher: TelegramName = p.next("teacher")?.parse()?;
+                let student: TelegramName = p.next("student")?.parse()?;
+                let od: NaiveDate         = p.next("old-date")?.parse()?;
+                let ot: NaiveTime         = p.next("old-time")?.parse()?;
+                let nd: NaiveDate         = p.next("new-date")?.parse()?;
+                let nt: NaiveTime         = p.next("new-time")?.parse()?;
+                p.finish()?;
                 Ok(BookParams::EF(teacher, student, od, ot, nd, nt))
             }
         }
@@ -235,55 +248,49 @@ impl FromStr for BookParams {
 }
 
 fn parse_create(parts: &[String]) -> Result<BookParams> {
-    let Some(first_str) = parts.first() else {
+    let mut p = ParamParser::new(parts, 0);
+    if p.is_empty() {
         return Ok(BookParams::C0());
-    };
-    let teacher: TelegramName = first_str.parse()?;
-
-    let Some(second_str) = parts.get(1) else {
+    }
+    let teacher: TelegramName = p.next("teacher")?.parse()?;
+    if p.is_empty() {
         return Ok(BookParams::C1(teacher));
-    };
-
-    let student: TelegramName = second_str.parse().map_err(|_| {
-        anyhow::anyhow!(
-            "unexpected second parameter '{}': expected student TelegramName",
-            second_str
-        )
+    }
+    let student: TelegramName = p.next("student")?.parse().map_err(|_| {
+        anyhow::anyhow!("expected student TelegramName")
     })?;
-
-    let Some(third_str) = parts.get(2) else {
+    if p.is_empty() {
         return Ok(BookParams::C2(teacher, student));
-    };
+    }
 
-    // Distinguish date (YYYY-MM-DD, 2 dashes) from year (plain integer, no dashes).
-    let third_dash_count = third_str.chars().filter(|c| *c == '-').count();
-    if third_dash_count >= 2 {
-        let date: NaiveDate = third_str.parse()?;
-        let Some(time_str) = parts.get(3) else {
+    // Distinguish date (YYYY-MM-DD, ≥2 dashes) from year (plain integer, no dashes).
+    let third = p.next("date or year")?;
+    let third_dashes = third.chars().filter(|c| *c == '-').count();
+    if third_dashes >= 2 {
+        let date: NaiveDate = third.parse()?;
+        if p.is_empty() {
             return Ok(BookParams::C6(teacher, student, date));
-        };
-        let time: NaiveTime = time_str.parse()?;
-        let Some(duration_str) = parts.get(4) else {
-            return Ok(BookParams::C7(teacher, student, date, time));
-        };
-        let duration: Duration = duration_str.parse()?;
-        if let Some(extra) = parts.get(5) {
-            return Err(anyhow::anyhow!("extra parameter: {}", extra));
         }
+        let time: NaiveTime = p.next("time")?.parse()?;
+        if p.is_empty() {
+            return Ok(BookParams::C7(teacher, student, date, time));
+        }
+        let duration: Duration = p.next("duration")?.parse()?;
+        p.finish()?;
         return Ok(BookParams::C8(teacher, student, date, time, duration));
     }
 
     // Year branch
-    let year: i32 = third_str.parse()?;
-    let Some(month_str) = parts.get(3) else {
+    let year: i32 = third.parse()?;
+    if p.is_empty() {
         return Ok(BookParams::C3(teacher, student, year));
-    };
-    let month: u32 = month_str.parse()?;
-    let Some(day_str) = parts.get(4) else {
+    }
+    let month: u32 = p.next("month")?.parse()?;
+    if p.is_empty() {
         return Ok(BookParams::C4(teacher, student, year, month));
-    };
-    let day: u32 = day_str.parse()?;
-    if let Some(extra) = parts.get(5) {
+    }
+    let day: u32 = p.next("day")?.parse()?;
+    if let Some(extra) = parts.get(p.pos) {
         return Err(anyhow::anyhow!("extra parameter: {}", extra));
     }
     Ok(BookParams::C5(teacher, student, year, month, day))
