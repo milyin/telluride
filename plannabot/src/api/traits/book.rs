@@ -105,7 +105,7 @@ impl fmt::Display for BookParams {
         let s  = BookSubcmd::Status(false);
         let sf = BookSubcmd::Status(true);
         match self {
-            BookParams::M0 => write!(f, "m0"),
+            BookParams::M0 => write!(f, ""),
             BookParams::C0() => write!(f, "{c}"),
             BookParams::C1(t) => write!(f, "{c} {}", screen_spaces(t.as_str())),
             BookParams::C2(t, s2) => write!(f, "{c} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str())),
@@ -169,11 +169,6 @@ impl FromStr for BookParams {
         let Some(first) = parts.first() else {
             return Ok(BookParams::M0);
         };
-
-        match first.as_str() {
-            "m0" => return Ok(BookParams::M0),
-            _ => {}
-        }
 
         let subcmd: BookSubcmd = first.parse()?;
 
