@@ -62,35 +62,26 @@ impl FromStr for PaymentParams {
                 if parts.len() == 1 {
                     return Ok(PaymentParams::P1(student));
                 }
-                // Second token is an amount (in major currency units, e.g. "100" or "100.50")
+                // Second token is an amount in the currency's major unit (e.g. "100" or "100.50").
                 let amt_str = &parts[1];
-                let amt_cents = parse_amount_cents(amt_str)?;
-                Ok(PaymentParams::P2(student, amt_cents))
+                let amt = parse_amount(amt_str)?;
+                Ok(PaymentParams::P2(student, amt))
             }
         }
     }
 }
 
-/// Parses a decimal amount string (e.g. "100" or "100.50") into integer cents.
-pub fn parse_amount_cents(s: &str) -> Result<i64> {
+/// Parses a decimal amount string (e.g. "100" or "100.50") into an integer
+/// currency-unit amount, rounding to the nearest whole unit.
+///
+/// Amounts are stored as integers in the same unit the rest of the codebase
+/// uses for `cost` (whole EUR/USD/etc.), NOT in cents.
+pub fn parse_amount(s: &str) -> Result<i64> {
     let f: f64 = s
         .parse()
         .map_err(|_| anyhow::anyhow!("invalid amount: '{}'", s))?;
     if f < 0.0 {
         return Err(anyhow::anyhow!("amount must be positive"));
     }
-    Ok((f * 100.0).round() as i64)
-}
-
-/// Formats integer cents as a human-readable amount string (e.g. 15050 → "150.50").
-pub fn format_amount(cents: i64) -> String {
-    let abs = cents.abs();
-    let sign = if cents < 0 { "-" } else { "" };
-    let major = abs / 100;
-    let minor = abs % 100;
-    if minor == 0 {
-        format!("{}{}", sign, major)
-    } else {
-        format!("{}{}.{:02}", sign, major, minor)
-    }
+    Ok(f.round() as i64)
 }

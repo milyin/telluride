@@ -10,7 +10,7 @@ use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
 use crate::api::common::format_duration;
 use crate::api::context::BotCtx;
-use crate::api::traits::payment::{format_amount, PaymentParams};
+use crate::api::traits::payment::PaymentParams;
 use crate::api::traits::PaymentCommand;
 use crate::models::{LessonStatus, Teacher, TelegramName};
 
@@ -85,9 +85,9 @@ async fn payment_P0<Cmd: PaymentCommand + CallbackBitcode + 'static>(
                 .map(|s| s.currency)
                 .unwrap_or_default();
             if currency.is_empty() {
-                format!("{}: {} owed", student, format_amount(balance))
+                format!("{}: {} owed", student, balance.to_string())
             } else {
-                format!("{}: {} {} owed", student, format_amount(balance), currency)
+                format!("{}: {} {} owed", student, balance.to_string(), currency)
             }
         };
 
@@ -158,11 +158,11 @@ async fn payment_P1<Cmd: PaymentCommand + CallbackBitcode + 'static>(
     let paid: i64 = student_payments.iter().map(|p| p.sum).sum();
     let balance = earned - paid;
 
-    let fmt_cost = |cents: i64| -> String {
+    let fmt_cost = |amt: i64| -> String {
         if currency.is_empty() {
-            format_amount(cents)
+            amt.to_string()
         } else {
-            format!("{} {}", format_amount(cents), currency)
+            format!("{} {}", amt, currency)
         }
     };
 
@@ -265,9 +265,9 @@ async fn payment_P2<Cmd: PaymentCommand + CallbackBitcode + 'static>(
         .to_string();
 
     let amount_str = if currency.is_empty() {
-        format_amount(amount_cents)
+        amount_cents.to_string()
     } else {
-        format!("{} {}", format_amount(amount_cents), currency)
+        format!("{} {}", amount_cents, currency)
     };
 
     let text = markdown_format!(
@@ -336,9 +336,9 @@ async fn payment_PF<Cmd: PaymentCommand + CallbackBitcode + 'static>(
         .await?;
 
     let amount_str = if currency.is_empty() {
-        format_amount(amount_cents)
+        amount_cents.to_string()
     } else {
-        format!("{} {}", format_amount(amount_cents), currency)
+        format!("{} {}", amount_cents, currency)
     };
 
     let text = markdown_format!(
