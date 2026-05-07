@@ -28,10 +28,15 @@ impl<Cmd: Send + Sync + Clone> BotCtx<Cmd> {
         match self.message_id {
             Some(id) => {
                 let req = self.bot.edit_markdown_message_text(self.chat_id, id, text);
-                if let Some(kb) = keyboard {
-                    req.reply_markup(kb).await?;
+                let result = if let Some(kb) = keyboard {
+                    req.reply_markup(kb).await.map(|_| ())
                 } else {
-                    req.await?;
+                    req.await.map(|_| ())
+                };
+                match result {
+                    Ok(_) => {}
+                    Err(teloxide::RequestError::Api(teloxide::ApiError::MessageNotModified)) => {}
+                    Err(e) => return Err(anyhow::anyhow!(e)),
                 }
             }
             None => {

@@ -4,9 +4,8 @@ use std::collections::HashMap;
 use telluride::calendar::build_month_calendar;
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::UserProxy;
-use telluride::markdown::{MarkdownString, MarkdownStringMessage};
+use telluride::markdown::MarkdownString;
 use telluride::markdown_string;
-use teloxide::prelude::*;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
 use crate::api::context::BotCtx;
@@ -26,7 +25,7 @@ where
     F: Fn(TelegramName) -> Cmd,
 {
     if names.is_empty() {
-        ctx.bot.send_markdown_message(ctx.chat_id, empty_msg).await?;
+        ctx.update_markdown_message(empty_msg, None).await?;
         return Ok(());
     }
 
@@ -46,22 +45,7 @@ where
     }
 
     let keyboard = InlineKeyboardMarkup::new(buttons);
-    match ctx.message_id {
-        Some(id) => {
-            ctx.bot
-                .edit_markdown_message_text(ctx.chat_id, id, message)
-                .reply_markup(keyboard)
-                .await?;
-        }
-        None => {
-            ctx.bot
-                .send_markdown_message(ctx.chat_id, message)
-                .reply_markup(keyboard)
-                .await?;
-        }
-    }
-
-    Ok(())
+    ctx.update_markdown_message(message, Some(keyboard)).await
 }
 
 pub async fn show_year_selection<Cmd, F>(
@@ -84,21 +68,7 @@ where
     }
 
     let keyboard = InlineKeyboardMarkup::new(buttons);
-    match ctx.message_id {
-        Some(id) => {
-            ctx.bot
-                .edit_markdown_message_text(ctx.chat_id, id, message)
-                .reply_markup(keyboard)
-                .await?;
-        }
-        None => {
-            ctx.bot
-                .send_markdown_message(ctx.chat_id, message)
-                .reply_markup(keyboard)
-                .await?;
-        }
-    }
-    Ok(())
+    ctx.update_markdown_message(message, Some(keyboard)).await
 }
 
 pub async fn show_month_selection<Cmd, F>(
@@ -126,21 +96,7 @@ where
     }
 
     let keyboard = InlineKeyboardMarkup::new(buttons);
-    match ctx.message_id {
-        Some(id) => {
-            ctx.bot
-                .edit_markdown_message_text(ctx.chat_id, id, message)
-                .reply_markup(keyboard)
-                .await?;
-        }
-        None => {
-            ctx.bot
-                .send_markdown_message(ctx.chat_id, message)
-                .reply_markup(keyboard)
-                .await?;
-        }
-    }
-    Ok(())
+    ctx.update_markdown_message(message, Some(keyboard)).await
 }
 
 pub async fn show_date_selection<Cmd, FDate, FPrev, FNext, FYear, FMonth>(
@@ -225,22 +181,7 @@ where
         keyboard.inline_keyboard.push(vec![InlineKeyboardButton::callback_key("↩ Back", &key)]);
     }
 
-    match ctx.message_id {
-        Some(id) => {
-            ctx.bot
-                .edit_markdown_message_text(ctx.chat_id, id, message)
-                .reply_markup(keyboard)
-                .await?;
-        }
-        None => {
-            ctx.bot
-                .send_markdown_message(ctx.chat_id, message)
-                .reply_markup(keyboard)
-                .await?;
-        }
-    }
-
-    Ok(())
+    ctx.update_markdown_message(message, Some(keyboard)).await
 }
 
 pub async fn show_slot_selection<Cmd, F>(
@@ -259,11 +200,7 @@ where
     let Some(pairing) = ctx.state.get_pairing(student, teacher).await else {
         let mut message = header;
         message.push(&markdown_string!("No available slots\\."));
-        match ctx.message_id {
-            Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, message).await?; }
-            None => { ctx.bot.send_markdown_message(ctx.chat_id, message).await?; }
-        }
-        return Ok(());
+        return ctx.update_markdown_message(message, None).await;
     };
     let lesson_duration = chrono::Duration::minutes(pairing.duration_minutes as i64);
 
@@ -295,20 +232,5 @@ where
     }
 
     let keyboard = InlineKeyboardMarkup::new(buttons);
-    match ctx.message_id {
-        Some(id) => {
-            ctx.bot
-                .edit_markdown_message_text(ctx.chat_id, id, message)
-                .reply_markup(keyboard)
-                .await?;
-        }
-        None => {
-            ctx.bot
-                .send_markdown_message(ctx.chat_id, message)
-                .reply_markup(keyboard)
-                .await?;
-        }
-    }
-
-    Ok(())
+    ctx.update_markdown_message(message, Some(keyboard)).await
 }
