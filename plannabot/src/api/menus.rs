@@ -1,5 +1,6 @@
 use anyhow::Result;
 use chrono::{Datelike, Local, NaiveDate, NaiveTime, Timelike};
+use std::collections::HashMap;
 use telluride::calendar::build_month_calendar;
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::UserProxy;
@@ -10,7 +11,7 @@ use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
 use crate::api::context::BotCtx;
 use crate::models::TelegramName;
-use crate::sheets::worktime::available_slots;
+use crate::sheets::worktime::{available_slots, DayAvailability};
 
 pub(crate) async fn show_name_list<Cmd, F>(
     ctx: &BotCtx<Cmd>,
@@ -153,6 +154,7 @@ pub async fn show_date_selection<Cmd, FDate, FPrev, FNext, FYear, FMonth>(
     make_year_cmd: FYear,
     make_month_cmd: FMonth,
     back: Option<Cmd>,
+    day_availability: &HashMap<NaiveDate, DayAvailability>,
 ) -> Result<()>
 where
     Cmd: CallbackBitcode + 'static,
@@ -204,7 +206,14 @@ where
         month,
         |date| {
             let day = date.day();
-            let label = if date == today { format!("[{}]", day) } else { format!("{}", day) };
+            let marker = match day_availability.get(&date) {
+                Some(DayAvailability::Free)    => "🟢",
+                Some(DayAvailability::Partial) => "🟡",
+                Some(DayAvailability::Busy)    => "🔴",
+                None => "",
+            };
+            let base = if date == today { format!("[{}]", day) } else { format!("{}", day) };
+            let label = if marker.is_empty() { base } else { format!("{}{}", marker, base) };
             InlineKeyboardButton::callback_key(label, &date_keys[(day - 1) as usize])
         },
     );

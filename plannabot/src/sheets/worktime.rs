@@ -2,9 +2,17 @@
 
 use anyhow::{Context, Result};
 use chrono::{Datelike, NaiveDate, NaiveTime, Weekday};
+use std::collections::HashMap;
 
 use super::{SheetSchema, SheetsClient, SHEET_WORKTIME, WORKTIME_COLS};
 use crate::models::{ScheduleEntry, SheetParseError, TelegramName, TimePeriod, Worktime};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DayAvailability {
+    Free,    // worktime exists, all slots available
+    Partial, // worktime exists, some slots taken
+    Busy,    // worktime exists but no free slots (or lesson doesn't fit)
+}
 
 impl SheetsClient {
     /// Reads all rows from the `Worktime` sheet and returns them together with
@@ -104,4 +112,64 @@ pub fn available_slots(
     slots.sort();
     slots.dedup();
     slots
+}
+
+/// For each day in the given month, computes the teacher/student availability.
+///
+/// Days where the teacher has no worktime are absent from the returned map
+/// (i.e. `DayAvailability::None` is represented by a missing key).
+pub fn month_availability(
+    worktime: &[Worktime],
+    schedule: &[ScheduleEntry],
+    teacher: &TelegramName,
+    student: &TelegramName,
+    year: i32,
+    month: u32,
+    lesson_duration: chrono::Duration,
+) -> HashMap<NaiveDate, DayAvailability> {
+    let last_day = last_day_of_month(year, month);
+    let mut result = HashMap::new();
+
+    for day in 1..=last_day {
+        let date = NaiveDate::from_ymd_opt(year, month, day).unwrap();
+        let windows = worktime_periods(worktime, teacher, date);
+        if windows.is_empty() {
+            continue;
+        }
+
+        let mut total: Vec<NaiveTime> = windows
+            .iter()
+            .flat_map(|p| p.hour_slots(lesson_duration))
+            .map(|dt| dt.time())
+            .collect();
+        total.sort();
+        total.dedup();
+
+        if total.is_empty() {
+            result.insert(date, DayAvailability::Busy);
+            continue;
+        }
+
+        let free = available_slots(worktime, schedule, teacher, student, date, lesson_duration);
+        let avail = if free.len() == total.len() {
+            DayAvailability::Free
+        } else if free.is_empty() {
+            DayAvailability::Busy
+        } else {
+            DayAvailability::Partial
+        };
+        result.insert(date, avail);
+    }
+
+    result
+}
+
+fn last_day_of_month(year: i32, month: u32) -> u32 {
+    let next_first = if month == 12 {
+        NaiveDate::from_ymd_opt(year + 1, 1, 1)
+    } else {
+        NaiveDate::from_ymd_opt(year, month + 1, 1)
+    }
+    .expect("invalid year/month");
+    next_first.pred_opt().expect("date underflow").day()
 }

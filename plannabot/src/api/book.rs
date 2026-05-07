@@ -17,7 +17,8 @@ use crate::api::menus::{
 };
 use crate::api::traits::{BookCommand, BookParams, BookingActor};
 use crate::models::{TelegramName, TimePeriod};
-use crate::sheets::worktime::worktime_periods;
+use crate::sheets::worktime::{month_availability, worktime_periods};
+use std::collections::HashMap;
 
 pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
@@ -192,6 +193,15 @@ async fn book_C5<Cmd: BookCommand + CallbackBitcode + 'static>(
     month: u32,
     _day: u32,
 ) -> Result<()> {
+    let day_availability = if let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await {
+        let (worktime, _) = ctx.state.sheets.get_worktime().await?;
+        let (schedule, _) = ctx.state.sheets.get_schedule().await?;
+        let duration = chrono::Duration::minutes(pairing.duration_minutes as i64);
+        month_availability(&worktime, &schedule, &teacher, &student, year, month, duration)
+    } else {
+        HashMap::new()
+    };
+
     let t_date  = teacher.clone();
     let s_date  = student.clone();
     let t_prev  = teacher.clone();
@@ -218,6 +228,7 @@ async fn book_C5<Cmd: BookCommand + CallbackBitcode + 'static>(
         move || Cmd::book(BookParams::C3(t_year.clone(), s_year.clone(), year)),
         move || Cmd::book(BookParams::C4(t_month.clone(), s_month.clone(), year, month)),
         Some(Cmd::book(BookParams::C2(t_back, s_back))),
+        &day_availability,
     )
     .await
 }
@@ -598,6 +609,15 @@ async fn book_R1<Cmd: BookCommand + CallbackBitcode + 'static>(
     year: i32,
     month: u32,
 ) -> Result<()> {
+    let day_availability = if let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await {
+        let (worktime, _) = ctx.state.sheets.get_worktime().await?;
+        let (schedule, _) = ctx.state.sheets.get_schedule().await?;
+        let duration = chrono::Duration::minutes(pairing.duration_minutes as i64);
+        month_availability(&worktime, &schedule, &teacher, &student, year, month, duration)
+    } else {
+        HashMap::new()
+    };
+
     let t_date   = teacher.clone();
     let s_date   = student.clone();
     let t_prev   = teacher.clone();
@@ -631,6 +651,7 @@ async fn book_R1<Cmd: BookCommand + CallbackBitcode + 'static>(
             Cmd::book(BookParams::R1(t_month.clone(), s_month.clone(), od, ot, prev_y, prev_m))
         },
         Some(Cmd::book(BookParams::L1(t_l1, s_l1, od, ot, 0))),
+        &day_availability,
     )
     .await
 }
