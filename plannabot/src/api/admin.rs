@@ -32,8 +32,8 @@ pub async fn refresh(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
             ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
         }
         Err(e) => {
-            ctx.bot.send_message(ctx.chat_id, format!("❌ Failed to refresh data: {}", e))
-                .await?;
+            let text = markdown_format!("❌ *Failed to refresh data:* {}", MarkdownString::escape(e.to_string()));
+            ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
         }
     }
 

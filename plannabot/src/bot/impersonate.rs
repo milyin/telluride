@@ -1,7 +1,7 @@
 use crate::api;
 use crate::api::context::BotCtx;
 use crate::api::traits::{BookCommand, BookParams, BookingActor};
-use crate::bot::{callback_command_handler, get_username};
+use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
 use std::sync::Arc;
@@ -79,15 +79,9 @@ async fn impersonate_handle(
         ImpersonateCommand::Quit => api::impersonate::quit(&ctx, &teacher).await,
     };
 
-    result.map_err(|e| {
-        log::error!(
-            "Error handling impersonate command {:?} for @{}: {}",
-            cmd,
-            username,
-            e
-        );
-        teloxide::RequestError::Io(Arc::new(std::io::Error::other(e.to_string())))
-    })?;
+    if let Err(e) = result {
+        return report_error(&ctx.bot, ctx.chat_id, e).await;
+    }
 
     Ok(())
 }

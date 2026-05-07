@@ -9,10 +9,19 @@ use std::future::Future;
 use std::sync::Arc;
 use telluride::command::CallbackKey;
 use telluride::data_store::{InMemStore, UserProxy};
+use telluride::markdown::{MarkdownString, MarkdownStringMessage};
+use telluride::markdown_format;
 use teloxide::dispatching::DpHandlerDescription;
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, Me, MessageId};
 use teloxide::utils::command::BotCommands;
+
+pub async fn report_error(bot: &Bot, chat_id: ChatId, e: impl std::fmt::Display) -> ResponseResult<()> {
+    log::error!("Command error: {e}");
+    let text = markdown_format!("❌ *Error:* {}", MarkdownString::escape(e.to_string()));
+    let _ = bot.send_markdown_message(chat_id, text).await;
+    Err(teloxide::RequestError::Io(Arc::new(std::io::Error::other(e.to_string()))))
+}
 
 pub fn filter_command_prefixed<C, Output>() -> dptree::Handler<'static, Output, DpHandlerDescription>
 where
@@ -109,7 +118,9 @@ where
     let cmd = match CallbackKey::unpack::<Cmd, _>(data, &user_proxy).await {
         Ok(c) => c,
         Err(e) => {
-            log::warn!("Failed to unpack callback: {}", e);
+            if let Some(chat_id) = q.message.as_ref().map(|m| m.chat().id) {
+                let _ = report_error(&bot, chat_id, e).await;
+            }
             return Ok(());
         }
     };
