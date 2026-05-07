@@ -23,7 +23,6 @@ pub async fn help(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
         /schedule \\- Show your planned lessons\n\
         /book \\- Book a lesson for a student\n\
         /payment \\- View student balances and record payments\n\
-        /impersonate \\- Impersonate a student to make actions on their behalf\n\
         /admin \\- Enter admin mode\n\
         /refresh \\- Forcedly refresh the data\n\n\
         📊 *Master Schedule:* [View on Google Sheets]({})",

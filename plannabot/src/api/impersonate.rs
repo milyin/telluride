@@ -1,93 +1,107 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::bot::teacher::TeacherCommand;
-use crate::models::{Teacher, TelegramName, UserRole};
-use teloxide::prelude::*;
+use crate::api::traits::{ImpersonateCommand, ImpersonateParams};
+use crate::models::Teacher;
 use anyhow::Result;
-use telluride::command::{CallbackKey, InlineKeyboardButtonPackedExt};
+use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::UserProxy;
 use telluride::markdown::MarkdownStringMessage;
-use telluride::markdown_string;
+use telluride::{markdown_format, markdown_string};
+use teloxide::payloads::SendMessageSetters;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
-pub async fn impersonate(
-    ctx: &BotCtx<TeacherCommand>,
-    student_name: Option<TelegramName>,
+pub async fn impersonate<Cmd: ImpersonateCommand + CallbackBitcode + 'static>(
+    ctx: &BotCtx<Cmd>,
+    params: &str,
 ) -> Result<()> {
     if ctx.state.get_impersonation(ctx.chat_id).await.is_some() {
         ctx.bot
-            .send_message(
+            .send_markdown_message(
                 ctx.chat_id,
-                "You are already in impersonation mode. Use /quit first.",
+                markdown_string!("You are already in impersonation mode\\. Use /quit first\\."),
             )
             .await?;
         return Ok(());
     }
 
-    let Some(name) = student_name else {
-        show_student_selection(ctx).await?;
-        return Ok(());
-    };
-
-    ctx.state.exit_admin_mode(ctx.chat_id).await;
-
-    match ctx.state.get_role(name.as_str()).await {
-        Some(UserRole::Student(_)) => {
-            ctx.state.impersonate(ctx.chat_id, name.clone()).await;
-            ctx.bot
-                .send_message(
-                    ctx.chat_id,
-                    format!(
-                        "Now impersonating {}. All commands will behave as if you were that student. \
+    let params: ImpersonateParams = params.parse()?;
+    match params {
+        ImpersonateParams::I0 => show_role_selection(ctx).await,
+        ImpersonateParams::Student(None) => show_student_selection(ctx).await,
+        ImpersonateParams::Student(Some(name)) => {
+            match ctx.state.get_student(&name).await {
+                Some(_) => {
+                    ctx.state.exit_admin_mode(ctx.chat_id).await;
+                    ctx.state.impersonate(ctx.chat_id, name.clone()).await;
+                    let text = markdown_format!(
+                        "Now impersonating {}\\. All commands will behave as if you were that student\\. \
                          Use /help to see available commands, use /quit to exit",
-                        name
-                    ),
-                )
-                .await?;
-        }
-        Some(UserRole::Teacher(_)) => {
-            if ctx.state.is_both_teacher_and_student(name.as_str()).await {
-                ctx.state.impersonate(ctx.chat_id, name.clone()).await;
-                ctx.bot
-                    .send_message(
-                        ctx.chat_id,
-                        format!(
-                            "Now impersonating {} (who is also a teacher). All commands will behave as if you were that student. \
-                             Use /help to see available commands, use /quit to exit",
-                            name
-                        ),
-                    )
-                    .await?;
-            } else {
-                ctx.bot
-                    .send_message(
-                        ctx.chat_id,
-                        format!("{} is a teacher, not a student.", name),
-                    )
-                    .await?;
+                        name.to_string()
+                    );
+                    ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
+                }
+                None => {
+                    let text = markdown_format!(
+                        "Student {} was not found in the spreadsheet\\.",
+                        name.to_string()
+                    );
+                    ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
+                }
             }
+            Ok(())
         }
-        None => {
+        ImpersonateParams::Teacher(_) => {
             ctx.bot
-                .send_message(
+                .send_markdown_message(
                     ctx.chat_id,
-                    format!("Student {} was not found in the spreadsheet.", name),
+                    markdown_string!("Impersonating a teacher is not implemented yet\\."),
                 )
                 .await?;
+            Ok(())
         }
     }
+}
+
+async fn show_role_selection<Cmd: ImpersonateCommand + CallbackBitcode + 'static>(
+    ctx: &BotCtx<Cmd>,
+) -> Result<()> {
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
+
+    let student_key = CallbackKey::pack(
+        Cmd::impersonate(ImpersonateParams::Student(None)),
+        &user_proxy,
+    )
+    .await;
+    let teacher_key = CallbackKey::pack(
+        Cmd::impersonate(ImpersonateParams::Teacher(None)),
+        &user_proxy,
+    )
+    .await;
+
+    let buttons = vec![
+        vec![InlineKeyboardButton::callback_key("Student".to_string(), &student_key)],
+        vec![InlineKeyboardButton::callback_key("Teacher".to_string(), &teacher_key)],
+    ];
+
+    let keyboard = InlineKeyboardMarkup::new(buttons);
+    ctx.bot
+        .send_markdown_message(ctx.chat_id, markdown_string!("Select role to impersonate:"))
+        .reply_markup(keyboard)
+        .await?;
 
     Ok(())
 }
 
-async fn show_student_selection(ctx: &BotCtx<TeacherCommand>) -> Result<()> {
+async fn show_student_selection<Cmd: ImpersonateCommand + CallbackBitcode + 'static>(
+    ctx: &BotCtx<Cmd>,
+) -> Result<()> {
     let student_names = ctx.state.get_student_names().await;
 
     if student_names.is_empty() {
         ctx.bot
-            .send_message(
+            .send_markdown_message(
                 ctx.chat_id,
-                "No students are registered in the spreadsheet yet.",
+                markdown_string!("No students are registered in the spreadsheet yet\\."),
             )
             .await?;
         return Ok(());
@@ -98,14 +112,21 @@ async fn show_student_selection(ctx: &BotCtx<TeacherCommand>) -> Result<()> {
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     for name in student_names {
         let label = name.to_string();
-        let key = CallbackKey::pack(TeacherCommand::Impersonate(Some(name)), &user_proxy).await;
+        let key = CallbackKey::pack(
+            Cmd::impersonate(ImpersonateParams::Student(Some(name))),
+            &user_proxy,
+        )
+        .await;
         let button = InlineKeyboardButton::callback_key(label, &key);
         buttons.push(vec![button]);
     }
 
     let keyboard = InlineKeyboardMarkup::new(buttons);
     ctx.bot
-        .send_message(ctx.chat_id, "Select the student you want to impersonate:")
+        .send_markdown_message(
+            ctx.chat_id,
+            markdown_string!("Select the student you want to impersonate:"),
+        )
         .reply_markup(keyboard)
         .await?;
 
@@ -131,16 +152,11 @@ pub async fn schedule(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
     };
     let Some(student) = ctx.state.get_student(&student_name).await else {
         ctx.state.clear_impersonation(ctx.chat_id).await;
-        ctx.bot
-            .send_message(
-                ctx.chat_id,
-                format!(
-                    "Student {} was not found in the spreadsheet. \
-                     Impersonation mode has been deactivated.",
-                    student_name
-                ),
-            )
-            .await?;
+        let text = markdown_format!(
+            "Student {} was not found in the spreadsheet\\. Impersonation mode has been deactivated\\.",
+            student_name.to_string()
+        );
+        ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
         return Ok(());
     };
     api::student::schedule(ctx, &student).await
@@ -148,14 +164,10 @@ pub async fn schedule(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
 
 pub async fn quit(ctx: &BotCtx<impl Send + Sync + Clone>, teacher: &Teacher) -> Result<()> {
     ctx.state.clear_impersonation(ctx.chat_id).await;
-    ctx.bot
-        .send_message(
-            ctx.chat_id,
-            format!(
-                "Exited impersonation mode. You are back as {} (teacher).",
-                teacher.telegram_name
-            ),
-        )
-        .await?;
+    let text = markdown_format!(
+        "Exited impersonation mode\\. You are back as {} \\(teacher\\)\\.",
+        teacher.telegram_name.to_string()
+    );
+    ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
     Ok(())
 }

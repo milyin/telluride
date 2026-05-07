@@ -9,17 +9,7 @@ use telluride::command::CallbackKey;
 use telluride::data_store::InMemStore;
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, MessageId, UserId};
-use teloxide::utils::command::{BotCommands, ParseError};
-
-fn parse_impersonate_arg(s: String) -> Result<(Option<TelegramName>,), ParseError> {
-    if s.trim().is_empty() {
-        Ok((None,))
-    } else {
-        let name = s.trim().parse::<TelegramName>()
-            .map_err(|e| ParseError::IncorrectFormat(e.into()))?;
-        Ok((Some(name),))
-    }
-}
+use teloxide::utils::command::BotCommands;
 
 #[derive(BotCommands, Clone, Debug, Hash, bitcode::Encode, bitcode::Decode)]
 #[command(rename_rule = "lowercase", description = "Teacher commands:")]
@@ -34,11 +24,6 @@ pub enum TeacherCommand {
         description = "book a lesson for a student (optionally provide: teacher_name student_name date hour duration)"
     )]
     Book(String),
-    #[command(
-        description = "view the bot as a student (shows student list or impersonates if username provided)",
-        parse_with = parse_impersonate_arg
-    )]
-    Impersonate(Option<TelegramName>),
     #[command(description = "enter admin mode")]
     Admin,
     #[command(description = "forcedly refresh the data")]
@@ -100,9 +85,6 @@ async fn teacher_handle(
         TeacherCommand::Schedule => api::teacher::schedule(&ctx, &teacher).await,
         TeacherCommand::Book(ref params) => {
             api::book::book(&ctx, params, &BookingActor::Teacher(teacher.telegram_name)).await
-        }
-        TeacherCommand::Impersonate(ref student_param) => {
-            api::impersonate::impersonate(&ctx, student_param.clone()).await
         }
         TeacherCommand::Admin => api::teacher::admin(&ctx, &teacher).await,
         TeacherCommand::Refresh => api::admin::refresh(&ctx).await,

@@ -233,7 +233,7 @@ async fn book_C5<Cmd: BookCommand + CallbackBitcode + 'static>(
         teacher, student, year, month, _day,
     )));
     message.push(&markdown_string!(
-        "🟢 Available  🟡 Partial  🔴 Busy\n\nSelect a date:"
+        "\nTeacher availability: 🟢 Available  🟡 Partial  🔴 Busy\nSelect a date:"
     ));
     show_date_selection(
         ctx,
@@ -811,7 +811,7 @@ async fn book_R1<Cmd: BookCommand + CallbackBitcode + 'static>(
         teacher, student, od, ot, year, month,
     )));
     message.push(&markdown_string!(
-        "🟢 Available  🟡 Partial  🔴 Busy\n\nSelect a new date:"
+        "\nTeacher availability: 🟢 Available  🟡 Partial  🔴 Busy\nSelect a new date:"
     ));
     show_date_selection(
         ctx,

@@ -47,6 +47,7 @@ pub async fn help(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
         /help \\- Display this help message\n\
         /status \\- Show global stat information\n\
         /refresh \\- Forcedly refresh the data\n\
+        /impersonate \\- View the bot as a student or teacher\n\
         /quit \\- Exit admin mode"
     );
     ctx.bot.send_markdown_message(ctx.chat_id, text).await?;

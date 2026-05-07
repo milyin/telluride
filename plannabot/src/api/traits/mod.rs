@@ -1,6 +1,8 @@
 pub mod book;
+pub mod impersonate;
 pub mod payment;
 pub use book::{BookParams, BookingActor};
+pub use impersonate::ImpersonateParams;
 pub use payment::PaymentParams;
 
 /// Trait for commands that can emit a book command.
@@ -8,6 +10,12 @@ pub use payment::PaymentParams;
 /// allowing the book API to be generic over the command type.
 pub trait BookCommand: Sized + Clone {
     fn book(params: BookParams) -> Self;
+}
+
+/// Trait for commands that can emit an impersonate command.
+/// Only AdminCommand implements this trait.
+pub trait ImpersonateCommand: Sized + Clone {
+    fn impersonate(params: ImpersonateParams) -> Self;
 }
 
 /// Trait for commands that can emit a payment command.

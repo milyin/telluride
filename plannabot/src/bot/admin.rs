@@ -1,5 +1,6 @@
 use crate::api;
 use crate::api::context::BotCtx;
+use crate::api::traits::{ImpersonateCommand, ImpersonateParams};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -21,11 +22,19 @@ pub enum AdminCommand {
     Status,
     #[command(description = "forcedly refresh the data")]
     Refresh,
+    #[command(description = "view the bot as a student or teacher")]
+    Impersonate(String),
     #[command(description = "exit admin mode")]
     Quit,
 }
 
 impl telluride::command::CallbackBitcode for AdminCommand {}
+
+impl ImpersonateCommand for AdminCommand {
+    fn impersonate(params: ImpersonateParams) -> Self {
+        AdminCommand::Impersonate(params.to_string())
+    }
+}
 
 pub async fn is_admin(username: TelegramName, chat_id: ChatId, state: Arc<BotState>) -> bool {
     matches!(
@@ -64,6 +73,7 @@ pub async fn admin_command_handler(
         AdminCommand::Help => api::admin::help(&ctx).await,
         AdminCommand::Status => api::admin::status(&ctx, &teacher).await,
         AdminCommand::Refresh => api::admin::refresh(&ctx).await,
+        AdminCommand::Impersonate(ref params) => api::impersonate::impersonate(&ctx, params).await,
         AdminCommand::Quit => api::admin::quit(&ctx).await,
     };
 
