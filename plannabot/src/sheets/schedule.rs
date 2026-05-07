@@ -192,9 +192,11 @@ impl SheetsClient {
                 continue;
             }
 
-            let row_teacher = schema.get_str(row, ScheduleEntry::TEACHER_TELEGRAM);
-            let row_student = schema.get_str(row, ScheduleEntry::STUDENT_TELEGRAM);
-            if row_teacher != teacher.as_str() || row_student != student.as_str() {
+            let row_teacher: Option<TelegramName> =
+                TelegramName::try_from(schema.get_str(row, ScheduleEntry::TEACHER_TELEGRAM)).ok();
+            let row_student: Option<TelegramName> =
+                TelegramName::try_from(schema.get_str(row, ScheduleEntry::STUDENT_TELEGRAM)).ok();
+            if row_teacher.as_ref() != Some(teacher) || row_student.as_ref() != Some(student) {
                 continue;
             }
 
@@ -255,9 +257,11 @@ impl SheetsClient {
                 continue;
             }
 
-            let row_teacher = schema.get_str(row, ScheduleEntry::TEACHER_TELEGRAM);
-            let row_student = schema.get_str(row, ScheduleEntry::STUDENT_TELEGRAM);
-            if row_teacher != teacher.as_str() || row_student != student.as_str() {
+            let row_teacher: Option<TelegramName> =
+                TelegramName::try_from(schema.get_str(row, ScheduleEntry::TEACHER_TELEGRAM)).ok();
+            let row_student: Option<TelegramName> =
+                TelegramName::try_from(schema.get_str(row, ScheduleEntry::STUDENT_TELEGRAM)).ok();
+            if row_teacher.as_ref() != Some(teacher) || row_student.as_ref() != Some(student) {
                 continue;
             }
 
