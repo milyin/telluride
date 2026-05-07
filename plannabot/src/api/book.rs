@@ -17,7 +17,7 @@ use crate::api::menus::{
 };
 use crate::api::traits::{BookCommand, BookParams, BookingActor};
 use crate::models::{TelegramName, TimePeriod};
-use crate::sheets::worktime::{month_availability, worktime_periods, DayAvailability};
+use crate::sheets::worktime::{DayAvailability, month_availability, worktime_periods};
 use std::collections::HashMap;
 
 pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
@@ -144,7 +144,16 @@ async fn book_C2<Cmd: BookCommand + CallbackBitcode + 'static>(
     actor: &BookingActor,
 ) -> Result<()> {
     let now = Local::now();
-    book_C5(ctx, teacher, student, now.year(), now.month(), now.day(), actor).await
+    book_C5(
+        ctx,
+        teacher,
+        student,
+        now.year(),
+        now.month(),
+        now.day(),
+        actor,
+    )
+    .await
 }
 
 async fn book_C3<Cmd: BookCommand + CallbackBitcode + 'static>(
@@ -223,7 +232,9 @@ async fn book_C5<Cmd: BookCommand + CallbackBitcode + 'static>(
     message.push(&MarkdownString::from(&BookParams::C5(
         teacher, student, year, month, _day,
     )));
-    message.push(&markdown_string!("Select a date:"));
+    message.push(&markdown_string!(
+        "🟢 Available  🟡 Partial  🔴 Busy\n\nSelect a date:"
+    ));
     show_date_selection(
         ctx,
         message,
@@ -485,7 +496,8 @@ async fn book_L0<Cmd: BookCommand + CallbackBitcode + 'static>(
         InlineKeyboardButton::callback_key("📅 Create", &create_key),
         InlineKeyboardButton::callback_key("✏️ Update", &update_key),
     ]]);
-    ctx.update_markdown_message(markdown_string!("📋 *Lessons*"), Some(keyboard)).await?;
+    ctx.update_markdown_message(markdown_string!("📋 *Lessons*"), Some(keyboard))
+        .await?;
     Ok(())
 }
 
@@ -526,7 +538,7 @@ async fn book_U0<Cmd: BookCommand + CallbackBitcode + 'static>(
 
     show_date_selection(
         ctx,
-        markdown_string!("📋 *Select a day:*"),
+        markdown_string!("📋 *Select a day with a lesson:*\n\n🟢 Planned  🟡 Mixed  🔴 Finished"),
         year,
         month,
         |date| Cmd::book(BookParams::U1(date)),
@@ -599,7 +611,9 @@ async fn book_U1<Cmd: BookCommand + CallbackBitcode + 'static>(
         InlineKeyboardButton::callback_key("Today", &today_key),
         InlineKeyboardButton::callback_key(">", &next_key),
     ]);
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back", &back_key,
+    )]);
 
     let text = markdown_format!("📋 *Lessons for {}*", date.format("%d %b %Y").to_string());
     let keyboard = InlineKeyboardMarkup::new(buttons);
@@ -720,12 +734,7 @@ async fn book_D0<Cmd: BookCommand + CallbackBitcode + 'static>(
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key = CallbackKey::pack(
-        Cmd::book(BookParams::L1(
-            teacher.clone(),
-            student.clone(),
-            date,
-            time,
-        )),
+        Cmd::book(BookParams::L1(teacher.clone(), student.clone(), date, time)),
         &user_proxy,
     )
     .await;
@@ -801,7 +810,9 @@ async fn book_R1<Cmd: BookCommand + CallbackBitcode + 'static>(
     message.push(&MarkdownString::from(&BookParams::R1(
         teacher, student, od, ot, year, month,
     )));
-    message.push(&markdown_string!("Select a new date:"));
+    message.push(&markdown_string!(
+        "🟢 Available  🟡 Partial  🔴 Busy\n\nSelect a new date:"
+    ));
     show_date_selection(
         ctx,
         message,
@@ -1080,12 +1091,7 @@ async fn book_S0<Cmd: BookCommand + CallbackBitcode + 'static>(
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key = CallbackKey::pack(
-        Cmd::book(BookParams::L1(
-            teacher.clone(),
-            student.clone(),
-            date,
-            time,
-        )),
+        Cmd::book(BookParams::L1(teacher.clone(), student.clone(), date, time)),
         &user_proxy,
     )
     .await;
