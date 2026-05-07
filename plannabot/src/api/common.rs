@@ -1,26 +1,14 @@
+use crate::api::context::BotCtx;
 use crate::models::UserRole;
-use crate::state::BotState;
 use anyhow::Result;
-use std::sync::Arc;
 use telluride::markdown::MarkdownStringMessage;
 use telluride::{markdown_format, markdown_string};
-use teloxide::prelude::*;
 
-/// Reset user to default state and show a role-appropriate welcome message.
-///
-/// Clears any active impersonation or admin mode (no-ops if not active), then
-/// looks up the user's role and sends a welcome message. This is the single
-/// implementation for all four modes' Start command.
-pub async fn start(
-    bot: &Bot,
-    chat_id: ChatId,
-    username: &str,
-    state: &Arc<BotState>,
-) -> Result<()> {
-    state.clear_impersonation(chat_id).await;
-    state.exit_admin_mode(chat_id).await;
+pub async fn start(ctx: &BotCtx<impl Send + Sync + Clone>, username: &str) -> Result<()> {
+    ctx.state.clear_impersonation(ctx.chat_id).await;
+    ctx.state.exit_admin_mode(ctx.chat_id).await;
 
-    let role = state.get_role(username).await;
+    let role = ctx.state.get_role(username).await;
 
     let mut text = markdown_string!("👋 *Welcome to Plannabot\\!*\n\n");
     let greeting = markdown_format!(
@@ -30,7 +18,7 @@ pub async fn start(
     text.push(&greeting);
 
     if let Some(UserRole::Teacher(teacher)) = &role {
-        if state
+        if ctx.state
             .is_both_teacher_and_student(teacher.telegram_name.as_str())
             .await
         {
@@ -41,15 +29,10 @@ pub async fn start(
         }
     }
 
-    bot.send_markdown_message(chat_id, text).await?;
+    ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
     Ok(())
 }
 
-/// Formats a lesson duration in minutes to a human-readable string.
-///
-/// - `90`  → `"1h30m"`
-/// - `120` → `"2h"`
-/// - `45`  → `"45m"`
 pub fn format_duration(minutes: i64) -> String {
     let hours = minutes / 60;
     let mins = minutes % 60;

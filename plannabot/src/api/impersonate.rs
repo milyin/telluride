@@ -2,17 +2,14 @@ use crate::api;
 use crate::api::context::BotCtx;
 use crate::bot::teacher::TeacherCommand;
 use crate::models::{Teacher, TelegramName, UserRole};
-use crate::state::BotState;
+use teloxide::prelude::*;
 use anyhow::Result;
-use std::sync::Arc;
 use telluride::command::{CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::UserProxy;
 use telluride::markdown::MarkdownStringMessage;
 use telluride::markdown_string;
-use teloxide::prelude::*;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
-/// Enter impersonation mode for a specific student, or show a selection UI.
 pub async fn impersonate(
     ctx: &BotCtx<TeacherCommand>,
     student_name: Option<TelegramName>,
@@ -115,8 +112,7 @@ async fn show_student_selection(ctx: &BotCtx<TeacherCommand>) -> Result<()> {
     Ok(())
 }
 
-/// Handle the /help command in impersonation mode.
-pub async fn help(bot: &Bot, chat_id: ChatId) -> Result<()> {
+pub async fn help(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
     let text = markdown_string!(
         "*Available Commands \\(Impersonation Mode\\):*\n\n\
         /start \\- Exit impersonation and restart the bot\n\
@@ -125,46 +121,41 @@ pub async fn help(bot: &Bot, chat_id: ChatId) -> Result<()> {
         /book \\- Book a lesson as the impersonated student\n\
         /quit \\- Exit impersonation mode"
     );
-    bot.send_markdown_message(chat_id, text).await?;
+    ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
     Ok(())
 }
 
-/// Handle the /schedule command in impersonation mode.
-pub async fn schedule(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Result<()> {
-    let Some(student_name) = state.get_impersonation(chat_id).await else {
+pub async fn schedule(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
+    let Some(student_name) = ctx.state.get_impersonation(ctx.chat_id).await else {
         return Ok(());
     };
-    let Some(student) = state.get_student(&student_name).await else {
-        state.clear_impersonation(chat_id).await;
-        bot.send_message(
-            chat_id,
+    let Some(student) = ctx.state.get_student(&student_name).await else {
+        ctx.state.clear_impersonation(ctx.chat_id).await;
+        ctx.bot
+            .send_message(
+                ctx.chat_id,
+                format!(
+                    "Student {} was not found in the spreadsheet. \
+                     Impersonation mode has been deactivated.",
+                    student_name
+                ),
+            )
+            .await?;
+        return Ok(());
+    };
+    api::student::schedule(ctx, &student).await
+}
+
+pub async fn quit(ctx: &BotCtx<impl Send + Sync + Clone>, teacher: &Teacher) -> Result<()> {
+    ctx.state.clear_impersonation(ctx.chat_id).await;
+    ctx.bot
+        .send_message(
+            ctx.chat_id,
             format!(
-                "Student {} was not found in the spreadsheet. \
-                 Impersonation mode has been deactivated.",
-                student_name
+                "Exited impersonation mode. You are back as {} (teacher).",
+                teacher.telegram_name
             ),
         )
         .await?;
-        return Ok(());
-    };
-    api::student::schedule(bot, chat_id, &student, state).await
-}
-
-/// Handle the /quit command in impersonation mode.
-pub async fn quit(
-    bot: &Bot,
-    chat_id: ChatId,
-    teacher: &Teacher,
-    state: &Arc<BotState>,
-) -> Result<()> {
-    state.clear_impersonation(chat_id).await;
-    bot.send_message(
-        chat_id,
-        format!(
-            "Exited impersonation mode. You are back as {} (teacher).",
-            teacher.telegram_name
-        ),
-    )
-    .await?;
     Ok(())
 }

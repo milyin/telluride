@@ -1,4 +1,5 @@
 use crate::api;
+use crate::api::context::BotCtx;
 use crate::bot::{callback_command_handler, get_username};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -38,7 +39,7 @@ pub async fn admin_command_handler(
     msg: Message,
     cmd: AdminCommand,
     state: Arc<BotState>,
-    _callback_storage: Arc<InMemStore<CallbackKey, AdminCommand>>,
+    callback_storage: Arc<InMemStore<CallbackKey, AdminCommand>>,
 ) -> ResponseResult<()> {
     let _ = state.refresh_if_needed().await;
 
@@ -55,12 +56,15 @@ pub async fn admin_command_handler(
         .try_send_errors_to_teacher(&bot, msg.chat.id, &teacher.telegram_name)
         .await;
 
+    let user_id = msg.from.as_ref().unwrap().id;
+    let ctx = BotCtx { bot, chat_id: msg.chat.id, state, user_id, callback_storage, message_id: None };
+
     let result = match cmd {
-        AdminCommand::Start => api::common::start(&bot, msg.chat.id, &username, &state).await,
-        AdminCommand::Help => api::admin::help(&bot, msg.chat.id).await,
-        AdminCommand::Status => api::admin::status(&bot, msg.chat.id, &teacher, &state).await,
-        AdminCommand::Refresh => api::admin::refresh(&bot, msg.chat.id, &state).await,
-        AdminCommand::Quit => api::admin::quit(&bot, msg.chat.id, &state).await,
+        AdminCommand::Start => api::common::start(&ctx, &username).await,
+        AdminCommand::Help => api::admin::help(&ctx).await,
+        AdminCommand::Status => api::admin::status(&ctx, &teacher).await,
+        AdminCommand::Refresh => api::admin::refresh(&ctx).await,
+        AdminCommand::Quit => api::admin::quit(&ctx).await,
     };
 
     result.map_err(|e| {

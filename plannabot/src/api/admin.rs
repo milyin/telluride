@@ -1,20 +1,18 @@
+use crate::api::context::BotCtx;
 use crate::models::Teacher;
-use crate::state::BotState;
+use teloxide::prelude::*;
 use anyhow::Result;
 use chrono_tz::Tz;
-use std::sync::Arc;
 use telluride::markdown::{MarkdownString, MarkdownStringMessage};
 use telluride::{markdown_format, markdown_string};
-use teloxide::prelude::*;
 
-/// Handle the /refresh command.
-pub async fn refresh(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Result<()> {
-    bot.send_message(chat_id, "🔄 Refreshing data from Google Sheets...")
+pub async fn refresh(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
+    ctx.bot.send_message(ctx.chat_id, "🔄 Refreshing data from Google Sheets...")
         .await?;
 
-    match state.refresh().await {
+    match ctx.state.refresh().await {
         Ok(errors) => {
-            let stats = state.get_stats().await;
+            let stats = ctx.state.get_stats().await;
             let mut text = markdown_format!(
                 "✅ *Data successfully refreshed\\!*\n\n\
                 • Students: {}\n\
@@ -31,10 +29,10 @@ pub async fn refresh(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Resul
                 text.push(&err_text);
             }
 
-            bot.send_markdown_message(chat_id, text).await?;
+            ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
         }
         Err(e) => {
-            bot.send_message(chat_id, format!("❌ Failed to refresh data: {}", e))
+            ctx.bot.send_message(ctx.chat_id, format!("❌ Failed to refresh data: {}", e))
                 .await?;
         }
     }
@@ -42,8 +40,7 @@ pub async fn refresh(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Resul
     Ok(())
 }
 
-/// Handle the /help command in admin mode.
-pub async fn help(bot: &Bot, chat_id: ChatId) -> Result<()> {
+pub async fn help(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
     let text = markdown_string!(
         "*Available Commands \\(Admin Mode\\):*\n\n\
         /start \\- Exit admin mode and restart the bot\n\
@@ -52,18 +49,12 @@ pub async fn help(bot: &Bot, chat_id: ChatId) -> Result<()> {
         /refresh \\- Forcedly refresh the data\n\
         /quit \\- Exit admin mode"
     );
-    bot.send_markdown_message(chat_id, text).await?;
+    ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
     Ok(())
 }
 
-/// Handle the /status command (admin mode only).
-pub async fn status(
-    bot: &Bot,
-    chat_id: ChatId,
-    teacher: &Teacher,
-    state: &Arc<BotState>,
-) -> Result<()> {
-    let stats = state.get_stats().await;
+pub async fn status(ctx: &BotCtx<impl Send + Sync + Clone>, teacher: &Teacher) -> Result<()> {
+    let stats = ctx.state.get_stats().await;
     let tz: Tz = teacher.timezone;
 
     let last_reload_str = stats
@@ -105,13 +96,12 @@ pub async fn status(
         @raw url_markdown
     );
 
-    bot.send_markdown_message(chat_id, text).await?;
+    ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
     Ok(())
 }
 
-/// Handle the /quit command in admin mode.
-pub async fn quit(bot: &Bot, chat_id: ChatId, state: &Arc<BotState>) -> Result<()> {
-    state.exit_admin_mode(chat_id).await;
-    bot.send_message(chat_id, "Exited admin mode.").await?;
+pub async fn quit(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
+    ctx.state.exit_admin_mode(ctx.chat_id).await;
+    ctx.bot.send_message(ctx.chat_id, "Exited admin mode.").await?;
     Ok(())
 }

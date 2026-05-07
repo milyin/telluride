@@ -70,15 +70,13 @@ async fn impersonate_handle(
     let ctx = BotCtx { bot, chat_id: msg.chat.id, state, user_id, callback_storage, message_id };
 
     let result = match &cmd {
-        ImpersonateCommand::Start => api::common::start(&ctx.bot, ctx.chat_id, &username, &ctx.state).await,
-        ImpersonateCommand::Help => api::impersonate::help(&ctx.bot, ctx.chat_id).await,
-        ImpersonateCommand::Schedule => api::impersonate::schedule(&ctx.bot, ctx.chat_id, &ctx.state).await,
+        ImpersonateCommand::Start => api::common::start(&ctx, &username).await,
+        ImpersonateCommand::Help => api::impersonate::help(&ctx).await,
+        ImpersonateCommand::Schedule => api::impersonate::schedule(&ctx).await,
         ImpersonateCommand::Book(params) => {
             api::book::book(&ctx, params, &BookingActor::Student(student_name.clone())).await
         }
-        ImpersonateCommand::Quit => {
-            api::impersonate::quit(&ctx.bot, ctx.chat_id, &teacher, &ctx.state).await
-        }
+        ImpersonateCommand::Quit => api::impersonate::quit(&ctx, &teacher).await,
     };
 
     result.map_err(|e| {

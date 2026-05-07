@@ -73,11 +73,9 @@ async fn student_handle(
     let ctx = BotCtx { bot, chat_id: msg.chat.id, state, user_id, callback_storage, message_id };
 
     let result = match &cmd {
-        StudentCommand::Start => api::common::start(&ctx.bot, ctx.chat_id, &username, &ctx.state).await,
-        StudentCommand::Help => api::student::help(&ctx.bot, ctx.chat_id).await,
-        StudentCommand::Schedule => {
-            api::student::schedule(&ctx.bot, ctx.chat_id, &student, &ctx.state).await
-        }
+        StudentCommand::Start => api::common::start(&ctx, &username).await,
+        StudentCommand::Help => api::student::help(&ctx).await,
+        StudentCommand::Schedule => api::student::schedule(&ctx, &student).await,
         StudentCommand::Book(params) => {
             api::book::book(&ctx, params, &BookingActor::Student(student.telegram_name.clone())).await
         }

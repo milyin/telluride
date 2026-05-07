@@ -87,19 +87,17 @@ async fn teacher_handle(
     let ctx = BotCtx { bot, chat_id: msg.chat.id, state, user_id, callback_storage, message_id };
 
     let result = match cmd {
-        TeacherCommand::Start => api::common::start(&ctx.bot, ctx.chat_id, &username, &ctx.state).await,
-        TeacherCommand::Help => api::teacher::help(&ctx.bot, ctx.chat_id, &ctx.state).await,
-        TeacherCommand::Schedule => {
-            api::teacher::schedule(&ctx.bot, ctx.chat_id, &teacher, &ctx.state).await
-        }
+        TeacherCommand::Start => api::common::start(&ctx, &username).await,
+        TeacherCommand::Help => api::teacher::help(&ctx).await,
+        TeacherCommand::Schedule => api::teacher::schedule(&ctx, &teacher).await,
         TeacherCommand::Book(ref params) => {
             api::book::book(&ctx, params, &BookingActor::Teacher(teacher.telegram_name)).await
         }
         TeacherCommand::Impersonate(ref student_param) => {
             api::impersonate::impersonate(&ctx, student_param.clone()).await
         }
-        TeacherCommand::Admin => api::teacher::admin(&ctx.bot, ctx.chat_id, &teacher, &ctx.state).await,
-        TeacherCommand::Refresh => api::admin::refresh(&ctx.bot, ctx.chat_id, &ctx.state).await,
+        TeacherCommand::Admin => api::teacher::admin(&ctx, &teacher).await,
+        TeacherCommand::Refresh => api::admin::refresh(&ctx).await,
     };
 
     result.map_err(|e| {

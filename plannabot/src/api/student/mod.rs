@@ -1,15 +1,12 @@
 use crate::api::common::format_duration;
+use crate::api::context::BotCtx;
 use crate::models::Student;
-use crate::state::BotState;
 use anyhow::Result;
 use chrono_tz::Tz;
-use std::sync::Arc;
 use telluride::markdown::MarkdownStringMessage;
 use telluride::{markdown_format, markdown_string};
-use teloxide::prelude::*;
 
-/// Handle the /help command for a student.
-pub async fn help(bot: &Bot, chat_id: ChatId) -> Result<()> {
+pub async fn help(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
     let text = markdown_string!(
         "*Available Commands:*\n\n\
         /start \\- Start the bot\n\
@@ -17,18 +14,12 @@ pub async fn help(bot: &Bot, chat_id: ChatId) -> Result<()> {
         /schedule \\- Show your planned lessons\n\
         /book \\- Book a lesson"
     );
-    bot.send_markdown_message(chat_id, text).await?;
+    ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
     Ok(())
 }
 
-/// Handle the /schedule command for a student.
-pub async fn schedule(
-    bot: &Bot,
-    chat_id: ChatId,
-    student: &Student,
-    state: &Arc<BotState>,
-) -> Result<()> {
-    let entries = state
+pub async fn schedule(ctx: &BotCtx<impl Send + Sync + Clone>, student: &Student) -> Result<()> {
+    let entries = ctx.state
         .sheets
         .get_student_schedule(student.telegram_name.as_str())
         .await?;
@@ -38,7 +29,7 @@ pub async fn schedule(
 
     if planned.is_empty() {
         let text = markdown_string!("📅 No planned lessons found\\.");
-        bot.send_markdown_message(chat_id, text).await?;
+        ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
     } else {
         let tz: Tz = student.timezone;
         let mut text = markdown_string!("📅 *Your planned lessons:*\n\n");
@@ -56,7 +47,7 @@ pub async fn schedule(
             );
             text.push(&line);
         }
-        bot.send_markdown_message(chat_id, text).await?;
+        ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
     }
 
     Ok(())
