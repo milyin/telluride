@@ -5,9 +5,8 @@ use anyhow::Result;
 use chrono::{Datelike, Local, NaiveDate, NaiveTime};
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::UserProxy;
-use telluride::markdown::{MarkdownString, MarkdownStringMessage};
+use telluride::markdown::MarkdownString;
 use telluride::{markdown_format, markdown_string};
-use teloxide::payloads::{EditMessageTextSetters, SendMessageSetters};
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
 use crate::api::common::format_duration;
@@ -91,11 +90,10 @@ async fn book_M0<Cmd: BookCommand + CallbackBitcode + 'static>(ctx: &BotCtx<Cmd>
         InlineKeyboardButton::callback_key("📅 Create", &create_key),
         InlineKeyboardButton::callback_key("📋 Update", &list_key),
     ]]);
-    let text = markdown_string!("📅 *Book a Lesson*\nWhat would you like to do?");
-    match ctx.message_id {
-        Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).reply_markup(keyboard).await?; }
-        None => { ctx.bot.send_markdown_message(ctx.chat_id, text).reply_markup(keyboard).await?; }
-    }
+    ctx.update_markdown_message(
+        markdown_string!("📅 *Book a Lesson*\nWhat would you like to do?"),
+        Some(keyboard),
+    ).await?;
     Ok(())
 }
 
@@ -277,11 +275,10 @@ async fn book_C7<Cmd: Send + Sync + Clone>(
     _actor: &BookingActor,
 ) -> Result<()> {
     let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await else {
-        let text = markdown_string!("⚠️ No pairing found for this teacher\\. Please contact your teacher\\.");
-        match ctx.message_id {
-            Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).await?; }
-            None => { ctx.bot.send_markdown_message(ctx.chat_id, text).await?; }
-        }
+        ctx.update_markdown_message(
+            markdown_string!("⚠️ No pairing found for this teacher\\. Please contact your teacher\\."),
+            None,
+        ).await?;
         return Ok(());
     };
     let duration = Duration::from(std::time::Duration::from_secs(
@@ -302,11 +299,10 @@ async fn book_C8<Cmd: Send + Sync + Clone>(
     let currency = student_data.as_ref().map(|s| s.currency.as_str()).unwrap_or("");
 
     let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await else {
-        let text = markdown_string!("⚠️ No pairing found for this teacher\\. Please contact your teacher\\.");
-        match ctx.message_id {
-            Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).await?; }
-            None => { ctx.bot.send_markdown_message(ctx.chat_id, text).await?; }
-        }
+        ctx.update_markdown_message(
+            markdown_string!("⚠️ No pairing found for this teacher\\. Please contact your teacher\\."),
+            None,
+        ).await?;
         return Ok(());
     };
 
@@ -330,10 +326,7 @@ async fn book_C8<Cmd: Send + Sync + Clone>(
     let button = InlineKeyboardButton::switch_inline_query_current_chat("📅 Book", cf_params);
     let keyboard = InlineKeyboardMarkup::new(vec![vec![button]]);
 
-    match ctx.message_id {
-        Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).reply_markup(keyboard).await?; }
-        None => { ctx.bot.send_markdown_message(ctx.chat_id, text).reply_markup(keyboard).await?; }
-    }
+    ctx.update_markdown_message(text, Some(keyboard)).await?;
     Ok(())
 }
 
@@ -346,11 +339,10 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
     duration: Duration,
 ) -> Result<()> {
     let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await else {
-        let text = markdown_string!("⚠️ Cannot book: you are not paired with this teacher\\.");
-        match ctx.message_id {
-            Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).await?; }
-            None => { ctx.bot.send_markdown_message(ctx.chat_id, text).await?; }
-        }
+        ctx.update_markdown_message(
+            markdown_string!("⚠️ Cannot book: you are not paired with this teacher\\."),
+            None,
+        ).await?;
         return Ok(());
     };
 
@@ -365,11 +357,10 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
         .iter()
         .any(|wp| wp.contains(&new_period));
     if !fits_in_worktime {
-        let text = markdown_string!("⚠️ Cannot book: the lesson extends outside the teacher's working hours\\.");
-        match ctx.message_id {
-            Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).await?; }
-            None => { ctx.bot.send_markdown_message(ctx.chat_id, text).await?; }
-        }
+        ctx.update_markdown_message(
+            markdown_string!("⚠️ Cannot book: the lesson extends outside the teacher's working hours\\."),
+            None,
+        ).await?;
         return Ok(());
     }
 
@@ -380,11 +371,10 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
         .filter(|e| e.student_telegram == student || e.teacher_telegram == teacher)
         .any(|e| e.time_period().overlaps(&new_period));
     if has_overlap {
-        let text = markdown_string!("⚠️ Cannot book: this time slot conflicts with an existing lesson\\.");
-        match ctx.message_id {
-            Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).await?; }
-            None => { ctx.bot.send_markdown_message(ctx.chat_id, text).await?; }
-        }
+        ctx.update_markdown_message(
+            markdown_string!("⚠️ Cannot book: this time slot conflicts with an existing lesson\\."),
+            None,
+        ).await?;
         return Ok(());
     }
 
@@ -412,10 +402,7 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
     };
     text.push(&markdown_format!("💰 Cost: {}\n", cost_str));
 
-    match ctx.message_id {
-        Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).await?; }
-        None => { ctx.bot.send_markdown_message(ctx.chat_id, text).await?; }
-    }
+    ctx.update_markdown_message(text, None).await?;
     Ok(())
 }
 
@@ -446,11 +433,7 @@ async fn book_L0<Cmd: BookCommand + CallbackBitcode + 'static>(
     entries.sort_by_key(|e| e.datetime);
 
     if entries.is_empty() {
-        let text = markdown_string!("No lessons found\\.");
-        match ctx.message_id {
-            Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).await?; }
-            None => { ctx.bot.send_markdown_message(ctx.chat_id, text).await?; }
-        }
+        ctx.update_markdown_message(markdown_string!("No lessons found\\."), None).await?;
         return Ok(());
     }
 
@@ -477,11 +460,7 @@ async fn book_L0<Cmd: BookCommand + CallbackBitcode + 'static>(
     }
 
     let keyboard = InlineKeyboardMarkup::new(buttons);
-    let text = markdown_string!("📋 *Your Lessons*\nSelect a lesson:");
-    match ctx.message_id {
-        Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).reply_markup(keyboard).await?; }
-        None => { ctx.bot.send_markdown_message(ctx.chat_id, text).reply_markup(keyboard).await?; }
-    }
+    ctx.update_markdown_message(markdown_string!("📋 *Your Lessons*\nSelect a lesson:"), Some(keyboard)).await?;
     Ok(())
 }
 
@@ -548,10 +527,7 @@ async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
     rows.push(vec![InlineKeyboardButton::callback_key("← Back", &back_key)]);
     let keyboard = InlineKeyboardMarkup::new(rows);
 
-    match ctx.message_id {
-        Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).reply_markup(keyboard).await?; }
-        None => { ctx.bot.send_markdown_message(ctx.chat_id, text).reply_markup(keyboard).await?; }
-    }
+    ctx.update_markdown_message(text, Some(keyboard)).await?;
     Ok(())
 }
 
@@ -573,10 +549,7 @@ async fn book_D0<Cmd: Send + Sync + Clone>(
     let button = InlineKeyboardButton::switch_inline_query_current_chat("🗑️ Yes, delete it", df_params);
     let keyboard = InlineKeyboardMarkup::new(vec![vec![button]]);
 
-    match ctx.message_id {
-        Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).reply_markup(keyboard).await?; }
-        None => { ctx.bot.send_markdown_message(ctx.chat_id, text).reply_markup(keyboard).await?; }
-    }
+    ctx.update_markdown_message(text, Some(keyboard)).await?;
     Ok(())
 }
 
@@ -595,10 +568,7 @@ async fn book_DF<Cmd: Send + Sync + Clone>(
     let mut text = markdown_string!("✅ *Lesson Deleted*\n\n");
     text.push(&MarkdownString::from(&BookParams::DF(teacher, student, date, time)));
 
-    match ctx.message_id {
-        Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).await?; }
-        None => { ctx.bot.send_markdown_message(ctx.chat_id, text).await?; }
-    }
+    ctx.update_markdown_message(text, None).await?;
     Ok(())
 }
 
@@ -702,10 +672,7 @@ async fn book_R3<Cmd: Send + Sync + Clone>(
     let button = InlineKeyboardButton::switch_inline_query_current_chat("✅ Confirm reschedule", rf_params);
     let keyboard = InlineKeyboardMarkup::new(vec![vec![button]]);
 
-    match ctx.message_id {
-        Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).reply_markup(keyboard).await?; }
-        None => { ctx.bot.send_markdown_message(ctx.chat_id, text).reply_markup(keyboard).await?; }
-    }
+    ctx.update_markdown_message(text, Some(keyboard)).await?;
     Ok(())
 }
 
@@ -719,11 +686,10 @@ async fn book_RF<Cmd: Send + Sync + Clone>(
     nt: NaiveTime,
 ) -> Result<()> {
     let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await else {
-        let text = markdown_string!("⚠️ Cannot reschedule: pairing not found\\.");
-        match ctx.message_id {
-            Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).await?; }
-            None => { ctx.bot.send_markdown_message(ctx.chat_id, text).await?; }
-        }
+        ctx.update_markdown_message(
+            markdown_string!("⚠️ Cannot reschedule: pairing not found\\."),
+            None,
+        ).await?;
         return Ok(());
     };
 
@@ -739,11 +705,10 @@ async fn book_RF<Cmd: Send + Sync + Clone>(
         .iter()
         .any(|wp| wp.contains(&new_period));
     if !fits_in_worktime {
-        let text = markdown_string!("⚠️ Cannot reschedule: new time extends outside the teacher's working hours\\.");
-        match ctx.message_id {
-            Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).await?; }
-            None => { ctx.bot.send_markdown_message(ctx.chat_id, text).await?; }
-        }
+        ctx.update_markdown_message(
+            markdown_string!("⚠️ Cannot reschedule: new time extends outside the teacher's working hours\\."),
+            None,
+        ).await?;
         return Ok(());
     }
 
@@ -755,11 +720,10 @@ async fn book_RF<Cmd: Send + Sync + Clone>(
         .filter(|e| e.datetime != old_start)
         .any(|e| e.time_period().overlaps(&new_period));
     if has_overlap {
-        let text = markdown_string!("⚠️ Cannot reschedule: new time conflicts with an existing lesson\\.");
-        match ctx.message_id {
-            Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).await?; }
-            None => { ctx.bot.send_markdown_message(ctx.chat_id, text).await?; }
-        }
+        ctx.update_markdown_message(
+            markdown_string!("⚠️ Cannot reschedule: new time conflicts with an existing lesson\\."),
+            None,
+        ).await?;
         return Ok(());
     }
 
@@ -776,10 +740,7 @@ async fn book_RF<Cmd: Send + Sync + Clone>(
     let mut text = markdown_string!("✅ *Lesson Rescheduled\\!*\n\n");
     text.push(&MarkdownString::from(&BookParams::RF(teacher, student, od, ot, nd, nt)));
 
-    match ctx.message_id {
-        Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).await?; }
-        None => { ctx.bot.send_markdown_message(ctx.chat_id, text).await?; }
-    }
+    ctx.update_markdown_message(text, None).await?;
     Ok(())
 }
 
@@ -796,11 +757,10 @@ async fn book_S0<Cmd: BookCommand + CallbackBitcode + 'static>(
     actor: &BookingActor,
 ) -> Result<()> {
     if matches!(actor, BookingActor::Student(_)) {
-        let text = markdown_string!("⚠️ Only teachers can change the lesson status\\.");
-        match ctx.message_id {
-            Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).await?; }
-            None => { ctx.bot.send_markdown_message(ctx.chat_id, text).await?; }
-        }
+        ctx.update_markdown_message(
+            markdown_string!("⚠️ Only teachers can change the lesson status\\."),
+            None,
+        ).await?;
         return Ok(());
     }
 
@@ -822,10 +782,7 @@ async fn book_S0<Cmd: BookCommand + CallbackBitcode + 'static>(
         InlineKeyboardButton::switch_inline_query_current_chat("🚫 Absent", absent_params),
     ]]);
 
-    match ctx.message_id {
-        Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).reply_markup(keyboard).await?; }
-        None => { ctx.bot.send_markdown_message(ctx.chat_id, text).reply_markup(keyboard).await?; }
-    }
+    ctx.update_markdown_message(text, Some(keyboard)).await?;
     Ok(())
 }
 
@@ -845,9 +802,6 @@ async fn book_SF<Cmd: Send + Sync + Clone>(
     let mut text = markdown_string!("✅ *Status Updated*\n\n");
     text.push(&MarkdownString::from(&BookParams::SF(teacher, student, date, time, status)));
 
-    match ctx.message_id {
-        Some(id) => { ctx.bot.edit_markdown_message_text(ctx.chat_id, id, text).await?; }
-        None => { ctx.bot.send_markdown_message(ctx.chat_id, text).await?; }
-    }
+    ctx.update_markdown_message(text, None).await?;
     Ok(())
 }
