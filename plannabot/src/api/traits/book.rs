@@ -72,8 +72,8 @@ pub enum BookParams {
     CF(TelegramName, TelegramName, NaiveDate, NaiveTime, Duration),
 
     // List flow
-    L0,
-    L1(TelegramName, TelegramName, NaiveDate, NaiveTime),
+    L0(i32),
+    L1(TelegramName, TelegramName, NaiveDate, NaiveTime, i32),
 
     // Delete flow (entry already identified via L1)
     D0(TelegramName, TelegramName, NaiveDate, NaiveTime),
@@ -118,8 +118,8 @@ impl fmt::Display for BookParams {
             BookParams::C7(t, s2, date, time)           => format_screen_spaces!(c, t, s2, date, time),
             BookParams::C8(t, s2, date, time, dur)      => format_screen_spaces!(c, t, s2, date, time, dur),
             BookParams::CF(t, s2, date, time, dur)      => format_screen_spaces!(cf, t, s2, date, time, dur),
-            BookParams::L0                              => format_screen_spaces!(l),
-            BookParams::L1(t, s2, date, time)           => format_screen_spaces!(l, t, s2, date, time),
+            BookParams::L0(w)                           => format_screen_spaces!(l, w),
+            BookParams::L1(t, s2, date, time, w)        => format_screen_spaces!(l, t, s2, date, time, w),
             BookParams::D0(t, s2, date, time)           => format_screen_spaces!(d, t, s2, date, time),
             BookParams::DF(t, s2, date, time)           => format_screen_spaces!(df, t, s2, date, time),
             BookParams::R1(t, s2, od, ot, ny, nm)       => format_screen_spaces!(r, t, s2, od, ot, ny, nm),
@@ -272,21 +272,32 @@ impl FromStr for BookParams {
 fn parse_list(parts: &[String]) -> Result<BookParams> {
     let mut p = ParamParser::new(parts, 0);
     if p.is_empty() {
-        return Ok(BookParams::L0);
+        return Ok(BookParams::L0(0));
     }
-    let teacher: TelegramName = p.next("teacher")?.parse()?;
+    let first = p.next("week_offset or teacher")?;
+    if let Ok(week_offset) = first.parse::<i32>() {
+        p.finish()?;
+        return Ok(BookParams::L0(week_offset));
+    }
+    let teacher: TelegramName = first.parse()?;
     let student: TelegramName = p.next("student")?.parse()?;
     let date: NaiveDate       = p.next("date")?.parse()?;
     let time: NaiveTime       = p.next("time")?.parse()?;
-    p.finish()?;
-    Ok(BookParams::L1(teacher, student, date, time))
+    let week_offset: i32 = if p.is_empty() {
+        0
+    } else {
+        let w = p.next("week_offset")?.parse()?;
+        p.finish()?;
+        w
+    };
+    Ok(BookParams::L1(teacher, student, date, time, week_offset))
 }
 
 impl From<&BookParams> for MarkdownString {
     fn from(p: &BookParams) -> MarkdownString {
         let mut s = MarkdownString::new();
         match p {
-            BookParams::M0 | BookParams::C0() | BookParams::L0 => {}
+            BookParams::M0 | BookParams::C0() | BookParams::L0(_) => {}
 
             BookParams::C1(t) => {
                 s.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", t.to_string()));
@@ -307,10 +318,16 @@ impl From<&BookParams> for MarkdownString {
             }
 
             BookParams::C7(t, st, date, time)
-            | BookParams::L1(t, st, date, time)
             | BookParams::D0(t, st, date, time)
             | BookParams::DF(t, st, date, time)
             | BookParams::S0(t, st, date, time) => {
+                s.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", t.to_string()));
+                s.push(&markdown_format!("👨\\-🎓 Student: {}\n", st.to_string()));
+                s.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
+                s.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
+            }
+
+            BookParams::L1(t, st, date, time, _) => {
                 s.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", t.to_string()));
                 s.push(&markdown_format!("👨\\-🎓 Student: {}\n", st.to_string()));
                 s.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
