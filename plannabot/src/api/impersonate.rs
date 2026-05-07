@@ -7,7 +7,6 @@ use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPacke
 use telluride::data_store::UserProxy;
 use telluride::markdown::MarkdownStringMessage;
 use telluride::{markdown_format, markdown_string};
-use teloxide::payloads::SendMessageSetters;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
 pub async fn impersonate<Cmd: ImpersonateCommand + CallbackBitcode + 'static>(
@@ -15,12 +14,11 @@ pub async fn impersonate<Cmd: ImpersonateCommand + CallbackBitcode + 'static>(
     params: &str,
 ) -> Result<()> {
     if ctx.state.get_impersonation(ctx.chat_id).await.is_some() {
-        ctx.bot
-            .send_markdown_message(
-                ctx.chat_id,
-                markdown_string!("You are already in impersonation mode\\. Use /quit first\\."),
-            )
-            .await?;
+        ctx.update_markdown_message(
+            markdown_string!("You are already in impersonation mode\\. Use /quit first\\."),
+            None,
+        )
+        .await?;
         return Ok(());
     }
 
@@ -38,25 +36,24 @@ pub async fn impersonate<Cmd: ImpersonateCommand + CallbackBitcode + 'static>(
                          Use /help to see available commands, use /quit to exit",
                         name.to_string()
                     );
-                    ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
+                    ctx.update_markdown_message(text, None).await?;
                 }
                 None => {
                     let text = markdown_format!(
                         "Student {} was not found in the spreadsheet\\.",
                         name.to_string()
                     );
-                    ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
+                    ctx.update_markdown_message(text, None).await?;
                 }
             }
             Ok(())
         }
         ImpersonateParams::Teacher(_) => {
-            ctx.bot
-                .send_markdown_message(
-                    ctx.chat_id,
-                    markdown_string!("Impersonating a teacher is not implemented yet\\."),
-                )
-                .await?;
+            ctx.update_markdown_message(
+                markdown_string!("Impersonating a teacher is not implemented yet\\."),
+                None,
+            )
+            .await?;
             Ok(())
         }
     }
@@ -83,13 +80,11 @@ async fn show_role_selection<Cmd: ImpersonateCommand + CallbackBitcode + 'static
         vec![InlineKeyboardButton::callback_key("Teacher".to_string(), &teacher_key)],
     ];
 
-    let keyboard = InlineKeyboardMarkup::new(buttons);
-    ctx.bot
-        .send_markdown_message(ctx.chat_id, markdown_string!("Select role to impersonate:"))
-        .reply_markup(keyboard)
-        .await?;
-
-    Ok(())
+    ctx.update_markdown_message(
+        markdown_string!("Select role to impersonate:"),
+        Some(InlineKeyboardMarkup::new(buttons)),
+    )
+    .await
 }
 
 async fn show_student_selection<Cmd: ImpersonateCommand + CallbackBitcode + 'static>(
@@ -98,12 +93,11 @@ async fn show_student_selection<Cmd: ImpersonateCommand + CallbackBitcode + 'sta
     let student_names = ctx.state.get_student_names().await;
 
     if student_names.is_empty() {
-        ctx.bot
-            .send_markdown_message(
-                ctx.chat_id,
-                markdown_string!("No students are registered in the spreadsheet yet\\."),
-            )
-            .await?;
+        ctx.update_markdown_message(
+            markdown_string!("No students are registered in the spreadsheet yet\\."),
+            None,
+        )
+        .await?;
         return Ok(());
     }
 
@@ -117,20 +111,21 @@ async fn show_student_selection<Cmd: ImpersonateCommand + CallbackBitcode + 'sta
             &user_proxy,
         )
         .await;
-        let button = InlineKeyboardButton::callback_key(label, &key);
-        buttons.push(vec![button]);
+        buttons.push(vec![InlineKeyboardButton::callback_key(label, &key)]);
     }
 
-    let keyboard = InlineKeyboardMarkup::new(buttons);
-    ctx.bot
-        .send_markdown_message(
-            ctx.chat_id,
-            markdown_string!("Select the student you want to impersonate:"),
-        )
-        .reply_markup(keyboard)
-        .await?;
+    let back_key = CallbackKey::pack(
+        Cmd::impersonate(ImpersonateParams::I0),
+        &user_proxy,
+    )
+    .await;
+    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back".to_string(), &back_key)]);
 
-    Ok(())
+    ctx.update_markdown_message(
+        markdown_string!("Select the student you want to impersonate:"),
+        Some(InlineKeyboardMarkup::new(buttons)),
+    )
+    .await
 }
 
 pub async fn help(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {

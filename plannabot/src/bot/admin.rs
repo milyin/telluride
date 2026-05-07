@@ -8,7 +8,7 @@ use std::sync::Arc;
 use telluride::command::CallbackKey;
 use telluride::data_store::InMemStore;
 use teloxide::prelude::*;
-use teloxide::types::ChatId;
+use teloxide::types::{ChatId, MessageId};
 use teloxide::utils::command::BotCommands;
 
 #[derive(BotCommands, Clone, Debug, Hash, bitcode::Encode, bitcode::Decode)]
@@ -43,12 +43,13 @@ pub async fn is_admin(username: TelegramName, chat_id: ChatId, state: Arc<BotSta
     )
 }
 
-pub async fn admin_command_handler(
+async fn admin_handle(
     bot: Bot,
     msg: Message,
     cmd: AdminCommand,
     state: Arc<BotState>,
     callback_storage: Arc<InMemStore<CallbackKey, AdminCommand>>,
+    message_id: Option<MessageId>,
 ) -> ResponseResult<()> {
     let _ = state.refresh_if_needed().await;
 
@@ -66,7 +67,7 @@ pub async fn admin_command_handler(
         .await;
 
     let user_id = msg.from.as_ref().unwrap().id;
-    let ctx = BotCtx { bot, chat_id: msg.chat.id, state, user_id, callback_storage, message_id: None };
+    let ctx = BotCtx { bot, chat_id: msg.chat.id, state, user_id, callback_storage, message_id };
 
     let result = match cmd {
         AdminCommand::Start => api::common::start(&ctx, &username).await,
@@ -84,13 +85,23 @@ pub async fn admin_command_handler(
     Ok(())
 }
 
+pub async fn admin_command_handler(
+    bot: Bot,
+    msg: Message,
+    cmd: AdminCommand,
+    state: Arc<BotState>,
+    callback_storage: Arc<InMemStore<CallbackKey, AdminCommand>>,
+) -> ResponseResult<()> {
+    admin_handle(bot, msg, cmd, state, callback_storage, None).await
+}
+
 pub async fn admin_callback_command_handler(
     bot: Bot,
     q: CallbackQuery,
     state: Arc<BotState>,
     callback_storage: Arc<InMemStore<CallbackKey, AdminCommand>>,
 ) -> ResponseResult<()> {
-    callback_command_handler(bot, q, callback_storage, state, |bot, msg, cmd, state, cb, _| {
-        Box::pin(admin_command_handler(bot, msg, cmd, state, cb))
+    callback_command_handler(bot, q, callback_storage, state, |bot, msg, cmd, state, cb, message_id| {
+        Box::pin(admin_handle(bot, msg, cmd, state, cb, message_id))
     }).await
 }
