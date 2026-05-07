@@ -496,15 +496,32 @@ async fn book_U0<Cmd: BookCommand + CallbackBitcode + 'static>(
     month: u32,
 ) -> Result<()> {
     let (all_entries, _) = ctx.state.sheets.get_schedule().await?;
-    let lesson_days: HashMap<NaiveDate, DayAvailability> = all_entries
+    let mut day_flags: HashMap<NaiveDate, (bool, bool)> = HashMap::new();
+    for entry in all_entries.iter().filter(|e| match actor {
+        BookingActor::Student(s) => &e.student_telegram == s,
+        BookingActor::Teacher(t) => &e.teacher_telegram == t,
+    }) {
+        let date = entry.datetime.date_naive();
+        if date.year() != year || date.month() != month {
+            continue;
+        }
+        let flags = day_flags.entry(date).or_insert((false, false));
+        if entry.status.is_none() {
+            flags.0 = true;
+        } else {
+            flags.1 = true;
+        }
+    }
+    let lesson_days: HashMap<NaiveDate, DayAvailability> = day_flags
         .into_iter()
-        .filter(|e| match actor {
-            BookingActor::Student(s) => &e.student_telegram == s,
-            BookingActor::Teacher(t) => &e.teacher_telegram == t,
+        .map(|(date, (has_planned, has_finished))| {
+            let avail = match (has_planned, has_finished) {
+                (true, false) => DayAvailability::Free,
+                (false, true) => DayAvailability::Busy,
+                _ => DayAvailability::Partial,
+            };
+            (date, avail)
         })
-        .map(|e| e.datetime.date_naive())
-        .filter(|d| d.year() == year && d.month() == month)
-        .map(|d| (d, DayAvailability::Free))
         .collect();
 
     show_date_selection(

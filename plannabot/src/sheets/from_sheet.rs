@@ -185,6 +185,11 @@ impl FromSheetValue for DateTime<Utc> {
                 return Ok(ndt.and_utc());
             }
         }
+        for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y"] {
+            if let Ok(d) = NaiveDate::parse_from_str(s, fmt) {
+                return Ok(d.and_hms_opt(0, 0, 0).unwrap().and_utc());
+            }
+        }
         Err(format!("cannot parse datetime '{s}'"))
     }
 }
