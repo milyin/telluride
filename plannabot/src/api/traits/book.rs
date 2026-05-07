@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use chrono::{Datelike, NaiveDate, NaiveTime};
-use telluride::utils::{screen_spaces, split_with_screened_spaces};
+use telluride::{format_screen_spaces, utils::split_with_screened_spaces};
 
 use crate::models::{LessonStatus, TelegramName};
 use crate::types::Duration;
@@ -107,25 +107,25 @@ impl fmt::Display for BookParams {
         match self {
             BookParams::M0 => write!(f, ""),
             BookParams::C0() => write!(f, "{c}"),
-            BookParams::C1(t) => write!(f, "{c} {}", screen_spaces(t.as_str())),
-            BookParams::C2(t, s2) => write!(f, "{c} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str())),
-            BookParams::C3(t, s2, y) => write!(f, "{c} {} {} {y}", screen_spaces(t.as_str()), screen_spaces(s2.as_str())),
-            BookParams::C4(t, s2, y, m) => write!(f, "{c} {} {} {y} {m}", screen_spaces(t.as_str()), screen_spaces(s2.as_str())),
-            BookParams::C5(t, s2, y, m, day) => write!(f, "{c} {} {} {y} {m} {day}", screen_spaces(t.as_str()), screen_spaces(s2.as_str())),
-            BookParams::C6(t, s2, date) => write!(f, "{c} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string())),
-            BookParams::C7(t, s2, date, time) => write!(f, "{c} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string())),
-            BookParams::C8(t, s2, date, time, dur) => write!(f, "{c} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string()), screen_spaces(&dur.to_string())),
-            BookParams::CF(t, s2, date, time, dur) => write!(f, "{cf} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string()), screen_spaces(&dur.to_string())),
+            BookParams::C1(t) => write!(f, "{c} {}", format_screen_spaces!(t)),
+            BookParams::C2(t, s2) => write!(f, "{c} {}", format_screen_spaces!(t, s2)),
+            BookParams::C3(t, s2, y) => write!(f, "{c} {} {y}", format_screen_spaces!(t, s2)),
+            BookParams::C4(t, s2, y, m) => write!(f, "{c} {} {y} {m}", format_screen_spaces!(t, s2)),
+            BookParams::C5(t, s2, y, m, day) => write!(f, "{c} {} {y} {m} {day}", format_screen_spaces!(t, s2)),
+            BookParams::C6(t, s2, date) => write!(f, "{c} {}", format_screen_spaces!(t, s2, date)),
+            BookParams::C7(t, s2, date, time) => write!(f, "{c} {}", format_screen_spaces!(t, s2, date, time)),
+            BookParams::C8(t, s2, date, time, dur) => write!(f, "{c} {}", format_screen_spaces!(t, s2, date, time, dur)),
+            BookParams::CF(t, s2, date, time, dur) => write!(f, "{cf} {}", format_screen_spaces!(t, s2, date, time, dur)),
             BookParams::L0 => write!(f, "{l}"),
-            BookParams::L1(t, s2, date, time) => write!(f, "{l} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string())),
-            BookParams::D0(t, s2, date, time) => write!(f, "{d} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string())),
-            BookParams::DF(t, s2, date, time) => write!(f, "{df} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string())),
-            BookParams::R1(t, s2, od, ot, ny, nm) => write!(f, "{r} {} {} {} {} {ny} {nm}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&od.to_string()), screen_spaces(&ot.to_string())),
-            BookParams::R2(t, s2, od, ot, nd) => write!(f, "{r} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&od.to_string()), screen_spaces(&ot.to_string()), screen_spaces(&nd.to_string())),
-            BookParams::R3(t, s2, od, ot, nd, nt) => write!(f, "{r} {} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&od.to_string()), screen_spaces(&ot.to_string()), screen_spaces(&nd.to_string()), screen_spaces(&nt.to_string())),
-            BookParams::RF(t, s2, od, ot, nd, nt) => write!(f, "{rf} {} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&od.to_string()), screen_spaces(&ot.to_string()), screen_spaces(&nd.to_string()), screen_spaces(&nt.to_string())),
-            BookParams::S0(t, s2, date, time) => write!(f, "{s} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string())),
-            BookParams::SF(t, s2, date, time, status) => write!(f, "{sf} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string()), status),
+            BookParams::L1(t, s2, date, time) => write!(f, "{l} {}", format_screen_spaces!(t, s2, date, time)),
+            BookParams::D0(t, s2, date, time) => write!(f, "{d} {}", format_screen_spaces!(t, s2, date, time)),
+            BookParams::DF(t, s2, date, time) => write!(f, "{df} {}", format_screen_spaces!(t, s2, date, time)),
+            BookParams::R1(t, s2, od, ot, ny, nm) => write!(f, "{r} {} {ny} {nm}", format_screen_spaces!(t, s2, od, ot)),
+            BookParams::R2(t, s2, od, ot, nd) => write!(f, "{r} {}", format_screen_spaces!(t, s2, od, ot, nd)),
+            BookParams::R3(t, s2, od, ot, nd, nt) => write!(f, "{r} {}", format_screen_spaces!(t, s2, od, ot, nd, nt)),
+            BookParams::RF(t, s2, od, ot, nd, nt) => write!(f, "{rf} {}", format_screen_spaces!(t, s2, od, ot, nd, nt)),
+            BookParams::S0(t, s2, date, time) => write!(f, "{s} {}", format_screen_spaces!(t, s2, date, time)),
+            BookParams::SF(t, s2, date, time, status) => write!(f, "{sf} {} {status}", format_screen_spaces!(t, s2, date, time)),
         }
     }
 }

@@ -37,3 +37,14 @@ pub fn split_with_screened_spaces(arg: &str) -> Vec<String> {
 pub fn screen_spaces(s: &str) -> String {
     s.replace('\\', "\\\\").replace(' ', "\\ ")
 }
+
+/// Formats multiple `Display` values by wrapping each with [`screen_spaces`] and joining with spaces.
+#[macro_export]
+macro_rules! format_screen_spaces {
+    ($($arg:expr),+) => {{
+        let parts: Vec<String> = vec![
+            $( $crate::utils::screen_spaces(&$arg.to_string()) ),+
+        ];
+        parts.join(" ")
+    }};
+}
