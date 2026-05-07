@@ -4,6 +4,7 @@ pub mod common;
 pub mod context;
 pub mod impersonate;
 pub mod menus;
+pub mod payment;
 pub mod student;
 pub mod teacher;
 pub mod traits;

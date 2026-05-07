@@ -1,6 +1,6 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BookCommand, BookParams, BookingActor};
+use crate::api::traits::{BookCommand, BookParams, BookingActor, PaymentCommand, PaymentParams};
 use crate::bot::{callback_command_handler, get_username};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -43,6 +43,8 @@ pub enum TeacherCommand {
     Admin,
     #[command(description = "forcedly refresh the data")]
     Refresh,
+    #[command(description = "view student balances and record payments")]
+    Payment(String),
 }
 
 impl telluride::command::CallbackBitcode for TeacherCommand {}
@@ -50,6 +52,12 @@ impl telluride::command::CallbackBitcode for TeacherCommand {}
 impl BookCommand for TeacherCommand {
     fn book(params: BookParams) -> Self {
         TeacherCommand::Book(params.to_string())
+    }
+}
+
+impl PaymentCommand for TeacherCommand {
+    fn payment(params: PaymentParams) -> Self {
+        TeacherCommand::Payment(params.to_string())
     }
 }
 
@@ -98,6 +106,9 @@ async fn teacher_handle(
         }
         TeacherCommand::Admin => api::teacher::admin(&ctx, &teacher).await,
         TeacherCommand::Refresh => api::admin::refresh(&ctx).await,
+        TeacherCommand::Payment(ref params) => {
+            api::payment::payment(&ctx, params, &teacher).await
+        }
     };
 
     result.map_err(|e| {
