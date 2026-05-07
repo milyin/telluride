@@ -65,26 +65,49 @@ sheet_struct! {
 }
 
 /// Status of a scheduled lesson.
+/// `None` in the sheet field means the lesson is planned.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LessonStatus {
-    Done,
-    Cancelled,
+    Passed,
+    Absent,
 }
 
 impl LessonStatus {
-    /// Parse from a string. Returns None for empty or unrecognized values (treated as "planned").
+    /// Parse from a sheet string. Returns `None` for empty or unrecognised values (= planned).
     pub fn from_str(s: &str) -> Option<Self> {
         match s.trim().to_lowercase().as_str() {
-            "done" | "completed" => Some(LessonStatus::Done),
-            "cancelled" | "canceled" => Some(LessonStatus::Cancelled),
+            "passed" | "done" | "completed" => Some(LessonStatus::Passed),
+            "absent" => Some(LessonStatus::Absent),
             _ => None,
         }
+    }
+
+    /// The string written to the sheet for this status.
+    pub fn as_sheet_str(&self) -> &'static str {
+        match self {
+            LessonStatus::Passed => "passed",
+            LessonStatus::Absent => "absent",
+        }
+    }
+}
+
+impl fmt::Display for LessonStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_sheet_str())
+    }
+}
+
+impl std::str::FromStr for LessonStatus {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> anyhow::Result<Self> {
+        LessonStatus::from_str(s)
+            .ok_or_else(|| anyhow::anyhow!("unknown lesson status: '{}'", s))
     }
 }
 
 sheet_struct! {
     /// A single entry in the schedule.
-    /// `status = None` means the lesson is planned (not yet done or cancelled).
+    /// `status = None` means the lesson is planned.
     #[derive(Debug, Clone)]
     pub struct ScheduleEntry {
         pub student_telegram: TelegramName,
@@ -97,7 +120,7 @@ sheet_struct! {
 }
 
 impl ScheduleEntry {
-    /// Returns true if this lesson is planned (not done or cancelled).
+    /// Returns `true` if the lesson has no status set (= planned).
     pub fn is_planned(&self) -> bool {
         self.status.is_none()
     }

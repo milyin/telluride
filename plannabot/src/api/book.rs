@@ -1,4 +1,5 @@
 #![allow(non_snake_case)]
+use crate::models::LessonStatus;
 use crate::types::Duration;
 use anyhow::Result;
 use chrono::{Datelike, Local, NaiveDate, NaiveTime};
@@ -15,7 +16,7 @@ use crate::api::menus::{
     show_date_selection, show_month_selection, show_name_list, show_slot_selection,
     show_year_selection,
 };
-use crate::api::traits::{BookCommand, BookParams, BookSubcmd, BookingActor};
+use crate::api::traits::{BookCommand, BookParams, BookingActor};
 use crate::models::{TelegramName, TimePeriod};
 use crate::sheets::worktime::worktime_periods;
 
@@ -27,7 +28,6 @@ pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
     let params: BookParams = params.parse()?;
     match params {
         BookParams::M0 => book_M0(ctx).await,
-        BookParams::M1(s) => book_M1(ctx, s, actor).await,
         BookParams::C0() => book_C0(ctx, actor).await,
         BookParams::C1(teacher) => book_C1(ctx, teacher, actor).await,
         BookParams::C2(teacher, student) => book_C2(ctx, teacher, student).await,
@@ -48,56 +48,57 @@ pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
         BookParams::CF(teacher, student, date, hour, duration) => {
             book_CF(ctx, teacher, student, date, hour, duration).await
         }
-        BookParams::D0() => book_D0(ctx, actor).await,
-        BookParams::D1(teacher, student, od, ot) => book_D1(ctx, teacher, student, od, ot).await,
-        BookParams::DF(teacher, student, od, ot) => book_DF(ctx, teacher, student, od, ot).await,
-        BookParams::E0() => book_E0(ctx, actor).await,
-        BookParams::E1(teacher, student, od, ot, ny, nm) => {
-            book_E1(ctx, teacher, student, od, ot, ny, nm).await
+        BookParams::L0 => book_L0(ctx, actor).await,
+        BookParams::L1(teacher, student, date, time) => {
+            book_L1(ctx, teacher, student, date, time, actor).await
         }
-        BookParams::E2(teacher, student, od, ot, nd) => {
-            book_E2(ctx, teacher, student, od, ot, nd).await
+        BookParams::D0(teacher, student, date, time) => {
+            book_D0(ctx, teacher, student, date, time).await
         }
-        BookParams::E3(teacher, student, od, ot, nd, nt) => {
-            book_E3(ctx, teacher, student, od, ot, nd, nt).await
+        BookParams::DF(teacher, student, date, time) => {
+            book_DF(ctx, teacher, student, date, time).await
         }
-        BookParams::EF(teacher, student, od, ot, nd, nt) => {
-            book_EF(ctx, teacher, student, od, ot, nd, nt).await
+        BookParams::R1(teacher, student, od, ot, ny, nm) => {
+            book_R1(ctx, teacher, student, od, ot, ny, nm).await
+        }
+        BookParams::R2(teacher, student, od, ot, nd) => {
+            book_R2(ctx, teacher, student, od, ot, nd).await
+        }
+        BookParams::R3(teacher, student, od, ot, nd, nt) => {
+            book_R3(ctx, teacher, student, od, ot, nd, nt).await
+        }
+        BookParams::RF(teacher, student, od, ot, nd, nt) => {
+            book_RF(ctx, teacher, student, od, ot, nd, nt).await
+        }
+        BookParams::S0(teacher, student, date, time) => {
+            book_S0(ctx, teacher, student, date, time, actor).await
+        }
+        BookParams::SF(teacher, student, date, time, status) => {
+            book_SF(ctx, teacher, student, date, time, status).await
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// Menu
+// Top-level menu (M0)
 // ---------------------------------------------------------------------------
 
 async fn book_M0<Cmd: BookCommand + CallbackBitcode + 'static>(ctx: &BotCtx<Cmd>) -> Result<()> {
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let create_key = CallbackKey::pack(Cmd::book(BookParams::M1(BookSubcmd::Create(false))), &user_proxy).await;
-    let edit_key = CallbackKey::pack(Cmd::book(BookParams::M1(BookSubcmd::Edit(false))), &user_proxy).await;
-    let delete_key = CallbackKey::pack(Cmd::book(BookParams::M1(BookSubcmd::Delete(false))), &user_proxy).await;
+    let create_key = CallbackKey::pack(Cmd::book(BookParams::C0()), &user_proxy).await;
+    let list_key   = CallbackKey::pack(Cmd::book(BookParams::L0), &user_proxy).await;
     let keyboard = InlineKeyboardMarkup::new(vec![vec![
         InlineKeyboardButton::callback_key("📅 Create", &create_key),
-        InlineKeyboardButton::callback_key("✏️ Edit", &edit_key),
-        InlineKeyboardButton::callback_key("🗑️ Cancel", &delete_key),
+        InlineKeyboardButton::callback_key("📋 List", &list_key),
     ]]);
     ctx.bot
-        .send_markdown_message(ctx.chat_id, markdown_string!("📅 *Book a Lesson*\nWhat would you like to do?"))
+        .send_markdown_message(
+            ctx.chat_id,
+            markdown_string!("📅 *Book a Lesson*\nWhat would you like to do?"),
+        )
         .reply_markup(keyboard)
         .await?;
     Ok(())
-}
-
-async fn book_M1<Cmd: BookCommand + CallbackBitcode + 'static>(
-    ctx: &BotCtx<Cmd>,
-    subcmd: BookSubcmd,
-    actor: &BookingActor,
-) -> Result<()> {
-    match subcmd {
-        BookSubcmd::Create(_) => book_C0(ctx, actor).await,
-        BookSubcmd::Edit(_) => book_E0(ctx, actor).await,
-        BookSubcmd::Delete(_) => book_D0(ctx, actor).await,
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -202,18 +203,18 @@ async fn book_C5<Cmd: BookCommand + CallbackBitcode + 'static>(
     month: u32,
     _day: u32,
 ) -> Result<()> {
-    let t_date = teacher.clone();
-    let s_date = student.clone();
-    let t_prev = teacher.clone();
-    let s_prev = student.clone();
-    let t_next = teacher.clone();
-    let s_next = student.clone();
-    let t_year = teacher.clone();
-    let s_year = student.clone();
+    let t_date  = teacher.clone();
+    let s_date  = student.clone();
+    let t_prev  = teacher.clone();
+    let s_prev  = student.clone();
+    let t_next  = teacher.clone();
+    let s_next  = student.clone();
+    let t_year  = teacher.clone();
+    let s_year  = student.clone();
     let t_month = teacher.clone();
     let s_month = student.clone();
-    let t_back = teacher.clone();
-    let s_back = student.clone();
+    let t_back  = teacher.clone();
+    let s_back  = student.clone();
     let message = markdown_format!(
         "📅 Book a Lesson\n{} ↔ {} — select a date:",
         teacher.to_string(),
@@ -228,14 +229,7 @@ async fn book_C5<Cmd: BookCommand + CallbackBitcode + 'static>(
         move |py, pm| Cmd::book(BookParams::C5(t_prev.clone(), s_prev.clone(), py, pm, 1)),
         move |ny, nm| Cmd::book(BookParams::C5(t_next.clone(), s_next.clone(), ny, nm, 1)),
         move || Cmd::book(BookParams::C3(t_year.clone(), s_year.clone(), year)),
-        move || {
-            Cmd::book(BookParams::C4(
-                t_month.clone(),
-                s_month.clone(),
-                year,
-                month,
-            ))
-        },
+        move || Cmd::book(BookParams::C4(t_month.clone(), s_month.clone(), year, month)),
         Some(Cmd::book(BookParams::C2(t_back, s_back))),
     )
     .await
@@ -247,8 +241,8 @@ async fn book_C6<Cmd: BookCommand + CallbackBitcode + 'static>(
     student: TelegramName,
     date: NaiveDate,
 ) -> Result<()> {
-    let t_cmd = teacher.clone();
-    let s_cmd = student.clone();
+    let t_cmd  = teacher.clone();
+    let s_cmd  = student.clone();
     let t_back = teacher.clone();
     let s_back = student.clone();
     show_slot_selection(
@@ -277,10 +271,12 @@ async fn book_C7<Cmd: Send + Sync + Clone>(
     _actor: &BookingActor,
 ) -> Result<()> {
     let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await else {
-        let text = markdown_string!(
-            "⚠️ No pairing found for this teacher\\. Please contact your teacher\\."
-        );
-        ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
+        ctx.bot
+            .send_markdown_message(
+                ctx.chat_id,
+                markdown_string!("⚠️ No pairing found for this teacher\\. Please contact your teacher\\."),
+            )
+            .await?;
         return Ok(());
     };
     let duration = Duration::from(std::time::Duration::from_secs(
@@ -298,16 +294,15 @@ async fn book_C8<Cmd: Send + Sync + Clone>(
     duration: Duration,
 ) -> Result<()> {
     let student_data = ctx.state.get_student(&student).await;
-    let currency = student_data
-        .as_ref()
-        .map(|s| s.currency.as_str())
-        .unwrap_or("");
+    let currency = student_data.as_ref().map(|s| s.currency.as_str()).unwrap_or("");
 
     let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await else {
-        let text = markdown_string!(
-            "⚠️ No pairing found for this teacher\\. Please contact your teacher\\."
-        );
-        ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
+        ctx.bot
+            .send_markdown_message(
+                ctx.chat_id,
+                markdown_string!("⚠️ No pairing found for this teacher\\. Please contact your teacher\\."),
+            )
+            .await?;
         return Ok(());
     };
 
@@ -319,16 +314,11 @@ async fn book_C8<Cmd: Send + Sync + Clone>(
     };
 
     let mut text = markdown_string!("📅 *Book a Lesson*\n\n");
-    let teacher_str = teacher.to_string();
-    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher_str));
-    let student_str = student.to_string();
-    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student_str));
-    let date_str = date.to_string();
-    text.push(&markdown_format!("📆 Date: {}\n", date_str));
-    let hour_str = hour.format("%H:%M").to_string();
-    text.push(&markdown_format!("⏰ Time: {}\n", hour_str));
-    let dur_str = format_duration(duration_minutes as i64);
-    text.push(&markdown_format!("⏱ Duration: {}\n", dur_str));
+    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
+    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
+    text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
+    text.push(&markdown_format!("⏰ Time: {}\n", hour.format("%H:%M").to_string()));
+    text.push(&markdown_format!("⏱ Duration: {}\n", format_duration(duration_minutes as i64)));
     let cost_str = if currency.is_empty() {
         actual_cost.to_string()
     } else {
@@ -336,10 +326,7 @@ async fn book_C8<Cmd: Send + Sync + Clone>(
     };
     text.push(&markdown_format!("💰 Cost: {}\n", cost_str));
 
-    let cf_params = format!(
-        "/book {}",
-        BookParams::CF(teacher, student, date, hour, duration)
-    );
+    let cf_params = format!("/book {}", BookParams::CF(teacher, student, date, hour, duration));
     let button = InlineKeyboardButton::switch_inline_query_current_chat("📅 Book", cf_params);
     let keyboard = InlineKeyboardMarkup::new(vec![vec![button]]);
 
@@ -359,8 +346,12 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
     duration: Duration,
 ) -> Result<()> {
     let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await else {
-        let text = markdown_string!("⚠️ Cannot book: you are not paired with this teacher\\.");
-        ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
+        ctx.bot
+            .send_markdown_message(
+                ctx.chat_id,
+                markdown_string!("⚠️ Cannot book: you are not paired with this teacher\\."),
+            )
+            .await?;
         return Ok(());
     };
 
@@ -375,10 +366,12 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
         .iter()
         .any(|wp| wp.contains(&new_period));
     if !fits_in_worktime {
-        let text = markdown_string!(
-            "⚠️ Cannot book: the lesson extends outside the teacher's working hours\\."
-        );
-        ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
+        ctx.bot
+            .send_markdown_message(
+                ctx.chat_id,
+                markdown_string!("⚠️ Cannot book: the lesson extends outside the teacher's working hours\\."),
+            )
+            .await?;
         return Ok(());
     }
 
@@ -388,11 +381,13 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
         .filter(|e| e.is_planned())
         .filter(|e| e.student_telegram == student || e.teacher_telegram == teacher)
         .any(|e| e.time_period().overlaps(&new_period));
-
     if has_overlap {
-        let text =
-            markdown_string!("⚠️ Cannot book: this time slot conflicts with an existing lesson\\.");
-        ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
+        ctx.bot
+            .send_markdown_message(
+                ctx.chat_id,
+                markdown_string!("⚠️ Cannot book: this time slot conflicts with an existing lesson\\."),
+            )
+            .await?;
         return Ok(());
     }
 
@@ -404,10 +399,7 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
     };
 
     let student_data = ctx.state.get_student(&student).await;
-    let currency = student_data
-        .as_ref()
-        .map(|s| s.currency.as_str())
-        .unwrap_or("");
+    let currency = student_data.as_ref().map(|s| s.currency.as_str()).unwrap_or("");
 
     ctx.state
         .sheets
@@ -415,16 +407,11 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
         .await?;
 
     let mut text = markdown_string!("✅ *Lesson Booked\\!*\n\n");
-    let teacher_str = teacher.to_string();
-    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher_str));
-    let student_str = student.to_string();
-    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student_str));
-    let date_str = date.to_string();
-    text.push(&markdown_format!("📆 Date: {}\n", date_str));
-    let hour_str = hour.format("%H:%M").to_string();
-    text.push(&markdown_format!("⏰ Time: {}\n", hour_str));
-    let dur_str = format_duration(duration_minutes as i64);
-    text.push(&markdown_format!("⏱ Duration: {}\n", dur_str));
+    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
+    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
+    text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
+    text.push(&markdown_format!("⏰ Time: {}\n", hour.format("%H:%M").to_string()));
+    text.push(&markdown_format!("⏱ Duration: {}\n", format_duration(duration_minutes as i64)));
     let cost_str = if currency.is_empty() {
         actual_cost.to_string()
     } else {
@@ -437,46 +424,51 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
 }
 
 // ---------------------------------------------------------------------------
-// Delete flow (D0, D1, DF)
+// List flow (L0, L1)
 // ---------------------------------------------------------------------------
 
-async fn book_D0<Cmd: BookCommand + CallbackBitcode + 'static>(
+fn status_label(status: &Option<LessonStatus>) -> &'static str {
+    match status {
+        None => "📅",
+        Some(LessonStatus::Passed) => "✅",
+        Some(LessonStatus::Absent) => "🚫",
+    }
+}
+
+async fn book_L0<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     actor: &BookingActor,
 ) -> Result<()> {
     let (all_entries, _) = ctx.state.sheets.get_schedule().await?;
-    let planned: Vec<_> = all_entries
+    let mut entries: Vec<_> = all_entries
         .into_iter()
-        .filter(|e| e.is_planned())
         .filter(|e| match actor {
             BookingActor::Student(s) => &e.student_telegram == s,
             BookingActor::Teacher(t) => &e.teacher_telegram == t,
         })
         .collect();
+    entries.sort_by_key(|e| e.datetime);
 
-    if planned.is_empty() {
+    if entries.is_empty() {
         ctx.bot
-            .send_markdown_message(ctx.chat_id, markdown_string!("No planned lessons found\\."))
+            .send_markdown_message(ctx.chat_id, markdown_string!("No lessons found\\."))
             .await?;
         return Ok(());
     }
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
-    for entry in planned {
+    for entry in entries {
         let dt = entry.datetime;
         let date = dt.date_naive();
         let time = dt.time();
-        let label = format!(
-            "{} {} ↔ {}",
-            date.format("%Y-%m-%d"),
-            time.format("%H:%M"),
-            match actor {
-                BookingActor::Student(_) => entry.teacher_telegram.to_string(),
-                BookingActor::Teacher(_) => entry.student_telegram.to_string(),
-            }
-        );
-        let cmd = Cmd::book(BookParams::D1(
+        let other = match actor {
+            BookingActor::Student(_) => entry.teacher_telegram.to_string(),
+            BookingActor::Teacher(_) => entry.student_telegram.to_string(),
+        };
+        let icon = status_label(&entry.status);
+        let label = format!("{} {} {} ↔ {}", icon, date.format("%Y-%m-%d"), time.format("%H:%M"), other);
+        let cmd = Cmd::book(BookParams::L1(
             entry.teacher_telegram,
             entry.student_telegram,
             date,
@@ -488,27 +480,104 @@ async fn book_D0<Cmd: BookCommand + CallbackBitcode + 'static>(
 
     let keyboard = InlineKeyboardMarkup::new(buttons);
     ctx.bot
-        .send_markdown_message(ctx.chat_id, markdown_string!("🗑️ *Cancel a Lesson*\nSelect a lesson to cancel:"))
+        .send_markdown_message(ctx.chat_id, markdown_string!("📋 *Your Lessons*\nSelect a lesson:"))
         .reply_markup(keyboard)
         .await?;
     Ok(())
 }
 
-async fn book_D1<Cmd: Send + Sync + Clone>(
+async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
-    od: NaiveDate,
-    ot: NaiveTime,
+    date: NaiveDate,
+    time: NaiveTime,
+    actor: &BookingActor,
 ) -> Result<()> {
-    let mut text = markdown_string!("🗑️ *Cancel a Lesson*\n\nCancel this lesson?\n\n");
+    // Look up the live entry to get status and duration.
+    let (all_entries, _) = ctx.state.sheets.get_schedule().await?;
+    let target_dt = date.and_time(time).and_utc();
+    let entry = all_entries.into_iter().find(|e| {
+        e.teacher_telegram == teacher && e.student_telegram == student && e.datetime == target_dt
+    });
+
+    let (status_opt, duration_minutes) = entry
+        .as_ref()
+        .map(|e| (e.status.clone(), e.duration_minutes))
+        .unwrap_or((None, 0));
+    let is_planned = status_opt.is_none();
+
+    let status_str = match &status_opt {
+        None => "planned".to_string(),
+        Some(s) => s.to_string(),
+    };
+
+    let mut text = markdown_string!("📋 *Lesson Details*\n\n");
     text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
     text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
-    text.push(&markdown_format!("📆 Date: {}\n", od.to_string()));
-    text.push(&markdown_format!("⏰ Time: {}\n", ot.format("%H:%M").to_string()));
+    text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
+    text.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
+    text.push(&markdown_format!("⏱ Duration: {}\n", format_duration(duration_minutes as i64)));
+    text.push(&markdown_format!("📊 Status: {}\n", status_str));
 
-    let df_params = format!("/book {}", BookParams::DF(teacher, student, od, ot));
-    let button = InlineKeyboardButton::switch_inline_query_current_chat("🗑️ Yes, cancel it", df_params);
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
+    let back_key = CallbackKey::pack(Cmd::book(BookParams::L0), &user_proxy).await;
+
+    let mut rows: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+
+    if is_planned {
+        let delete_params = format!("/book {}", BookParams::D0(teacher.clone(), student.clone(), date, time));
+        rows.push(vec![
+            InlineKeyboardButton::switch_inline_query_current_chat("🗑️ Delete", delete_params),
+        ]);
+
+        let now = Local::now();
+        let reschedule_key = CallbackKey::pack(
+            Cmd::book(BookParams::R1(teacher.clone(), student.clone(), date, time, now.year(), now.month())),
+            &user_proxy,
+        )
+        .await;
+        rows.push(vec![InlineKeyboardButton::callback_key("📅 Reschedule", &reschedule_key)]);
+    }
+
+    if matches!(actor, BookingActor::Teacher(_)) {
+        let s0_key = CallbackKey::pack(
+            Cmd::book(BookParams::S0(teacher.clone(), student.clone(), date, time)),
+            &user_proxy,
+        )
+        .await;
+        rows.push(vec![InlineKeyboardButton::callback_key("✏️ Change Status", &s0_key)]);
+    }
+
+    rows.push(vec![InlineKeyboardButton::callback_key("← Back", &back_key)]);
+    let keyboard = InlineKeyboardMarkup::new(rows);
+
+    ctx.bot
+        .send_markdown_message(ctx.chat_id, text)
+        .reply_markup(keyboard)
+        .await?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Delete flow (D0, DF)
+// ---------------------------------------------------------------------------
+
+async fn book_D0<Cmd: Send + Sync + Clone>(
+    ctx: &BotCtx<Cmd>,
+    teacher: TelegramName,
+    student: TelegramName,
+    date: NaiveDate,
+    time: NaiveTime,
+) -> Result<()> {
+    let mut text = markdown_string!("🗑️ *Delete Lesson*\n\nDelete this lesson?\n\n");
+    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
+    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
+    text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
+    text.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
+
+    let df_params = format!("/book {}", BookParams::DF(teacher, student, date, time));
+    let button = InlineKeyboardButton::switch_inline_query_current_chat("🗑️ Yes, delete it", df_params);
     let keyboard = InlineKeyboardMarkup::new(vec![vec![button]]);
 
     ctx.bot
@@ -522,86 +591,29 @@ async fn book_DF<Cmd: Send + Sync + Clone>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
-    od: NaiveDate,
-    ot: NaiveTime,
+    date: NaiveDate,
+    time: NaiveTime,
 ) -> Result<()> {
     ctx.state
         .sheets
-        .cancel_schedule_entry(&teacher, &student, od, ot)
+        .delete_schedule_entry(&teacher, &student, date, time)
         .await?;
 
-    let mut text = markdown_string!("✅ *Lesson Cancelled*\n\n");
+    let mut text = markdown_string!("✅ *Lesson Deleted*\n\n");
     text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
     text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
-    text.push(&markdown_format!("📆 Date: {}\n", od.to_string()));
-    text.push(&markdown_format!("⏰ Time: {}\n", ot.format("%H:%M").to_string()));
+    text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
+    text.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
 
     ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
     Ok(())
 }
 
 // ---------------------------------------------------------------------------
-// Edit flow (E0, E1, E2, E3, EF)
+// Reschedule flow (R1, R2, R3, RF)
 // ---------------------------------------------------------------------------
 
-async fn book_E0<Cmd: BookCommand + CallbackBitcode + 'static>(
-    ctx: &BotCtx<Cmd>,
-    actor: &BookingActor,
-) -> Result<()> {
-    let (all_entries, _) = ctx.state.sheets.get_schedule().await?;
-    let planned: Vec<_> = all_entries
-        .into_iter()
-        .filter(|e| e.is_planned())
-        .filter(|e| match actor {
-            BookingActor::Student(s) => &e.student_telegram == s,
-            BookingActor::Teacher(t) => &e.teacher_telegram == t,
-        })
-        .collect();
-
-    if planned.is_empty() {
-        ctx.bot
-            .send_markdown_message(ctx.chat_id, markdown_string!("No planned lessons found\\."))
-            .await?;
-        return Ok(());
-    }
-
-    let now = Local::now();
-    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
-    for entry in planned {
-        let dt = entry.datetime;
-        let date = dt.date_naive();
-        let time = dt.time();
-        let label = format!(
-            "{} {} ↔ {}",
-            date.format("%Y-%m-%d"),
-            time.format("%H:%M"),
-            match actor {
-                BookingActor::Student(_) => entry.teacher_telegram.to_string(),
-                BookingActor::Teacher(_) => entry.student_telegram.to_string(),
-            }
-        );
-        let cmd = Cmd::book(BookParams::E1(
-            entry.teacher_telegram,
-            entry.student_telegram,
-            date,
-            time,
-            now.year(),
-            now.month(),
-        ));
-        let key = CallbackKey::pack(cmd, &user_proxy).await;
-        buttons.push(vec![InlineKeyboardButton::callback_key(label, &key)]);
-    }
-
-    let keyboard = InlineKeyboardMarkup::new(buttons);
-    ctx.bot
-        .send_markdown_message(ctx.chat_id, markdown_string!("✏️ *Edit a Lesson*\nSelect a lesson to reschedule:"))
-        .reply_markup(keyboard)
-        .await?;
-    Ok(())
-}
-
-async fn book_E1<Cmd: BookCommand + CallbackBitcode + 'static>(
+async fn book_R1<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
@@ -610,17 +622,21 @@ async fn book_E1<Cmd: BookCommand + CallbackBitcode + 'static>(
     year: i32,
     month: u32,
 ) -> Result<()> {
-    let t_date = teacher.clone();
-    let s_date = student.clone();
-    let t_prev = teacher.clone();
-    let s_prev = student.clone();
-    let t_next = teacher.clone();
-    let s_next = student.clone();
-    let t_back = teacher.clone();
-    let s_back = student.clone();
+    let t_date   = teacher.clone();
+    let s_date   = student.clone();
+    let t_prev   = teacher.clone();
+    let s_prev   = student.clone();
+    let t_next   = teacher.clone();
+    let s_next   = student.clone();
+    let t_year   = teacher.clone();
+    let s_year   = student.clone();
+    let t_month  = teacher.clone();
+    let s_month  = student.clone();
+    let t_l1     = teacher.clone();
+    let s_l1     = student.clone();
 
     let message = markdown_format!(
-        "✏️ Edit Lesson\n{} ↔ {} — select a new date:",
+        "📅 Reschedule\n{} ↔ {} — select a new date:",
         teacher.to_string(),
         student.to_string()
     );
@@ -629,25 +645,23 @@ async fn book_E1<Cmd: BookCommand + CallbackBitcode + 'static>(
         message,
         year,
         month,
-        move |date| Cmd::book(BookParams::E2(t_date.clone(), s_date.clone(), od, ot, date)),
-        move |py, pm| Cmd::book(BookParams::E1(t_prev.clone(), s_prev.clone(), od, ot, py, pm)),
-        move |ny, nm| Cmd::book(BookParams::E1(t_next.clone(), s_next.clone(), od, ot, ny, nm)),
-        move || Cmd::book(BookParams::E1(t_back.clone(), s_back.clone(), od, ot, year - 1, month)),
+        move |date| Cmd::book(BookParams::R2(t_date.clone(), s_date.clone(), od, ot, date)),
+        move |py, pm| Cmd::book(BookParams::R1(t_prev.clone(), s_prev.clone(), od, ot, py, pm)),
+        move |ny, nm| Cmd::book(BookParams::R1(t_next.clone(), s_next.clone(), od, ot, ny, nm)),
         move || {
-            // month nav: cycle months
-            let (prev_y, prev_m) = if month > 1 {
-                (year, month - 1)
-            } else {
-                (year - 1, 12)
-            };
-            Cmd::book(BookParams::E1(teacher.clone(), student.clone(), od, ot, prev_y, prev_m))
+            let (prev_y, prev_m) = if month > 1 { (year, month - 1) } else { (year - 1, 12) };
+            Cmd::book(BookParams::R1(t_year.clone(), s_year.clone(), od, ot, prev_y, prev_m))
         },
-        Some(Cmd::book(BookParams::E0())),
+        move || {
+            let (prev_y, prev_m) = if month > 1 { (year, month - 1) } else { (year - 1, 12) };
+            Cmd::book(BookParams::R1(t_month.clone(), s_month.clone(), od, ot, prev_y, prev_m))
+        },
+        Some(Cmd::book(BookParams::L1(t_l1, s_l1, od, ot))),
     )
     .await
 }
 
-async fn book_E2<Cmd: BookCommand + CallbackBitcode + 'static>(
+async fn book_R2<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
@@ -655,8 +669,8 @@ async fn book_E2<Cmd: BookCommand + CallbackBitcode + 'static>(
     ot: NaiveTime,
     nd: NaiveDate,
 ) -> Result<()> {
-    let t_cmd = teacher.clone();
-    let s_cmd = student.clone();
+    let t_cmd  = teacher.clone();
+    let s_cmd  = student.clone();
     let t_back = teacher.clone();
     let s_back = student.clone();
     show_slot_selection(
@@ -665,16 +679,9 @@ async fn book_E2<Cmd: BookCommand + CallbackBitcode + 'static>(
         &student,
         nd,
         move |new_time| {
-            Cmd::book(BookParams::E3(
-                t_cmd.clone(),
-                s_cmd.clone(),
-                od,
-                ot,
-                nd,
-                new_time,
-            ))
+            Cmd::book(BookParams::R3(t_cmd.clone(), s_cmd.clone(), od, ot, nd, new_time))
         },
-        Some(Cmd::book(BookParams::E1(
+        Some(Cmd::book(BookParams::R1(
             t_back,
             s_back,
             od,
@@ -686,7 +693,7 @@ async fn book_E2<Cmd: BookCommand + CallbackBitcode + 'static>(
     .await
 }
 
-async fn book_E3<Cmd: Send + Sync + Clone>(
+async fn book_R3<Cmd: Send + Sync + Clone>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
@@ -695,7 +702,7 @@ async fn book_E3<Cmd: Send + Sync + Clone>(
     nd: NaiveDate,
     nt: NaiveTime,
 ) -> Result<()> {
-    let mut text = markdown_string!("✏️ *Reschedule Lesson*\n\n");
+    let mut text = markdown_string!("📅 *Reschedule Lesson*\n\n");
     text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
     text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
     text.push(&markdown_format!("📆 Old date: {}\n", od.to_string()));
@@ -703,12 +710,8 @@ async fn book_E3<Cmd: Send + Sync + Clone>(
     text.push(&markdown_format!("📆 New date: {}\n", nd.to_string()));
     text.push(&markdown_format!("⏰ New time: {}\n", nt.format("%H:%M").to_string()));
 
-    let ef_params = format!(
-        "/book {}",
-        BookParams::EF(teacher, student, od, ot, nd, nt)
-    );
-    let button =
-        InlineKeyboardButton::switch_inline_query_current_chat("✅ Confirm reschedule", ef_params);
+    let rf_params = format!("/book {}", BookParams::RF(teacher, student, od, ot, nd, nt));
+    let button = InlineKeyboardButton::switch_inline_query_current_chat("✅ Confirm reschedule", rf_params);
     let keyboard = InlineKeyboardMarkup::new(vec![vec![button]]);
 
     ctx.bot
@@ -718,7 +721,7 @@ async fn book_E3<Cmd: Send + Sync + Clone>(
     Ok(())
 }
 
-async fn book_EF<Cmd: Send + Sync + Clone>(
+async fn book_RF<Cmd: Send + Sync + Clone>(
     ctx: &BotCtx<Cmd>,
     teacher: TelegramName,
     student: TelegramName,
@@ -728,8 +731,9 @@ async fn book_EF<Cmd: Send + Sync + Clone>(
     nt: NaiveTime,
 ) -> Result<()> {
     let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await else {
-        let text = markdown_string!("⚠️ Cannot reschedule: pairing not found\\.");
-        ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
+        ctx.bot
+            .send_markdown_message(ctx.chat_id, markdown_string!("⚠️ Cannot reschedule: pairing not found\\."))
+            .await?;
         return Ok(());
     };
 
@@ -745,10 +749,12 @@ async fn book_EF<Cmd: Send + Sync + Clone>(
         .iter()
         .any(|wp| wp.contains(&new_period));
     if !fits_in_worktime {
-        let text = markdown_string!(
-            "⚠️ Cannot reschedule: new time extends outside the teacher's working hours\\."
-        );
-        ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
+        ctx.bot
+            .send_markdown_message(
+                ctx.chat_id,
+                markdown_string!("⚠️ Cannot reschedule: new time extends outside the teacher's working hours\\."),
+            )
+            .await?;
         return Ok(());
     }
 
@@ -757,29 +763,26 @@ async fn book_EF<Cmd: Send + Sync + Clone>(
         .iter()
         .filter(|e| e.is_planned())
         .filter(|e| e.student_telegram == student || e.teacher_telegram == teacher)
-        // Exclude the old booking itself from the overlap check.
         .filter(|e| e.datetime != old_start)
         .any(|e| e.time_period().overlaps(&new_period));
-
     if has_overlap {
-        let text = markdown_string!(
-            "⚠️ Cannot reschedule: new time conflicts with an existing lesson\\."
-        );
-        ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
+        ctx.bot
+            .send_markdown_message(
+                ctx.chat_id,
+                markdown_string!("⚠️ Cannot reschedule: new time conflicts with an existing lesson\\."),
+            )
+            .await?;
         return Ok(());
     }
 
     ctx.state
         .sheets
-        .cancel_schedule_entry(&teacher, &student, od, ot)
+        .delete_schedule_entry(&teacher, &student, od, ot)
         .await?;
-
-    let duration_minutes = pairing.duration_minutes;
-    let actual_cost = pairing.cost;
 
     ctx.state
         .sheets
-        .add_schedule_entry(&student, &teacher, new_start, duration_minutes, actual_cost)
+        .add_schedule_entry(&student, &teacher, new_start, pairing.duration_minutes, pairing.cost)
         .await?;
 
     let mut text = markdown_string!("✅ *Lesson Rescheduled\\!*\n\n");
@@ -787,6 +790,81 @@ async fn book_EF<Cmd: Send + Sync + Clone>(
     text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
     text.push(&markdown_format!("📆 New date: {}\n", nd.to_string()));
     text.push(&markdown_format!("⏰ New time: {}\n", nt.format("%H:%M").to_string()));
+
+    ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Status flow (S0, SF) — teacher only
+// ---------------------------------------------------------------------------
+
+async fn book_S0<Cmd: BookCommand + CallbackBitcode + 'static>(
+    ctx: &BotCtx<Cmd>,
+    teacher: TelegramName,
+    student: TelegramName,
+    date: NaiveDate,
+    time: NaiveTime,
+    actor: &BookingActor,
+) -> Result<()> {
+    if matches!(actor, BookingActor::Student(_)) {
+        ctx.bot
+            .send_markdown_message(
+                ctx.chat_id,
+                markdown_string!("⚠️ Only teachers can change the lesson status\\."),
+            )
+            .await?;
+        return Ok(());
+    }
+
+    let mut text = markdown_string!("✏️ *Change Lesson Status*\n\n");
+    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
+    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
+    text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
+    text.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
+    text.push(&markdown_string!("\nSelect new status:"));
+
+    let passed_params = format!(
+        "/book {}",
+        BookParams::SF(teacher.clone(), student.clone(), date, time, LessonStatus::Passed)
+    );
+    let absent_params = format!(
+        "/book {}",
+        BookParams::SF(teacher.clone(), student.clone(), date, time, LessonStatus::Absent)
+    );
+
+    let keyboard = InlineKeyboardMarkup::new(vec![vec![
+        InlineKeyboardButton::switch_inline_query_current_chat("✅ Passed", passed_params),
+        InlineKeyboardButton::switch_inline_query_current_chat("🚫 Absent", absent_params),
+    ]]);
+
+    ctx.bot
+        .send_markdown_message(ctx.chat_id, text)
+        .reply_markup(keyboard)
+        .await?;
+    Ok(())
+}
+
+async fn book_SF<Cmd: Send + Sync + Clone>(
+    ctx: &BotCtx<Cmd>,
+    teacher: TelegramName,
+    student: TelegramName,
+    date: NaiveDate,
+    time: NaiveTime,
+    status: LessonStatus,
+) -> Result<()> {
+    ctx.state
+        .sheets
+        .update_schedule_status(&teacher, &student, date, time, &status)
+        .await?;
+
+    let status_str = status.to_string();
+    let mut text = markdown_string!("✅ *Status Updated*\n\n");
+    text.push(&markdown_format!("👨\\-🏫 Teacher: {}\n", teacher.to_string()));
+    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
+    text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
+    text.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
+    text.push(&markdown_format!("📊 New status: {}\n", status_str));
 
     ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
     Ok(())

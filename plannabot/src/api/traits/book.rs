@@ -2,31 +2,33 @@ use std::fmt;
 use std::str::FromStr;
 
 use anyhow::Result;
-use chrono::{NaiveDate, NaiveTime};
+use chrono::{Datelike, NaiveDate, NaiveTime};
 use telluride::utils::{screen_spaces, split_with_screened_spaces};
 
-use crate::models::TelegramName;
+use crate::models::{LessonStatus, TelegramName};
 use crate::types::Duration;
 
 /// Subcommand discriminant for the `/book` command.
 /// The bool field is the **force flag**: `false` = normal UI state, `true` = execute.
 /// When force is true the Display representation gains a `"!"` suffix (e.g. `"create!"`).
-/// `FromStr` returns an error if the force form appears without a complete parameter set.
 pub enum BookSubcmd {
     Create(bool),
-    Edit(bool),
     Delete(bool),
+    Reschedule(bool),
+    Status(bool),
 }
 
 impl fmt::Display for BookSubcmd {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BookSubcmd::Create(false) => write!(f, "create"),
-            BookSubcmd::Create(true)  => write!(f, "create!"),
-            BookSubcmd::Edit(false)   => write!(f, "edit"),
-            BookSubcmd::Edit(true)    => write!(f, "edit!"),
-            BookSubcmd::Delete(false) => write!(f, "delete"),
-            BookSubcmd::Delete(true)  => write!(f, "delete!"),
+            BookSubcmd::Create(false)    => write!(f, "create"),
+            BookSubcmd::Create(true)     => write!(f, "create!"),
+            BookSubcmd::Delete(false)    => write!(f, "delete"),
+            BookSubcmd::Delete(true)     => write!(f, "delete!"),
+            BookSubcmd::Reschedule(false) => write!(f, "reschedule"),
+            BookSubcmd::Reschedule(true)  => write!(f, "reschedule!"),
+            BookSubcmd::Status(false)    => write!(f, "status"),
+            BookSubcmd::Status(true)     => write!(f, "status!"),
         }
     }
 }
@@ -35,22 +37,24 @@ impl FromStr for BookSubcmd {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self> {
         match s {
-            "create"  => Ok(BookSubcmd::Create(false)),
-            "create!" => Ok(BookSubcmd::Create(true)),
-            "edit"    => Ok(BookSubcmd::Edit(false)),
-            "edit!"   => Ok(BookSubcmd::Edit(true)),
-            "delete"  => Ok(BookSubcmd::Delete(false)),
-            "delete!" => Ok(BookSubcmd::Delete(true)),
-            _         => Err(anyhow::anyhow!("unknown subcommand: {}", s)),
+            "create"      => Ok(BookSubcmd::Create(false)),
+            "create!"     => Ok(BookSubcmd::Create(true)),
+            "delete"      => Ok(BookSubcmd::Delete(false)),
+            "delete!"     => Ok(BookSubcmd::Delete(true)),
+            "reschedule"  => Ok(BookSubcmd::Reschedule(false)),
+            "reschedule!" => Ok(BookSubcmd::Reschedule(true)),
+            "status"      => Ok(BookSubcmd::Status(false)),
+            "status!"     => Ok(BookSubcmd::Status(true)),
+            _             => Err(anyhow::anyhow!("unknown subcommand: {}", s)),
         }
     }
 }
 
 pub enum BookParams {
-    // Menu states
+    // Top-level menu
     M0,
-    M1(BookSubcmd),
-    // Create flow (C0-C7 = former L0-L7; C8 shows summary + force button; CF executes)
+
+    // Create flow
     C0(),
     C1(TelegramName),
     C2(TelegramName, TelegramName),
@@ -61,16 +65,24 @@ pub enum BookParams {
     C7(TelegramName, TelegramName, NaiveDate, NaiveTime),
     C8(TelegramName, TelegramName, NaiveDate, NaiveTime, Duration),
     CF(TelegramName, TelegramName, NaiveDate, NaiveTime, Duration),
-    // Delete flow
-    D0(),
-    D1(TelegramName, TelegramName, NaiveDate, NaiveTime),
+
+    // List flow
+    L0,
+    L1(TelegramName, TelegramName, NaiveDate, NaiveTime),
+
+    // Delete flow (entry already identified via L1)
+    D0(TelegramName, TelegramName, NaiveDate, NaiveTime),
     DF(TelegramName, TelegramName, NaiveDate, NaiveTime),
-    // Edit flow
-    E0(),
-    E1(TelegramName, TelegramName, NaiveDate, NaiveTime, i32, u32),
-    E2(TelegramName, TelegramName, NaiveDate, NaiveTime, NaiveDate),
-    E3(TelegramName, TelegramName, NaiveDate, NaiveTime, NaiveDate, NaiveTime),
-    EF(TelegramName, TelegramName, NaiveDate, NaiveTime, NaiveDate, NaiveTime),
+
+    // Reschedule flow (entry already identified via L1)
+    R1(TelegramName, TelegramName, NaiveDate, NaiveTime, i32, u32),
+    R2(TelegramName, TelegramName, NaiveDate, NaiveTime, NaiveDate),
+    R3(TelegramName, TelegramName, NaiveDate, NaiveTime, NaiveDate, NaiveTime),
+    RF(TelegramName, TelegramName, NaiveDate, NaiveTime, NaiveDate, NaiveTime),
+
+    // Status flow (teacher only)
+    S0(TelegramName, TelegramName, NaiveDate, NaiveTime),
+    SF(TelegramName, TelegramName, NaiveDate, NaiveTime, LessonStatus),
 }
 
 pub enum BookingActor {
@@ -80,40 +92,41 @@ pub enum BookingActor {
 
 impl fmt::Display for BookParams {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let c = BookSubcmd::Create(false);
+        let c  = BookSubcmd::Create(false);
         let cf = BookSubcmd::Create(true);
-        let d = BookSubcmd::Delete(false);
+        let d  = BookSubcmd::Delete(false);
         let df = BookSubcmd::Delete(true);
-        let e = BookSubcmd::Edit(false);
-        let ef = BookSubcmd::Edit(true);
+        let r  = BookSubcmd::Reschedule(false);
+        let rf = BookSubcmd::Reschedule(true);
+        let s  = BookSubcmd::Status(false);
+        let sf = BookSubcmd::Status(true);
         match self {
             BookParams::M0 => write!(f, "m0"),
-            BookParams::M1(s) => write!(f, "m1 {s}"),
             BookParams::C0() => write!(f, "{c}"),
             BookParams::C1(t) => write!(f, "{c} {}", screen_spaces(t.as_str())),
-            BookParams::C2(t, s) => write!(f, "{c} {} {}", screen_spaces(t.as_str()), screen_spaces(s.as_str())),
-            BookParams::C3(t, s, y) => write!(f, "{c} {} {} {y}", screen_spaces(t.as_str()), screen_spaces(s.as_str())),
-            BookParams::C4(t, s, y, m) => write!(f, "{c} {} {} {y} {m}", screen_spaces(t.as_str()), screen_spaces(s.as_str())),
-            BookParams::C5(t, s, y, m, day) => write!(f, "{c} {} {} {y} {m} {day}", screen_spaces(t.as_str()), screen_spaces(s.as_str())),
-            BookParams::C6(t, s, date) => write!(f, "{c} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s.as_str()), screen_spaces(&date.to_string())),
-            BookParams::C7(t, s, date, time) => write!(f, "{c} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string())),
-            BookParams::C8(t, s, date, time, dur) => write!(f, "{c} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string()), screen_spaces(&dur.to_string())),
-            BookParams::CF(t, s, date, time, dur) => write!(f, "{cf} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string()), screen_spaces(&dur.to_string())),
-            BookParams::D0() => write!(f, "{d}"),
-            BookParams::D1(t, s, od, ot) => write!(f, "{d} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s.as_str()), screen_spaces(&od.to_string()), screen_spaces(&ot.to_string())),
-            BookParams::DF(t, s, od, ot) => write!(f, "{df} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s.as_str()), screen_spaces(&od.to_string()), screen_spaces(&ot.to_string())),
-            BookParams::E0() => write!(f, "{e}"),
-            BookParams::E1(t, s, od, ot, ny, nm) => write!(f, "{e} {} {} {} {} {ny} {nm}", screen_spaces(t.as_str()), screen_spaces(s.as_str()), screen_spaces(&od.to_string()), screen_spaces(&ot.to_string())),
-            BookParams::E2(t, s, od, ot, nd) => write!(f, "{e} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s.as_str()), screen_spaces(&od.to_string()), screen_spaces(&ot.to_string()), screen_spaces(&nd.to_string())),
-            BookParams::E3(t, s, od, ot, nd, nt) => write!(f, "{e} {} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s.as_str()), screen_spaces(&od.to_string()), screen_spaces(&ot.to_string()), screen_spaces(&nd.to_string()), screen_spaces(&nt.to_string())),
-            BookParams::EF(t, s, od, ot, nd, nt) => write!(f, "{ef} {} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s.as_str()), screen_spaces(&od.to_string()), screen_spaces(&ot.to_string()), screen_spaces(&nd.to_string()), screen_spaces(&nt.to_string())),
+            BookParams::C2(t, s2) => write!(f, "{c} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str())),
+            BookParams::C3(t, s2, y) => write!(f, "{c} {} {} {y}", screen_spaces(t.as_str()), screen_spaces(s2.as_str())),
+            BookParams::C4(t, s2, y, m) => write!(f, "{c} {} {} {y} {m}", screen_spaces(t.as_str()), screen_spaces(s2.as_str())),
+            BookParams::C5(t, s2, y, m, day) => write!(f, "{c} {} {} {y} {m} {day}", screen_spaces(t.as_str()), screen_spaces(s2.as_str())),
+            BookParams::C6(t, s2, date) => write!(f, "{c} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string())),
+            BookParams::C7(t, s2, date, time) => write!(f, "{c} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string())),
+            BookParams::C8(t, s2, date, time, dur) => write!(f, "{c} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string()), screen_spaces(&dur.to_string())),
+            BookParams::CF(t, s2, date, time, dur) => write!(f, "{cf} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string()), screen_spaces(&dur.to_string())),
+            BookParams::L0 => write!(f, "list"),
+            BookParams::L1(t, s2, date, time) => write!(f, "list {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string())),
+            BookParams::D0(t, s2, date, time) => write!(f, "{d} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string())),
+            BookParams::DF(t, s2, date, time) => write!(f, "{df} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string())),
+            BookParams::R1(t, s2, od, ot, ny, nm) => write!(f, "{r} {} {} {} {} {ny} {nm}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&od.to_string()), screen_spaces(&ot.to_string())),
+            BookParams::R2(t, s2, od, ot, nd) => write!(f, "{r} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&od.to_string()), screen_spaces(&ot.to_string()), screen_spaces(&nd.to_string())),
+            BookParams::R3(t, s2, od, ot, nd, nt) => write!(f, "{r} {} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&od.to_string()), screen_spaces(&ot.to_string()), screen_spaces(&nd.to_string()), screen_spaces(&nt.to_string())),
+            BookParams::RF(t, s2, od, ot, nd, nt) => write!(f, "{rf} {} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&od.to_string()), screen_spaces(&ot.to_string()), screen_spaces(&nd.to_string()), screen_spaces(&nt.to_string())),
+            BookParams::S0(t, s2, date, time) => write!(f, "{s} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string())),
+            BookParams::SF(t, s2, date, time, status) => write!(f, "{sf} {} {} {} {} {}", screen_spaces(t.as_str()), screen_spaces(s2.as_str()), screen_spaces(&date.to_string()), screen_spaces(&time.to_string()), status),
         }
     }
 }
 
 /// Sequential token consumer used by `BookParams::from_str`.
-/// Eliminates magic count checks: each field is named, missing fields and
-/// extra fields are both detected without hardcoding a total count.
 struct ParamParser<'a> {
     parts: &'a [String],
     pos: usize,
@@ -126,7 +139,6 @@ impl<'a> ParamParser<'a> {
     fn is_empty(&self) -> bool {
         self.pos >= self.parts.len()
     }
-    /// Consume and return the next token, or error with the field name.
     fn next(&mut self, name: &str) -> Result<&str> {
         self.parts
             .get(self.pos)
@@ -136,7 +148,6 @@ impl<'a> ParamParser<'a> {
             })
             .ok_or_else(|| anyhow::anyhow!("missing parameter: {}", name))
     }
-    /// Error if any tokens remain unconsumed.
     fn finish(&self) -> Result<()> {
         match self.parts.get(self.pos) {
             None => Ok(()),
@@ -157,13 +168,7 @@ impl FromStr for BookParams {
 
         match first.as_str() {
             "m0" => return Ok(BookParams::M0),
-            "m1" => {
-                let subcmd = parts
-                    .get(1)
-                    .ok_or_else(|| anyhow::anyhow!("m1 requires a subcommand"))?
-                    .parse::<BookSubcmd>()?;
-                return Ok(BookParams::M1(subcmd));
-            }
+            "list" => return parse_list(&parts[1..]),
             _ => {}
         }
 
@@ -183,56 +188,53 @@ impl FromStr for BookParams {
             }
             BookSubcmd::Delete(false) => {
                 let mut p = ParamParser::new(&parts, 1);
-                if p.is_empty() {
-                    return Ok(BookParams::D0());
-                }
                 let teacher: TelegramName = p.next("teacher")?.parse()?;
                 let student: TelegramName = p.next("student")?.parse()?;
-                let od: NaiveDate         = p.next("date")?.parse()?;
-                let ot: NaiveTime         = p.next("time")?.parse()?;
+                let date: NaiveDate       = p.next("date")?.parse()?;
+                let time: NaiveTime       = p.next("time")?.parse()?;
                 p.finish()?;
-                Ok(BookParams::D1(teacher, student, od, ot))
+                Ok(BookParams::D0(teacher, student, date, time))
             }
             BookSubcmd::Delete(true) => {
                 let mut p = ParamParser::new(&parts, 1);
                 let teacher: TelegramName = p.next("teacher")?.parse()?;
                 let student: TelegramName = p.next("student")?.parse()?;
-                let od: NaiveDate         = p.next("date")?.parse()?;
-                let ot: NaiveTime         = p.next("time")?.parse()?;
+                let date: NaiveDate       = p.next("date")?.parse()?;
+                let time: NaiveTime       = p.next("time")?.parse()?;
                 p.finish()?;
-                Ok(BookParams::DF(teacher, student, od, ot))
+                Ok(BookParams::DF(teacher, student, date, time))
             }
-            BookSubcmd::Edit(false) => {
+            BookSubcmd::Reschedule(false) => {
                 let mut p = ParamParser::new(&parts, 1);
-                if p.is_empty() {
-                    return Ok(BookParams::E0());
-                }
                 let teacher: TelegramName = p.next("teacher")?.parse()?;
-                let student: TelegramName = p.next("student")?.parse().map_err(|_| {
-                    anyhow::anyhow!("expected student TelegramName")
-                })?;
+                let student: TelegramName = p.next("student")?.parse()?;
                 let od: NaiveDate = p.next("old-date")?.parse()?;
                 let ot: NaiveTime = p.next("old-time")?.parse()?;
 
-                // Distinguish new-date (YYYY-MM-DD, ≥2 dashes) from year (integer, no dashes).
+                if p.is_empty() {
+                    let now = chrono::Local::now();
+                    return Ok(BookParams::R1(teacher, student, od, ot, now.year(), now.month()));
+                }
+
+                // Distinguish new-date (≥2 dashes) from year (no dashes).
                 let fifth = p.next("new-date or year")?;
                 let fifth_dashes = fifth.chars().filter(|c| *c == '-').count();
                 if fifth_dashes >= 2 {
                     let nd: NaiveDate = fifth.parse()?;
                     if p.is_empty() {
-                        return Ok(BookParams::E2(teacher, student, od, ot, nd));
+                        return Ok(BookParams::R2(teacher, student, od, ot, nd));
                     }
                     let nt: NaiveTime = p.next("new-time")?.parse()?;
                     p.finish()?;
-                    Ok(BookParams::E3(teacher, student, od, ot, nd, nt))
+                    Ok(BookParams::R3(teacher, student, od, ot, nd, nt))
                 } else {
-                    let ny: i32  = fifth.parse()?;
-                    let nm: u32  = p.next("month")?.parse()?;
+                    let ny: i32 = fifth.parse()?;
+                    let nm: u32 = p.next("month")?.parse()?;
                     p.finish()?;
-                    Ok(BookParams::E1(teacher, student, od, ot, ny, nm))
+                    Ok(BookParams::R1(teacher, student, od, ot, ny, nm))
                 }
             }
-            BookSubcmd::Edit(true) => {
+            BookSubcmd::Reschedule(true) => {
                 let mut p = ParamParser::new(&parts, 1);
                 let teacher: TelegramName = p.next("teacher")?.parse()?;
                 let student: TelegramName = p.next("student")?.parse()?;
@@ -241,10 +243,42 @@ impl FromStr for BookParams {
                 let nd: NaiveDate         = p.next("new-date")?.parse()?;
                 let nt: NaiveTime         = p.next("new-time")?.parse()?;
                 p.finish()?;
-                Ok(BookParams::EF(teacher, student, od, ot, nd, nt))
+                Ok(BookParams::RF(teacher, student, od, ot, nd, nt))
+            }
+            BookSubcmd::Status(false) => {
+                let mut p = ParamParser::new(&parts, 1);
+                let teacher: TelegramName = p.next("teacher")?.parse()?;
+                let student: TelegramName = p.next("student")?.parse()?;
+                let date: NaiveDate       = p.next("date")?.parse()?;
+                let time: NaiveTime       = p.next("time")?.parse()?;
+                p.finish()?;
+                Ok(BookParams::S0(teacher, student, date, time))
+            }
+            BookSubcmd::Status(true) => {
+                let mut p = ParamParser::new(&parts, 1);
+                let teacher: TelegramName = p.next("teacher")?.parse()?;
+                let student: TelegramName = p.next("student")?.parse()?;
+                let date: NaiveDate       = p.next("date")?.parse()?;
+                let time: NaiveTime       = p.next("time")?.parse()?;
+                let status: LessonStatus  = p.next("status")?.parse()?;
+                p.finish()?;
+                Ok(BookParams::SF(teacher, student, date, time, status))
             }
         }
     }
+}
+
+fn parse_list(parts: &[String]) -> Result<BookParams> {
+    let mut p = ParamParser::new(parts, 0);
+    if p.is_empty() {
+        return Ok(BookParams::L0);
+    }
+    let teacher: TelegramName = p.next("teacher")?.parse()?;
+    let student: TelegramName = p.next("student")?.parse()?;
+    let date: NaiveDate       = p.next("date")?.parse()?;
+    let time: NaiveTime       = p.next("time")?.parse()?;
+    p.finish()?;
+    Ok(BookParams::L1(teacher, student, date, time))
 }
 
 fn parse_create(parts: &[String]) -> Result<BookParams> {
@@ -280,7 +314,6 @@ fn parse_create(parts: &[String]) -> Result<BookParams> {
         return Ok(BookParams::C8(teacher, student, date, time, duration));
     }
 
-    // Year branch
     let year: i32 = third.parse()?;
     if p.is_empty() {
         return Ok(BookParams::C3(teacher, student, year));
@@ -290,8 +323,6 @@ fn parse_create(parts: &[String]) -> Result<BookParams> {
         return Ok(BookParams::C4(teacher, student, year, month));
     }
     let day: u32 = p.next("day")?.parse()?;
-    if let Some(extra) = parts.get(p.pos) {
-        return Err(anyhow::anyhow!("extra parameter: {}", extra));
-    }
+    p.finish()?;
     Ok(BookParams::C5(teacher, student, year, month, day))
 }

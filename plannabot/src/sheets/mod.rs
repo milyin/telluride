@@ -391,6 +391,33 @@ impl SheetsClient {
         Ok(())
     }
 
+    /// Deletes the row at `row_index` (0-based) from `sheet_name`.
+    pub async fn delete_row(&self, sheet_name: &str, row_index: usize) -> Result<()> {
+        let sheet_id = self.get_sheet_id(sheet_name).await?;
+        let idx = row_index as i32;
+        let batch_req = api::BatchUpdateSpreadsheetRequest {
+            requests: Some(vec![api::Request {
+                delete_dimension: Some(api::DeleteDimensionRequest {
+                    range: Some(api::DimensionRange {
+                        sheet_id: Some(sheet_id),
+                        dimension: Some("ROWS".to_string()),
+                        start_index: Some(idx),
+                        end_index: Some(idx + 1),
+                    }),
+                }),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        };
+        self.hub
+            .spreadsheets()
+            .batch_update(batch_req, &self.spreadsheet_id)
+            .doit()
+            .await
+            .with_context(|| format!("Failed to delete row {row_index} from sheet '{sheet_name}'"))?;
+        Ok(())
+    }
+
     /// Returns the titles of all existing sheet tabs in the spreadsheet.
     pub async fn list_sheets(&self) -> Result<Vec<String>> {
         let (_, spreadsheet) = self
