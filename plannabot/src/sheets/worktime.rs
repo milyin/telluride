@@ -12,6 +12,7 @@ pub enum DayAvailability {
     Free,    // worktime exists, all slots available
     Partial, // worktime exists, some slots taken
     Busy,    // worktime exists but no free slots (or lesson doesn't fit)
+    Marked,  // date has a custom marker (e.g. existing exception)
 }
 
 impl SheetsClient {

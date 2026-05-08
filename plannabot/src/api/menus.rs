@@ -174,6 +174,7 @@ where
                 Some(DayAvailability::Free)    => "🟢",
                 Some(DayAvailability::Partial) => "🟡",
                 Some(DayAvailability::Busy)    => "🔴",
+                Some(DayAvailability::Marked)  => "📆",
                 None => "",
             };
             let base = if date == today { format!("[{}]", day) } else { format!("{}", day) };

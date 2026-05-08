@@ -565,6 +565,21 @@ async fn worktime_EAYM<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     year: i32,
     month: u32,
 ) -> Result<()> {
+    use crate::sheets::worktime::DayAvailability;
+
+    let (worktime, _) = ctx.state.sheets.get_worktime().await?;
+    let marked: HashMap<NaiveDate, DayAvailability> = worktime
+        .iter()
+        .filter(|w| {
+            &w.teacher_telegram == teacher
+                && w.date
+                    .map(|d| d.year() == year && d.month() == month)
+                    .unwrap_or(false)
+        })
+        .filter_map(|w| w.date)
+        .map(|d| (d, DayAvailability::Marked))
+        .collect();
+
     let back = Cmd::worktime(WorktimeParams::EYM(year, month));
 
     show_date_selection(
@@ -581,7 +596,7 @@ async fn worktime_EAYM<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
         move || Cmd::worktime(WorktimeParams::EAYM(year, month)),
         move || Cmd::worktime(WorktimeParams::EAYM(year, month)),
         Some(back),
-        &HashMap::new(),
+        &marked,
     )
     .await
 }
