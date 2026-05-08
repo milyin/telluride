@@ -210,14 +210,8 @@ async fn payment_PL<Cmd: PaymentCommand + CallbackBitcode + 'static>(
         buttons.push(nav_row);
     }
 
-    let new_key = CallbackKey::pack(
-        Cmd::payment(PaymentParams::PN(student.clone())),
-        &user_proxy,
-    )
-    .await;
     let back_key =
         CallbackKey::pack(Cmd::payment(PaymentParams::P1(student.clone())), &user_proxy).await;
-    buttons.push(vec![InlineKeyboardButton::callback_key("➕ New Payment", &new_key)]);
     buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
 
     let header = if total == 0 {
@@ -273,15 +267,13 @@ async fn payment_PS<Cmd: PaymentCommand + CallbackBitcode + 'static>(
     )
     .await;
 
-    let delete_params = format!(
-        "/payment {}",
-        PaymentParams::PD(student.clone(), date, time)
-    );
+    let delete_key = CallbackKey::pack(
+        Cmd::payment(PaymentParams::PD(student.clone(), date, time)),
+        &user_proxy,
+    )
+    .await;
     let keyboard = InlineKeyboardMarkup::new(vec![
-        vec![InlineKeyboardButton::switch_inline_query_current_chat(
-            "🗑️ Delete",
-            delete_params,
-        )],
+        vec![InlineKeyboardButton::callback_key("🗑️ Delete", &delete_key)],
         vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)],
     ]);
 
