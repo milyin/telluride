@@ -75,7 +75,6 @@ pub fn find_weekday_entry<'a>(
 }
 
 /// Returns all exception worktime entries for a teacher on a given date, sorted by start time.
-/// Useful when you hold a date identifier and need to display the full list of periods.
 pub fn find_exception_entries<'a>(
     worktime: &'a [Worktime],
     teacher: &TelegramName,
@@ -87,6 +86,21 @@ pub fn find_exception_entries<'a>(
         .collect();
     entries.sort_by_key(|w| w.start_time);
     entries
+}
+
+/// Returns the exception worktime entry matching teacher + date + start_time.
+/// Useful when you hold a unique identifier and need to look up the full record for display.
+pub fn find_exception_entry<'a>(
+    worktime: &'a [Worktime],
+    teacher: &TelegramName,
+    date: NaiveDate,
+    start: NaiveTime,
+) -> Option<&'a Worktime> {
+    worktime.iter().find(|w| {
+        &w.teacher_telegram == teacher
+            && w.date == Some(date)
+            && w.start_time == start
+    })
 }
 
 /// Returns the applicable worktime windows for `teacher` on `date` as [`TimePeriod`]s.
@@ -315,11 +329,12 @@ impl SheetsClient {
         ))
     }
 
-    /// Deletes all exception worktime rows for teacher on the given date.
+    /// Deletes the exception worktime row identified by teacher + date + start_time.
     pub async fn delete_worktime_exception(
         &self,
         teacher: &TelegramName,
         date: NaiveDate,
+        start: NaiveTime,
     ) -> Result<()> {
         let range = format!("{SHEET_WORKTIME}!A:Z");
         let rows = self
@@ -333,8 +348,6 @@ impl SheetsClient {
 
         let schema = SheetSchema::new(SHEET_WORKTIME.to_string(), rows[0].clone());
 
-        // Collect indices in reverse so we can delete without shifting
-        let mut to_delete: Vec<usize> = Vec::new();
         for (row_idx, row) in rows.iter().enumerate().skip(1) {
             if row.is_empty() || row.iter().all(|c| c.is_empty()) {
                 continue;
@@ -346,23 +359,24 @@ impl SheetsClient {
             }
             let row_date: Option<NaiveDate> =
                 schema.get_str(row, Worktime::DATE).parse().ok();
-            if row_date == Some(date) {
-                to_delete.push(row_idx);
+            if row_date != Some(date) {
+                continue;
             }
+            let row_start: Option<NaiveTime> =
+                schema.get_str(row, Worktime::START_TIME).parse().ok();
+            if row_start != Some(start) {
+                continue;
+            }
+            self.delete_row(SHEET_WORKTIME, row_idx).await?;
+            return Ok(());
         }
 
-        if to_delete.is_empty() {
-            return Err(anyhow::anyhow!(
-                "No exception worktime found for {} on {}",
-                teacher,
-                date
-            ));
-        }
-
-        for &idx in to_delete.iter().rev() {
-            self.delete_row(SHEET_WORKTIME, idx).await?;
-        }
-        Ok(())
+        Err(anyhow::anyhow!(
+            "No exception worktime found for {} on {} at {}",
+            teacher,
+            date,
+            start
+        ))
     }
 }
 

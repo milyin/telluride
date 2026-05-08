@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 use anyhow::Result;
-use chrono::{Datelike, NaiveDate, NaiveTime, Weekday};
+use chrono::{Datelike, NaiveDate, NaiveTime, Timelike, Weekday};
 use std::collections::HashMap;
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::UserProxy;
@@ -12,7 +12,7 @@ use crate::api::menus::show_date_selection;
 use crate::api::traits::worktime::WorktimeParams;
 use crate::api::traits::WorktimeCommand;
 use crate::models::TelegramName;
-use crate::sheets::worktime::find_weekday_entry;
+use crate::sheets::worktime::{find_exception_entry, find_weekday_entry};
 
 pub async fn worktime<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
@@ -38,8 +38,8 @@ pub async fn worktime<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
         WorktimeParams::EDHH(d, s, e) => worktime_EDHH(ctx, teacher, d, s, e).await,
         WorktimeParams::EDHHF(d, s, e) => worktime_EDHHF(ctx, teacher, d, s, e).await,
         WorktimeParams::ERYM(y, m) => worktime_ERYM(ctx, teacher, y, m).await,
-        WorktimeParams::ERD(d) => worktime_ERD(ctx, teacher, d).await,
-        WorktimeParams::ERDF(d) => worktime_ERDF(ctx, teacher, d).await,
+        WorktimeParams::ERDH(d, s) => worktime_ERDH(ctx, teacher, d, s).await,
+        WorktimeParams::ERDHF(d, s) => worktime_ERDHF(ctx, teacher, d, s).await,
     }
 }
 
@@ -60,10 +60,10 @@ async fn worktime_M0<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     )
     .await;
 
-    let keyboard = InlineKeyboardMarkup::new(vec![
-        vec![InlineKeyboardButton::callback_key("📅 Week days", &wd_key)],
-        vec![InlineKeyboardButton::callback_key("📆 Exceptions", &ex_key)],
-    ]);
+    let keyboard = InlineKeyboardMarkup::new(vec![vec![
+        InlineKeyboardButton::callback_key("📅 Week days", &wd_key),
+        InlineKeyboardButton::callback_key("📆 Exceptions", &ex_key),
+    ]]);
 
     ctx.update_markdown_message(
         markdown_format!("🕐 *Worktime \\- {}*\n\nSelect category:", teacher.to_string()),
@@ -193,7 +193,7 @@ async fn worktime_WAW<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     teacher: &TelegramName,
     weekday: Weekday,
 ) -> Result<()> {
-    let mut buttons = hour_buttons(ctx, |h| {
+    let mut buttons = hour_buttons(ctx, 0, |h| {
         Cmd::worktime(WorktimeParams::WAWH(weekday, NaiveTime::from_hms_opt(h, 0, 0).unwrap()))
     })
     .await;
@@ -222,7 +222,7 @@ async fn worktime_WAWH<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     weekday: Weekday,
     start: NaiveTime,
 ) -> Result<()> {
-    let mut buttons = hour_buttons(ctx, |h| {
+    let mut buttons = hour_buttons(ctx, start.hour() + 1, |h| {
         Cmd::worktime(WorktimeParams::WAWHH(
             weekday,
             start,
@@ -237,7 +237,7 @@ async fn worktime_WAWH<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 
     ctx.update_markdown_message(
         markdown_format!(
-            "📅 *Add weekday entry \\- {} {} from {}*\n\nSelect end time:",
+            "📅 *Add weekday entry \\- {}*\n\n{} {} –\n\nSelect end time:",
             teacher.to_string(),
             format!("{weekday:?}"),
             start.format("%H:%M").to_string()
@@ -304,7 +304,7 @@ async fn worktime_WAWHHF<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 
     ctx.update_markdown_message(
         markdown_format!(
-            "✅ *Added\\!*\n\n{} {}\u{2013}{} added for {}\\.",
+            "✅ *Worktime added\\!*\n\n{} {}\u{2013}{} added for {}\\.",
             format!("{weekday:?}"),
             start.format("%H:%M").to_string(),
             end.format("%H:%M").to_string(),
@@ -575,6 +575,7 @@ async fn worktime_ED<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 ) -> Result<()> {
     let mut buttons = hour_buttons(
         ctx,
+        0,
         |h| Cmd::worktime(WorktimeParams::EDH(date, NaiveTime::from_hms_opt(h, 0, 0).unwrap())),
     )
     .await;
@@ -609,6 +610,7 @@ async fn worktime_EDH<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 ) -> Result<()> {
     let mut buttons = hour_buttons(
         ctx,
+        start.hour() + 1,
         |h| {
             Cmd::worktime(WorktimeParams::EDHH(
                 date,
@@ -624,7 +626,7 @@ async fn worktime_EDH<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 
     ctx.update_markdown_message(
         markdown_format!(
-            "📆 *Add exception \\- {} {} from {}*\n\nSelect end time:",
+            "📆 *Add exception \\- {}*\n\n{} {} –\n\nSelect end time:",
             teacher.to_string(),
             date.format("%d %b %Y").to_string(),
             start.format("%H:%M").to_string()
@@ -686,7 +688,7 @@ async fn worktime_EDHHF<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 
     ctx.update_markdown_message(
         markdown_format!(
-            "✅ *Added\\!*\n\n{} {}\u{2013}{} added for {}\\.",
+            "✅ *Worktime added\\!*\n\n{} {}\u{2013}{} added for {}\\.",
             date.format("%d %b %Y").to_string(),
             start.format("%H:%M").to_string(),
             end.format("%H:%M").to_string(),
@@ -708,7 +710,7 @@ async fn worktime_ERYM<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     month: u32,
 ) -> Result<()> {
     let (worktime, _) = ctx.state.sheets.get_worktime().await?;
-    let mut dates: Vec<NaiveDate> = worktime
+    let mut entries: Vec<_> = worktime
         .iter()
         .filter(|w| {
             &w.teacher_telegram == teacher
@@ -716,10 +718,8 @@ async fn worktime_ERYM<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
                     .map(|d| d.year() == year && d.month() == month)
                     .unwrap_or(false)
         })
-        .filter_map(|w| w.date)
         .collect();
-    dates.sort();
-    dates.dedup();
+    entries.sort_by_key(|e| (e.date, e.start_time));
 
     let month_label = NaiveDate::from_ymd_opt(year, month, 1)
         .map(|d| d.format("%B %Y").to_string())
@@ -740,7 +740,7 @@ async fn worktime_ERYM<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
 
-    if dates.is_empty() {
+    if entries.is_empty() {
         let prev_label = format!(
             "< {}",
             NaiveDate::from_ymd_opt(py, pm, 1)
@@ -770,10 +770,19 @@ async fn worktime_ERYM<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
         return Ok(());
     }
 
-    for d in &dates {
-        let label = d.format("%d %b %Y").to_string();
-        let key =
-            CallbackKey::pack(Cmd::worktime(WorktimeParams::ERD(*d)), &user_proxy).await;
+    for e in &entries {
+        let d = e.date.unwrap();
+        let label = format!(
+            "{} {}\u{2013}{}",
+            d.format("%d %b"),
+            e.start_time.format("%H:%M"),
+            e.end_time.format("%H:%M")
+        );
+        let key = CallbackKey::pack(
+            Cmd::worktime(WorktimeParams::ERDH(d, e.start_time)),
+            &user_proxy,
+        )
+        .await;
         buttons.push(vec![InlineKeyboardButton::callback_key(label, &key)]);
     }
 
@@ -806,14 +815,20 @@ async fn worktime_ERYM<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 }
 
 // ---------------------------------------------------------------------------
-// ERD — confirmation before removing exception
+// ERDH — confirmation before removing a specific exception slot
 // ---------------------------------------------------------------------------
 
-async fn worktime_ERD<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
+async fn worktime_ERDH<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     teacher: &TelegramName,
     date: NaiveDate,
+    start: NaiveTime,
 ) -> Result<()> {
+    let (worktime, _) = ctx.state.sheets.get_worktime().await?;
+    let period_label = find_exception_entry(&worktime, teacher, date, start)
+        .map(|e| format!("{}\u{2013}{}", e.start_time.format("%H:%M"), e.end_time.format("%H:%M")))
+        .unwrap_or_else(|| start.format("%H:%M").to_string());
+
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key = CallbackKey::pack(
         Cmd::worktime(WorktimeParams::ERYM(date.year(), date.month())),
@@ -821,7 +836,7 @@ async fn worktime_ERD<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     )
     .await;
 
-    let forced_cmd = format!("/worktime {}", WorktimeParams::ERDF(date));
+    let forced_cmd = format!("/worktime {}", WorktimeParams::ERDHF(date, start));
     let keyboard = InlineKeyboardMarkup::new(vec![vec![
         InlineKeyboardButton::callback_key("↩ Back", &back_key),
         InlineKeyboardButton::switch_inline_query_current_chat("🗑 Remove", forced_cmd),
@@ -829,9 +844,10 @@ async fn worktime_ERD<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 
     ctx.update_markdown_message(
         markdown_format!(
-            "🗑 *Remove exception \\- {}*\n\n{}\n\nConfirm removal:",
+            "🗑 *Remove exception \\- {}*\n\n{} {}\n\nConfirm removal:",
             teacher.to_string(),
-            date.format("%d %b %Y").to_string()
+            date.format("%d %b %Y").to_string(),
+            period_label
         ),
         Some(keyboard),
     )
@@ -839,23 +855,30 @@ async fn worktime_ERD<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 }
 
 // ---------------------------------------------------------------------------
-// ERDF — forced: delete exception
+// ERDHF — forced: delete specific exception slot
 // ---------------------------------------------------------------------------
 
-async fn worktime_ERDF<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
+async fn worktime_ERDHF<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     teacher: &TelegramName,
     date: NaiveDate,
+    start: NaiveTime,
 ) -> Result<()> {
+    let (worktime, _) = ctx.state.sheets.get_worktime().await?;
+    let period_label = find_exception_entry(&worktime, teacher, date, start)
+        .map(|e| format!("{}\u{2013}{}", e.start_time.format("%H:%M"), e.end_time.format("%H:%M")))
+        .unwrap_or_else(|| start.format("%H:%M").to_string());
+
     ctx.state
         .sheets
-        .delete_worktime_exception(teacher, date)
+        .delete_worktime_exception(teacher, date, start)
         .await?;
 
     ctx.update_markdown_message(
         markdown_format!(
-            "✅ *Removed\\!*\n\nException for {} removed from {}\\.",
+            "✅ *Removed\\!*\n\n{} {} removed for {}\\.",
             date.format("%d %b %Y").to_string(),
+            period_label,
             teacher.to_string()
         ),
         None,
@@ -869,6 +892,7 @@ async fn worktime_ERDF<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 
 async fn hour_buttons<Cmd, F>(
     ctx: &BotCtx<Cmd>,
+    from_hour: u32,
     make_cmd: F,
 ) -> Vec<Vec<InlineKeyboardButton>>
 where
@@ -878,7 +902,7 @@ where
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     let mut row: Vec<InlineKeyboardButton> = Vec::new();
-    for h in 0u32..24 {
+    for h in from_hour..24 {
         let label = format!("{:02}:00", h);
         let key = CallbackKey::pack(make_cmd(h), &user_proxy).await;
         row.push(InlineKeyboardButton::callback_key(label, &key));

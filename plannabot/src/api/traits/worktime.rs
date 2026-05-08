@@ -121,10 +121,10 @@ pub enum WorktimeParams {
     EDHHF(NaiveDate, NaiveTime, NaiveTime),
     /// Exception remove list for year/month
     ERYM(i32, u32),
-    /// Exception remove confirmation for a date
-    ERD(NaiveDate),
+    /// Exception remove confirmation: date + start (unique ID; full period looked up at render)
+    ERDH(NaiveDate, NaiveTime),
     /// Exception remove forced: execute delete
-    ERDF(NaiveDate),
+    ERDHF(NaiveDate, NaiveTime),
 }
 
 impl fmt::Display for WorktimeParams {
@@ -169,11 +169,11 @@ impl fmt::Display for WorktimeParams {
                 ex, add_f, d.format("%Y-%m-%d"), s.format("%H:%M"), e.format("%H:%M")
             ),
             WorktimeParams::ERYM(y, m) => format_screen_spaces!(ex, rm, y, m),
-            WorktimeParams::ERD(d) => {
-                format_screen_spaces!(ex, rm, d.format("%Y-%m-%d"))
+            WorktimeParams::ERDH(d, s) => {
+                format_screen_spaces!(ex, rm, d.format("%Y-%m-%d"), s.format("%H:%M"))
             }
-            WorktimeParams::ERDF(d) => {
-                format_screen_spaces!(ex, rm_f, d.format("%Y-%m-%d"))
+            WorktimeParams::ERDHF(d, s) => {
+                format_screen_spaces!(ex, rm_f, d.format("%Y-%m-%d"), s.format("%H:%M"))
             }
         }
         .fmt(f)
@@ -306,10 +306,11 @@ impl FromStr for WorktimeParams {
                             }
                             Some(tok) if tok.contains('-') => {
                                 let d: NaiveDate = p.next("date")?.parse()?;
+                                let s: NaiveTime = p.next("start")?.parse()?;
                                 if forced {
-                                    Ok(WorktimeParams::ERDF(d))
+                                    Ok(WorktimeParams::ERDHF(d, s))
                                 } else {
-                                    Ok(WorktimeParams::ERD(d))
+                                    Ok(WorktimeParams::ERDH(d, s))
                                 }
                             }
                             _ => {
