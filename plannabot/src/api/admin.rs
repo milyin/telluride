@@ -46,6 +46,7 @@ pub async fn help(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
         /start \\- Exit admin mode and restart the bot\n\
         /help \\- Display this help message\n\
         /status \\- Show global stat information\n\
+        /balance \\- View student balances\n\
         /refresh \\- Forcedly refresh the data\n\
         /impersonate \\- View the bot as a student or teacher\n\
         /quit \\- Exit admin mode"

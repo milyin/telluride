@@ -10,6 +10,7 @@ pub async fn help(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
         /start \\- Exit impersonation and restart the bot\n\
         /help \\- Display this help message\n\
         /schedule \\- Show the impersonated student's planned lessons\n\
+        /balance \\- View the impersonated student's balance\n\
         /book \\- Book a lesson as the impersonated student\n\
         /quit \\- Exit impersonation mode"
     );

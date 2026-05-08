@@ -239,6 +239,18 @@ async fn balance_L2<Cmd: BalanceCommand + CallbackBitcode + 'static>(
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let (py, pm) = prev_month(year, month);
     let (ny, nm) = next_month(year, month);
+    let prev_label = format!(
+        "< {}",
+        NaiveDate::from_ymd_opt(py, pm, 1)
+            .map(|d| d.format("%B %Y").to_string())
+            .unwrap_or_default()
+    );
+    let next_label = format!(
+        "{} >",
+        NaiveDate::from_ymd_opt(ny, nm, 1)
+            .map(|d| d.format("%B %Y").to_string())
+            .unwrap_or_default()
+    );
     let prev_key = CallbackKey::pack(
         Cmd::balance(BalanceParams::L2(student.clone(), py, pm)),
         &user_proxy,
@@ -251,8 +263,8 @@ async fn balance_L2<Cmd: BalanceCommand + CallbackBitcode + 'static>(
     .await;
 
     let mut rows: Vec<Vec<InlineKeyboardButton>> = vec![vec![
-        InlineKeyboardButton::callback_key("<", &prev_key),
-        InlineKeyboardButton::callback_key(">", &next_key),
+        InlineKeyboardButton::callback_key(prev_label, &prev_key),
+        InlineKeyboardButton::callback_key(next_label, &next_key),
     ]];
 
     match actor {

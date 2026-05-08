@@ -9,6 +9,7 @@ pub async fn help(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
         /start \\- Start the bot\n\
         /help \\- Display this help message\n\
         /schedule \\- Show your planned lessons\n\
+        /balance \\- View your balance\n\
         /book \\- Book a lesson"
     );
     ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
