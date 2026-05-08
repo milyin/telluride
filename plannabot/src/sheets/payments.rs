@@ -76,6 +76,67 @@ impl SheetsClient {
             .collect())
     }
 
+    /// Deletes a payment row from the Payments sheet.
+    /// Matches by student_telegram and exact date (DateTime<Utc>).
+    pub async fn delete_payment(
+        &self,
+        student_telegram: &TelegramName,
+        date: DateTime<Utc>,
+    ) -> Result<()> {
+        let range = format!("{SHEET_PAYMENTS}!A:Z");
+        let rows = self
+            .get_values(&range)
+            .await
+            .context("Failed to get Payments sheet data")?;
+
+        if rows.is_empty() {
+            return Err(anyhow::anyhow!("Payments sheet is empty"));
+        }
+
+        let schema = SheetSchema::new(SHEET_PAYMENTS.to_string(), rows[0].clone());
+        let mut errors: Vec<SheetParseError> = Vec::new();
+
+        for (row_idx, row) in rows.iter().enumerate().skip(1) {
+            if row.is_empty() || row.iter().all(|c| c.is_empty()) {
+                continue;
+            }
+
+            let row_num = row_idx + 1;
+            let Some(row_student) = schema.get_field::<Option<TelegramName>>(
+                row,
+                row_num,
+                Payment::STUDENT_TELEGRAM,
+                &mut errors,
+            ) else {
+                continue;
+            };
+            if &row_student != student_telegram {
+                continue;
+            }
+
+            let Some(row_date) = schema.get_field::<Option<DateTime<Utc>>>(
+                row,
+                row_num,
+                Payment::DATE,
+                &mut errors,
+            ) else {
+                continue;
+            };
+            if row_date != date {
+                continue;
+            }
+
+            self.delete_row(SHEET_PAYMENTS, row_idx).await?;
+            return Ok(());
+        }
+
+        Err(anyhow::anyhow!(
+            "No payment found for {} at {}",
+            student_telegram,
+            date
+        ))
+    }
+
     /// Appends a new payment record to the Payments sheet.
     pub async fn add_payment(
         &self,
