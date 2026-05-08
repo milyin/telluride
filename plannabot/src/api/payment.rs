@@ -6,7 +6,7 @@ use telluride::data_store::UserProxy;
 use telluride::{markdown_format, markdown_string};
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
-use crate::api::common::PageInfo;
+use crate::api::common::{PageInfo, fmt_money};
 use crate::api::context::BotCtx;
 use crate::api::traits::payment::PaymentParams;
 use crate::api::traits::{PaymentActor, PaymentCommand};
@@ -149,12 +149,7 @@ async fn payment_PL<Cmd: PaymentCommand + CallbackBitcode + 'static>(
     let mut payments = ctx.state.sheets.get_payments_for_student(&student).await?;
     payments.sort_by(|a, b| b.date.cmp(&a.date));
 
-    let currency = ctx
-        .state
-        .get_student(&student)
-        .await
-        .map(|s| s.currency)
-        .unwrap_or_default();
+    let currency = ctx.state.get_student(&student).await.and_then(|s| s.currency);
 
     let total = payments.len();
     let info = PageInfo::new(page, total);
@@ -165,17 +160,12 @@ async fn payment_PL<Cmd: PaymentCommand + CallbackBitcode + 'static>(
     for payment in &payments[info.start..info.end] {
         let date = payment.date.date_naive();
         let time = payment.date.time();
-        let label = if currency.is_empty() {
-            format!("{} {}: {}", date, time.format("%H:%M"), payment.sum)
-        } else {
-            format!(
-                "{} {}: {} {}",
-                date,
-                time.format("%H:%M"),
-                payment.sum,
-                currency
-            )
-        };
+        let label = format!(
+            "{} {}: {}",
+            date,
+            time.format("%H:%M"),
+            fmt_money(payment.sum, currency)
+        );
         let key = CallbackKey::pack(
             Cmd::payment(PaymentParams::PS(student.clone(), date, time)),
             &user_proxy,
@@ -240,12 +230,7 @@ async fn payment_PS<Cmd: PaymentCommand + CallbackBitcode + 'static>(
     date: NaiveDate,
     time: NaiveTime,
 ) -> Result<()> {
-    let currency = ctx
-        .state
-        .get_student(&student)
-        .await
-        .map(|s| s.currency)
-        .unwrap_or_default();
+    let currency = ctx.state.get_student(&student).await.and_then(|s| s.currency);
 
     let dt = date.and_time(time).and_utc();
     let payments = ctx.state.sheets.get_payments_for_student(&student).await?;
@@ -259,15 +244,7 @@ async fn payment_PS<Cmd: PaymentCommand + CallbackBitcode + 'static>(
         "⏰ Time: {}\n",
         time.format("%H:%M").to_string()
     ));
-    if currency.is_empty() {
-        text.push(&markdown_format!("💵 Amount: {}\n", sum.to_string()));
-    } else {
-        text.push(&markdown_format!(
-            "💵 Amount: {} {}\n",
-            sum.to_string(),
-            currency
-        ));
-    }
+    text.push(&markdown_format!("💵 Amount: {}\n", fmt_money(sum, currency)));
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key = CallbackKey::pack(
@@ -299,12 +276,7 @@ async fn payment_PD<Cmd: PaymentCommand + CallbackBitcode + 'static>(
     date: NaiveDate,
     time: NaiveTime,
 ) -> Result<()> {
-    let currency = ctx
-        .state
-        .get_student(&student)
-        .await
-        .map(|s| s.currency)
-        .unwrap_or_default();
+    let currency = ctx.state.get_student(&student).await.and_then(|s| s.currency);
 
     let dt = date.and_time(time).and_utc();
     let payments = ctx.state.sheets.get_payments_for_student(&student).await?;
@@ -318,15 +290,7 @@ async fn payment_PD<Cmd: PaymentCommand + CallbackBitcode + 'static>(
         "⏰ Time: {}\n",
         time.format("%H:%M").to_string()
     ));
-    if currency.is_empty() {
-        text.push(&markdown_format!("💵 Amount: {}\n", sum.to_string()));
-    } else {
-        text.push(&markdown_format!(
-            "💵 Amount: {} {}\n",
-            sum.to_string(),
-            currency
-        ));
-    }
+    text.push(&markdown_format!("💵 Amount: {}\n", fmt_money(sum, currency)));
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key = CallbackKey::pack(
@@ -382,12 +346,7 @@ async fn payment_PN<Cmd: PaymentCommand + CallbackBitcode + 'static>(
     let (all_payments, _) = ctx.state.sheets.get_payments().await?;
     let (schedule, _) = ctx.state.sheets.get_schedule().await?;
 
-    let currency = ctx
-        .state
-        .get_student(&student)
-        .await
-        .map(|s| s.currency)
-        .unwrap_or_default();
+    let currency = ctx.state.get_student(&student).await.and_then(|s| s.currency);
 
     let allocated: i64 = schedule
         .iter()
@@ -400,12 +359,7 @@ async fn payment_PN<Cmd: PaymentCommand + CallbackBitcode + 'static>(
         .map(|p| p.sum)
         .sum();
     let balance = paid - allocated;
-
-    let balance_str = if currency.is_empty() {
-        balance.to_string()
-    } else {
-        format!("{} {}", balance, currency)
-    };
+    let balance_str = fmt_money(balance, currency);
 
     let mut text = markdown_format!("💰 *New Payment: {}*\n\n", student.to_string());
     text.push(&markdown_format!("Balance: {}\n\n", balance_str));
@@ -441,25 +395,14 @@ async fn payment_PNF<Cmd: Send + Sync + Clone>(
     student: TelegramName,
     amount: i64,
 ) -> Result<()> {
-    let currency = ctx
-        .state
-        .get_student(&student)
-        .await
-        .map(|s| s.currency)
-        .unwrap_or_default();
+    let currency = ctx.state.get_student(&student).await.and_then(|s| s.currency);
 
     let now = Utc::now();
     ctx.state.sheets.add_payment(&student, now, amount).await?;
 
-    let amount_str = if currency.is_empty() {
-        amount.to_string()
-    } else {
-        format!("{} {}", amount, currency)
-    };
-
     let mut text = markdown_string!("✅ *Payment Added*\n\n");
     text.push(&markdown_format!("🎓 Student: {}\n", student.to_string()));
-    text.push(&markdown_format!("💵 Amount: {}\n", amount_str));
+    text.push(&markdown_format!("💵 Amount: {}\n", fmt_money(amount, currency)));
 
     ctx.update_markdown_message(text, None).await
 }

@@ -21,6 +21,7 @@ dotenv.workspace = true
 bitcode.workspace = true
 paste.workspace = true
 humantime.workspace = true
+rusty-money = { version = "0.5", features = ["iso"] }
 
 [[bin]]
 name = "plannabot"

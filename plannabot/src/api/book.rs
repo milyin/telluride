@@ -9,7 +9,7 @@ use telluride::markdown::MarkdownString;
 use telluride::{markdown_format, markdown_string};
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
-use crate::api::common::{format_duration, format_entry_label};
+use crate::api::common::{format_duration, format_entry_label, fmt_money};
 use crate::api::context::BotCtx;
 use crate::api::menus::{
     show_date_selection, show_month_selection, show_name_list, show_slot_selection,
@@ -320,10 +320,7 @@ async fn book_C8<Cmd: BookCommand + CallbackBitcode + 'static>(
     duration: Duration,
 ) -> Result<()> {
     let student_data = ctx.state.get_student(&student).await;
-    let currency = student_data
-        .as_ref()
-        .map(|s| s.currency.as_str())
-        .unwrap_or("");
+    let currency = student_data.as_ref().and_then(|s| s.currency);
 
     let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await else {
         ctx.update_markdown_message(
@@ -338,7 +335,9 @@ async fn book_C8<Cmd: BookCommand + CallbackBitcode + 'static>(
 
     let duration_minutes = duration.as_secs() / 60;
     let actual_cost = if pairing.duration_minutes > 0 {
-        pairing.cost * duration_minutes as i64 / pairing.duration_minutes as i64
+        let n = pairing.cost * duration_minutes as i64;
+        let d = pairing.duration_minutes as i64;
+        (n + d / 2) / d
     } else {
         pairing.cost
     };
@@ -351,12 +350,7 @@ async fn book_C8<Cmd: BookCommand + CallbackBitcode + 'static>(
         hour,
         duration.clone(),
     )));
-    let cost_str = if currency.is_empty() {
-        actual_cost.to_string()
-    } else {
-        format!("{} {}", actual_cost, currency)
-    };
-    text.push(&markdown_format!("💰 Cost: {}\n", cost_str));
+    text.push(&markdown_format!("💰 Cost: {}\n", fmt_money(actual_cost, currency)));
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key = CallbackKey::pack(
@@ -432,16 +426,15 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
 
     let duration_minutes = duration.as_secs() / 60;
     let actual_cost = if pairing.duration_minutes > 0 {
-        pairing.cost * duration_minutes as i64 / pairing.duration_minutes as i64
+        let n = pairing.cost * duration_minutes as i64;
+        let d = pairing.duration_minutes as i64;
+        (n + d / 2) / d
     } else {
         pairing.cost
     };
 
     let student_data = ctx.state.get_student(&student).await;
-    let currency = student_data
-        .as_ref()
-        .map(|s| s.currency.as_str())
-        .unwrap_or("");
+    let currency = student_data.as_ref().and_then(|s| s.currency);
 
     ctx.state
         .sheets
@@ -456,12 +449,7 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
         hour,
         duration,
     )));
-    let cost_str = if currency.is_empty() {
-        actual_cost.to_string()
-    } else {
-        format!("{} {}", actual_cost, currency)
-    };
-    text.push(&markdown_format!("💰 Cost: {}\n", cost_str));
+    text.push(&markdown_format!("💰 Cost: {}\n", fmt_money(actual_cost, currency)));
 
     ctx.update_markdown_message(text, None).await?;
     Ok(())

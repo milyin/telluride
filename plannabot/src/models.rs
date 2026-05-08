@@ -47,7 +47,7 @@ sheet_struct! {
         pub telegram_name: TelegramName,
         pub name: String,
         pub timezone: Tz,
-        pub currency: String,
+        pub currency: Option<&'static rusty_money::iso::Currency>,
         pub zoom_url: Option<String>,
         pub board_url: Option<String>,
     }

@@ -7,7 +7,7 @@ use telluride::data_store::UserProxy;
 use telluride::{markdown_format, markdown_string};
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
-use crate::api::common::PageInfo;
+use crate::api::common::{PageInfo, fmt_money};
 use crate::api::context::BotCtx;
 use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams};
 use crate::models::TelegramName;
@@ -84,13 +84,8 @@ async fn balance_L0<Cmd: BalanceCommand + CallbackBitcode + 'static>(
             .sum();
         let remains = paid - allocated;
 
-        let currency = ctx
-            .state
-            .get_student(student)
-            .await
-            .map(|s| s.currency)
-            .unwrap_or_default();
-        let balance_str = fmt_cost(remains, &currency);
+        let currency = ctx.state.get_student(student).await.and_then(|s| s.currency);
+        let balance_str = fmt_money(remains, currency);
         let label = format!("{}: {}", student, balance_str);
 
         let key = CallbackKey::pack(
@@ -147,11 +142,7 @@ async fn balance_L2<Cmd: BalanceCommand + CallbackBitcode + 'static>(
     month: u32,
 ) -> Result<()> {
     let student_data = ctx.state.get_student(&student).await;
-    let currency = student_data
-        .as_ref()
-        .map(|s| s.currency.as_str())
-        .unwrap_or("")
-        .to_string();
+    let currency = student_data.as_ref().and_then(|s| s.currency);
     let tz: Tz = student_data
         .as_ref()
         .map(|s| s.timezone)
@@ -175,9 +166,9 @@ async fn balance_L2<Cmd: BalanceCommand + CallbackBitcode + 'static>(
 
     // Build header
     let mut text = markdown_format!("💰 *Balance: {}*\n\n", student.to_string());
-    text.push(&markdown_format!("Balance: {}\n", fmt_cost(paid, &currency)));
-    text.push(&markdown_format!("Allocated: {}\n", fmt_cost(allocated, &currency)));
-    text.push(&markdown_format!("Remains: {}\n", fmt_cost(remains, &currency)));
+    text.push(&markdown_format!("Balance: {}\n", fmt_money(paid, currency)));
+    text.push(&markdown_format!("Allocated: {}\n", fmt_money(allocated, currency)));
+    text.push(&markdown_format!("Remains: {}\n", fmt_money(remains, currency)));
 
     // Month name
     let month_label = NaiveDate::from_ymd_opt(year, month, 1)
@@ -199,7 +190,7 @@ async fn balance_L2<Cmd: BalanceCommand + CallbackBitcode + 'static>(
         let date_str = p.date.with_timezone(&tz).format("%d %b").to_string();
         txns.push((
             p.date,
-            format!("{} +{} paid", date_str, fmt_cost(p.sum, &currency)),
+            format!("{} +{} paid", date_str, fmt_money(p.sum, currency)),
         ));
     }
 
@@ -217,7 +208,7 @@ async fn balance_L2<Cmd: BalanceCommand + CallbackBitcode + 'static>(
             format!(
                 "{} -{} lesson with {}",
                 date_str,
-                fmt_cost(e.cost, &currency),
+                fmt_money(e.cost, currency),
                 e.teacher_telegram
             ),
         ));
@@ -281,14 +272,6 @@ async fn balance_L2<Cmd: BalanceCommand + CallbackBitcode + 'static>(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-fn fmt_cost(amt: i64, currency: &str) -> String {
-    if currency.is_empty() {
-        amt.to_string()
-    } else {
-        format!("{} {}", amt, currency)
-    }
-}
 
 fn prev_month(year: i32, month: u32) -> (i32, u32) {
     if month == 1 {

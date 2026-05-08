@@ -2,6 +2,7 @@ use crate::api::context::BotCtx;
 use crate::api::traits::BookingActor;
 use crate::models::{LessonStatus, ScheduleEntry, UserRole};
 use anyhow::Result;
+use rusty_money::{Money, iso};
 use telluride::markdown::MarkdownStringMessage;
 use telluride::{markdown_format, markdown_string};
 
@@ -76,6 +77,13 @@ impl PageInfo {
     }
     pub fn has_prev(&self) -> bool { self.page > 0 }
     pub fn has_next(&self) -> bool { self.end < self.total }
+}
+
+pub fn fmt_money(amount: i64, currency: Option<&'static iso::Currency>) -> String {
+    match currency {
+        Some(c) => Money::from_major(amount, c).to_string(),
+        None => amount.to_string(),
+    }
 }
 
 pub fn format_duration(minutes: i64) -> String {

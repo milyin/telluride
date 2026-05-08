@@ -266,6 +266,47 @@ impl FromSheet for i64 {
     }
 }
 
+fn normalize_currency_code(s: &str) -> &str {
+    match s.trim() {
+        "₽" => "RUB",
+        "$" => "USD",
+        "€" => "EUR",
+        "£" => "GBP",
+        other => other,
+    }
+}
+
+impl FromSheetValue for &'static rusty_money::iso::Currency {
+    fn from_sheet_value(s: &str) -> Result<Self, String> {
+        let code = normalize_currency_code(s).to_uppercase();
+        rusty_money::iso::find(&code)
+            .ok_or_else(|| format!("unknown ISO 4217 currency code '{s}'"))
+    }
+}
+
+/// Empty cell → `None` (silent). Non-empty but unrecognised → `None` + error logged.
+impl FromSheet for Option<&'static rusty_money::iso::Currency> {
+    fn from_sheet(
+        schema: &SheetSchema,
+        row: &[String],
+        row_num: usize,
+        col_name: &str,
+        errors: &mut Vec<SheetParseError>,
+    ) -> Self {
+        let raw = schema.get_str(row, col_name);
+        if raw.trim().is_empty() {
+            return None;
+        }
+        match <&'static rusty_money::iso::Currency>::from_sheet_value(raw) {
+            Ok(c) => Some(c),
+            Err(msg) => {
+                push_error(schema, row_num, col_name, msg, errors);
+                None
+            }
+        }
+    }
+}
+
 /// Empty or unrecognised cell → `false` (silent).  "true"/"yes"/"1" → `true`.
 impl FromSheet for bool {
     fn from_sheet(schema: &SheetSchema, row: &[String], _row_num: usize, col_name: &str, _errors: &mut Vec<SheetParseError>) -> Self {
