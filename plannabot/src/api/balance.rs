@@ -7,6 +7,7 @@ use telluride::data_store::UserProxy;
 use telluride::{markdown_format, markdown_string};
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
+use crate::api::common::PageInfo;
 use crate::api::context::BotCtx;
 use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams};
 use crate::models::TelegramName;
@@ -52,11 +53,8 @@ async fn balance_L0<Cmd: BalanceCommand + CallbackBitcode + 'static>(
     students.sort();
     students.dedup();
 
-    let page_size: usize = 10;
     let total = students.len();
-    let page_idx = page.max(0) as usize;
-    let start = (page_idx * page_size).min(total);
-    let end = (start + page_size).min(total);
+    let info = PageInfo::new(page, total);
 
     if total == 0 {
         return ctx
@@ -73,7 +71,7 @@ async fn balance_L0<Cmd: BalanceCommand + CallbackBitcode + 'static>(
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
 
-    for student in &students[start..end] {
+    for student in &students[info.start..info.end] {
         let allocated: i64 = schedule
             .iter()
             .filter(|e| &e.student_telegram == student && e.status.is_some())
@@ -104,12 +102,12 @@ async fn balance_L0<Cmd: BalanceCommand + CallbackBitcode + 'static>(
     }
 
     let mut nav_row: Vec<InlineKeyboardButton> = Vec::new();
-    if page > 0 {
-        let k = CallbackKey::pack(Cmd::balance(BalanceParams::L0(page - 1)), &user_proxy).await;
+    if info.has_prev() {
+        let k = CallbackKey::pack(Cmd::balance(BalanceParams::L0(info.page - 1)), &user_proxy).await;
         nav_row.push(InlineKeyboardButton::callback_key("<", &k));
     }
-    if end < total {
-        let k = CallbackKey::pack(Cmd::balance(BalanceParams::L0(page + 1)), &user_proxy).await;
+    if info.has_next() {
+        let k = CallbackKey::pack(Cmd::balance(BalanceParams::L0(info.page + 1)), &user_proxy).await;
         nav_row.push(InlineKeyboardButton::callback_key(">", &k));
     }
     if !nav_row.is_empty() {

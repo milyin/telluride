@@ -1,6 +1,6 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor, PaymentCommand, PaymentParams, ScheduleCommand, ScheduleParams};
+use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor, PaymentActor, PaymentCommand, PaymentParams, ScheduleCommand, ScheduleParams};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -125,7 +125,7 @@ async fn impersonate_teacher_handle(
             .await
         }
         ImpersonateTeacherCommand::Payment(params) => {
-            api::payment::payment(&ctx, params, &impersonated_teacher).await
+            api::payment::payment(&ctx, params, &PaymentActor::Teacher(impersonated_name.clone())).await
         }
         ImpersonateTeacherCommand::Quit => {
             api::impersonate_teacher::quit(&ctx, &acting_teacher).await

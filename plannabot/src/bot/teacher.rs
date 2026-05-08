@@ -1,6 +1,6 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor, PaymentCommand, PaymentParams, ScheduleCommand, ScheduleParams};
+use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor, PaymentActor, PaymentCommand, PaymentParams, ScheduleCommand, ScheduleParams};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -108,7 +108,7 @@ async fn teacher_handle(
         TeacherCommand::Admin => api::teacher::admin(&ctx, &teacher).await,
         TeacherCommand::Refresh => api::admin::refresh(&ctx).await,
         TeacherCommand::Payment(ref params) => {
-            api::payment::payment(&ctx, params, &teacher).await
+            api::payment::payment(&ctx, params, &PaymentActor::Teacher(teacher.telegram_name.clone())).await
         }
     };
 

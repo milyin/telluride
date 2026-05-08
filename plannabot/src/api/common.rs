@@ -59,6 +59,25 @@ pub fn format_entry_label(entry: &ScheduleEntry, actor: &BookingActor) -> String
     )
 }
 
+pub struct PageInfo {
+    pub start: usize,
+    pub end: usize,
+    pub page: i32,
+    pub total: usize,
+}
+
+impl PageInfo {
+    pub const PAGE_SIZE: usize = 10;
+    pub fn new(page: i32, total: usize) -> Self {
+        let page_idx = page.max(0) as usize;
+        let start = (page_idx * Self::PAGE_SIZE).min(total);
+        let end = (start + Self::PAGE_SIZE).min(total);
+        Self { start, end, page, total }
+    }
+    pub fn has_prev(&self) -> bool { self.page > 0 }
+    pub fn has_next(&self) -> bool { self.end < self.total }
+}
+
 pub fn format_duration(minutes: i64) -> String {
     let hours = minutes / 60;
     let mins = minutes % 60;
