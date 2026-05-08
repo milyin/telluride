@@ -44,11 +44,19 @@ pub fn status_label(status: &Option<LessonStatus>) -> &'static str {
 }
 
 pub fn format_entry_label(entry: &ScheduleEntry, actor: &BookingActor) -> String {
-    let other = match actor {
-        BookingActor::Student(_) => entry.teacher_telegram.to_string(),
-        BookingActor::Teacher(_) => entry.student_telegram.to_string(),
+    let (role_icon, other) = match actor {
+        BookingActor::Student(_) => ("🏫", entry.teacher_telegram.to_string()),
+        BookingActor::Teacher(_) => ("🎓", entry.student_telegram.to_string()),
     };
-    format!("{} {} ↔ {}", status_label(&entry.status), entry.datetime.time().format("%H:%M"), other)
+    let duration = format_duration(entry.duration_minutes as i64);
+    format!(
+        "{} {} {} {} {}",
+        status_label(&entry.status),
+        entry.datetime.time().format("%H:%M"),
+        duration,
+        role_icon,
+        other
+    )
 }
 
 pub fn format_duration(minutes: i64) -> String {
