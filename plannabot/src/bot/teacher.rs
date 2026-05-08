@@ -1,6 +1,6 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BookCommand, BookParams, BookingActor, PaymentCommand, PaymentParams, ScheduleCommand, ScheduleParams};
+use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor, PaymentCommand, PaymentParams, ScheduleCommand, ScheduleParams};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -28,6 +28,8 @@ pub enum TeacherCommand {
     Admin,
     #[command(description = "forcedly refresh the data")]
     Refresh,
+    #[command(description = "view student balances")]
+    Balance(String),
     #[command(description = "view student balances and record payments")]
     Payment(String),
 }
@@ -49,6 +51,12 @@ impl PaymentCommand for TeacherCommand {
 impl ScheduleCommand for TeacherCommand {
     fn schedule(params: ScheduleParams) -> Self {
         TeacherCommand::Schedule(params.to_string())
+    }
+}
+
+impl BalanceCommand for TeacherCommand {
+    fn balance(params: BalanceParams) -> Self {
+        TeacherCommand::Balance(params.to_string())
     }
 }
 
@@ -90,6 +98,9 @@ async fn teacher_handle(
         TeacherCommand::Help => api::teacher::help(&ctx).await,
         TeacherCommand::Schedule(ref params) => {
             api::schedule::schedule(&ctx, params, &BookingActor::Teacher(teacher.telegram_name.clone()), teacher.timezone).await
+        }
+        TeacherCommand::Balance(ref params) => {
+            api::balance::balance(&ctx, params, &BalanceActor::Teacher(teacher.telegram_name.clone())).await
         }
         TeacherCommand::Book(ref params) => {
             api::book::book(&ctx, params, &BookingActor::Teacher(teacher.telegram_name)).await

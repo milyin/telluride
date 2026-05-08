@@ -1,7 +1,9 @@
+pub mod balance;
 pub mod book;
 pub mod impersonate;
 pub mod payment;
 pub mod schedule;
+pub use balance::{BalanceActor, BalanceParams};
 pub use book::{BookParams, BookingActor};
 pub use impersonate::ImpersonateParams;
 pub use payment::PaymentParams;
@@ -29,4 +31,9 @@ pub trait PaymentCommand: Sized + Clone {
 /// Trait for commands that can emit a schedule command.
 pub trait ScheduleCommand: Sized + Clone {
     fn schedule(params: ScheduleParams) -> Self;
+}
+
+/// Trait for commands that can emit a balance command.
+pub trait BalanceCommand: Sized + Clone {
+    fn balance(params: BalanceParams) -> Self;
 }

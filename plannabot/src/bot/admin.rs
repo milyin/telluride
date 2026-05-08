@@ -1,6 +1,6 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{ImpersonateCommand, ImpersonateParams};
+use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, ImpersonateCommand, ImpersonateParams};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -22,6 +22,8 @@ pub enum AdminCommand {
     Status,
     #[command(description = "forcedly refresh the data")]
     Refresh,
+    #[command(description = "view student balances")]
+    Balance(String),
     #[command(description = "view the bot as a student or teacher")]
     Impersonate(String),
     #[command(description = "exit admin mode")]
@@ -33,6 +35,12 @@ impl telluride::command::CallbackBitcode for AdminCommand {}
 impl ImpersonateCommand for AdminCommand {
     fn impersonate(params: ImpersonateParams) -> Self {
         AdminCommand::Impersonate(params.to_string())
+    }
+}
+
+impl BalanceCommand for AdminCommand {
+    fn balance(params: BalanceParams) -> Self {
+        AdminCommand::Balance(params.to_string())
     }
 }
 
@@ -74,6 +82,9 @@ async fn admin_handle(
         AdminCommand::Help => api::admin::help(&ctx).await,
         AdminCommand::Status => api::admin::status(&ctx, &teacher).await,
         AdminCommand::Refresh => api::admin::refresh(&ctx).await,
+        AdminCommand::Balance(ref params) => {
+            api::balance::balance(&ctx, params, &BalanceActor::Admin).await
+        }
         AdminCommand::Impersonate(ref params) => api::impersonate::impersonate(&ctx, params).await,
         AdminCommand::Quit => api::admin::quit(&ctx).await,
     };

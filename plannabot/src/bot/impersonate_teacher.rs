@@ -1,6 +1,6 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BookCommand, BookParams, BookingActor, PaymentCommand, PaymentParams, ScheduleCommand, ScheduleParams};
+use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor, PaymentCommand, PaymentParams, ScheduleCommand, ScheduleParams};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -27,6 +27,8 @@ pub enum ImpersonateTeacherCommand {
     )]
     Book(String),
     #[command(description = "view student balances as the impersonated teacher")]
+    Balance(String),
+    #[command(description = "view student balances as the impersonated teacher")]
     Payment(String),
     #[command(description = "exit impersonation mode")]
     Quit,
@@ -49,6 +51,12 @@ impl PaymentCommand for ImpersonateTeacherCommand {
 impl ScheduleCommand for ImpersonateTeacherCommand {
     fn schedule(params: ScheduleParams) -> Self {
         ImpersonateTeacherCommand::Schedule(params.to_string())
+    }
+}
+
+impl BalanceCommand for ImpersonateTeacherCommand {
+    fn balance(params: BalanceParams) -> Self {
+        ImpersonateTeacherCommand::Balance(params.to_string())
     }
 }
 
@@ -104,6 +112,9 @@ async fn impersonate_teacher_handle(
         ImpersonateTeacherCommand::Help => api::impersonate_teacher::help(&ctx).await,
         ImpersonateTeacherCommand::Schedule(params) => {
             api::schedule::schedule(&ctx, params, &BookingActor::Teacher(impersonated_name.clone()), impersonated_teacher.timezone).await
+        }
+        ImpersonateTeacherCommand::Balance(params) => {
+            api::balance::balance(&ctx, params, &BalanceActor::Teacher(impersonated_name.clone())).await
         }
         ImpersonateTeacherCommand::Book(params) => {
             api::book::book(

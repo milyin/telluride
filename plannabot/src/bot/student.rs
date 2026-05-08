@@ -1,6 +1,6 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BookCommand, BookParams, BookingActor, ScheduleCommand, ScheduleParams};
+use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor, ScheduleCommand, ScheduleParams};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole, UserRole};
 use crate::state::BotState;
@@ -20,6 +20,8 @@ pub enum StudentCommand {
     Help,
     #[command(description = "show your planned lessons")]
     Schedule(String),
+    #[command(description = "view your balance")]
+    Balance(String),
     #[command(
         description = "book a lesson (optionally provide: teacher_name date hour duration)"
     )]
@@ -37,6 +39,12 @@ impl BookCommand for StudentCommand {
 impl ScheduleCommand for StudentCommand {
     fn schedule(params: ScheduleParams) -> Self {
         StudentCommand::Schedule(params.to_string())
+    }
+}
+
+impl BalanceCommand for StudentCommand {
+    fn balance(params: BalanceParams) -> Self {
+        StudentCommand::Balance(params.to_string())
     }
 }
 
@@ -83,6 +91,9 @@ async fn student_handle(
         StudentCommand::Help => api::student::help(&ctx).await,
         StudentCommand::Schedule(params) => {
             api::schedule::schedule(&ctx, params, &BookingActor::Student(student.telegram_name.clone()), student.timezone).await
+        }
+        StudentCommand::Balance(params) => {
+            api::balance::balance(&ctx, params, &BalanceActor::Student(student.telegram_name.clone())).await
         }
         StudentCommand::Book(params) => {
             api::book::book(&ctx, params, &BookingActor::Student(student.telegram_name.clone())).await

@@ -1,4 +1,5 @@
 pub mod admin;
+pub mod balance;
 pub mod book;
 pub mod common;
 pub mod context;
