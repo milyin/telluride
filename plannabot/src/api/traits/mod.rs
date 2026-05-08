@@ -1,9 +1,11 @@
 pub mod book;
 pub mod impersonate;
 pub mod payment;
+pub mod schedule;
 pub use book::{BookParams, BookingActor};
 pub use impersonate::ImpersonateParams;
 pub use payment::PaymentParams;
+pub use schedule::ScheduleParams;
 
 /// Trait for commands that can emit a book command.
 /// StudentCommand, ImpersonateCommand, and TeacherCommand implement this trait,
@@ -22,4 +24,9 @@ pub trait ImpersonateCommand: Sized + Clone {
 /// Only TeacherCommand implements this trait.
 pub trait PaymentCommand: Sized + Clone {
     fn payment(params: PaymentParams) -> Self;
+}
+
+/// Trait for commands that can emit a schedule command.
+pub trait ScheduleCommand: Sized + Clone {
+    fn schedule(params: ScheduleParams) -> Self;
 }

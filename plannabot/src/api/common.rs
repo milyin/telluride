@@ -1,5 +1,6 @@
 use crate::api::context::BotCtx;
-use crate::models::UserRole;
+use crate::api::traits::BookingActor;
+use crate::models::{LessonStatus, ScheduleEntry, UserRole};
 use anyhow::Result;
 use telluride::markdown::MarkdownStringMessage;
 use telluride::{markdown_format, markdown_string};
@@ -32,6 +33,22 @@ pub async fn start(ctx: &BotCtx<impl Send + Sync + Clone>, username: &str) -> Re
 
     ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
     Ok(())
+}
+
+pub fn status_label(status: &Option<LessonStatus>) -> &'static str {
+    match status {
+        None => "📅",
+        Some(LessonStatus::Passed) => "✅",
+        Some(LessonStatus::Absent) => "🚫",
+    }
+}
+
+pub fn format_entry_label(entry: &ScheduleEntry, actor: &BookingActor) -> String {
+    let other = match actor {
+        BookingActor::Student(_) => entry.teacher_telegram.to_string(),
+        BookingActor::Teacher(_) => entry.student_telegram.to_string(),
+    };
+    format!("{} {} ↔ {}", status_label(&entry.status), entry.datetime.time().format("%H:%M"), other)
 }
 
 pub fn format_duration(minutes: i64) -> String {

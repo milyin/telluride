@@ -1,6 +1,6 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BookCommand, BookParams, BookingActor};
+use crate::api::traits::{BookCommand, BookParams, BookingActor, ScheduleCommand, ScheduleParams};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -21,7 +21,7 @@ pub enum ImpersonateStudentCommand {
     #[command(description = "display help")]
     Help,
     #[command(description = "show the impersonated student's planned lessons")]
-    Schedule,
+    Schedule(String),
     #[command(
         description = "book a lesson as the impersonated student (optionally provide: teacher_name date hour duration)"
     )]
@@ -35,6 +35,12 @@ impl telluride::command::CallbackBitcode for ImpersonateStudentCommand {}
 impl BookCommand for ImpersonateStudentCommand {
     fn book(params: BookParams) -> Self {
         ImpersonateStudentCommand::Book(params.to_string())
+    }
+}
+
+impl ScheduleCommand for ImpersonateStudentCommand {
+    fn schedule(params: ScheduleParams) -> Self {
+        ImpersonateStudentCommand::Schedule(params.to_string())
     }
 }
 
@@ -88,8 +94,8 @@ async fn impersonate_student_handle(
     let result = match &cmd {
         ImpersonateStudentCommand::Start => api::common::start(&ctx, &username).await,
         ImpersonateStudentCommand::Help => api::impersonate_student::help(&ctx).await,
-        ImpersonateStudentCommand::Schedule => {
-            api::student::schedule(&ctx, &impersonated_student).await
+        ImpersonateStudentCommand::Schedule(params) => {
+            api::schedule::schedule(&ctx, params, &BookingActor::Student(impersonated_name.clone()), impersonated_student.timezone).await
         }
         ImpersonateStudentCommand::Book(params) => {
             api::book::book(&ctx, params, &BookingActor::Student(impersonated_name.clone())).await

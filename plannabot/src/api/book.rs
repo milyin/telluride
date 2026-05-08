@@ -9,7 +9,7 @@ use telluride::markdown::MarkdownString;
 use telluride::{markdown_format, markdown_string};
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
-use crate::api::common::format_duration;
+use crate::api::common::{format_duration, format_entry_label};
 use crate::api::context::BotCtx;
 use crate::api::menus::{
     show_date_selection, show_month_selection, show_name_list, show_slot_selection,
@@ -471,13 +471,6 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
 // List flow (L0, L1)
 // ---------------------------------------------------------------------------
 
-fn status_label(status: &Option<LessonStatus>) -> &'static str {
-    match status {
-        None => "📅",
-        Some(LessonStatus::Passed) => "✅",
-        Some(LessonStatus::Absent) => "🚫",
-    }
-}
 
 async fn book_L0<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
@@ -589,18 +582,12 @@ async fn book_U1<Cmd: BookCommand + CallbackBitcode + 'static>(
 
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     for entry in entries {
-        let time = entry.datetime.time();
-        let other = match actor {
-            BookingActor::Student(_) => entry.teacher_telegram.to_string(),
-            BookingActor::Teacher(_) => entry.student_telegram.to_string(),
-        };
-        let icon = status_label(&entry.status);
-        let label = format!("{} {} ↔ {}", icon, time.format("%H:%M"), other);
+        let label = format_entry_label(&entry, actor);
         let cmd = Cmd::book(BookParams::L1(
             entry.teacher_telegram,
             entry.student_telegram,
-            date,
-            time,
+            entry.datetime.date_naive(),
+            entry.datetime.time(),
         ));
         let key = CallbackKey::pack(cmd, &user_proxy).await;
         buttons.push(vec![InlineKeyboardButton::callback_key(label, &key)]);

@@ -1,6 +1,6 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BookCommand, BookParams, BookingActor};
+use crate::api::traits::{BookCommand, BookParams, BookingActor, ScheduleCommand, ScheduleParams};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole, UserRole};
 use crate::state::BotState;
@@ -19,7 +19,7 @@ pub enum StudentCommand {
     #[command(description = "display help")]
     Help,
     #[command(description = "show your planned lessons")]
-    Schedule,
+    Schedule(String),
     #[command(
         description = "book a lesson (optionally provide: teacher_name date hour duration)"
     )]
@@ -31,6 +31,12 @@ impl telluride::command::CallbackBitcode for StudentCommand {}
 impl BookCommand for StudentCommand {
     fn book(params: BookParams) -> Self {
         StudentCommand::Book(params.to_string())
+    }
+}
+
+impl ScheduleCommand for StudentCommand {
+    fn schedule(params: ScheduleParams) -> Self {
+        StudentCommand::Schedule(params.to_string())
     }
 }
 
@@ -75,7 +81,9 @@ async fn student_handle(
     let result = match &cmd {
         StudentCommand::Start => api::common::start(&ctx, &username).await,
         StudentCommand::Help => api::student::help(&ctx).await,
-        StudentCommand::Schedule => api::student::schedule(&ctx, &student).await,
+        StudentCommand::Schedule(params) => {
+            api::schedule::schedule(&ctx, params, &BookingActor::Student(student.telegram_name.clone()), student.timezone).await
+        }
         StudentCommand::Book(params) => {
             api::book::book(&ctx, params, &BookingActor::Student(student.telegram_name.clone())).await
         }

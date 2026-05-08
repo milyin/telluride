@@ -1,6 +1,6 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BookCommand, BookParams, BookingActor, PaymentCommand, PaymentParams};
+use crate::api::traits::{BookCommand, BookParams, BookingActor, PaymentCommand, PaymentParams, ScheduleCommand, ScheduleParams};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -19,7 +19,7 @@ pub enum TeacherCommand {
     #[command(description = "display help")]
     Help,
     #[command(description = "show your planned lessons")]
-    Schedule,
+    Schedule(String),
     #[command(
         description = "book a lesson for a student (optionally provide: teacher_name student_name date hour duration)"
     )]
@@ -43,6 +43,12 @@ impl BookCommand for TeacherCommand {
 impl PaymentCommand for TeacherCommand {
     fn payment(params: PaymentParams) -> Self {
         TeacherCommand::Payment(params.to_string())
+    }
+}
+
+impl ScheduleCommand for TeacherCommand {
+    fn schedule(params: ScheduleParams) -> Self {
+        TeacherCommand::Schedule(params.to_string())
     }
 }
 
@@ -82,7 +88,9 @@ async fn teacher_handle(
     let result = match cmd {
         TeacherCommand::Start => api::common::start(&ctx, &username).await,
         TeacherCommand::Help => api::teacher::help(&ctx).await,
-        TeacherCommand::Schedule => api::teacher::schedule(&ctx, &teacher).await,
+        TeacherCommand::Schedule(ref params) => {
+            api::schedule::schedule(&ctx, params, &BookingActor::Teacher(teacher.telegram_name.clone()), teacher.timezone).await
+        }
         TeacherCommand::Book(ref params) => {
             api::book::book(&ctx, params, &BookingActor::Teacher(teacher.telegram_name)).await
         }
