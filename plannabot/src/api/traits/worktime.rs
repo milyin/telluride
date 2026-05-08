@@ -5,6 +5,60 @@ use anyhow::Result;
 use chrono::{Datelike, Local, NaiveDate, NaiveTime, Weekday};
 use telluride::utils::{format_screen_spaces, split_with_screened_spaces};
 
+pub enum WorktimeBranch {
+    Weekday,
+    Exception,
+}
+
+impl fmt::Display for WorktimeBranch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            WorktimeBranch::Weekday => write!(f, "weekday"),
+            WorktimeBranch::Exception => write!(f, "exception"),
+        }
+    }
+}
+
+impl FromStr for WorktimeBranch {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "weekday" => Ok(WorktimeBranch::Weekday),
+            "exception" => Ok(WorktimeBranch::Exception),
+            _ => Err(anyhow::anyhow!("unknown worktime branch: {}", s)),
+        }
+    }
+}
+
+pub enum WorktimeSubcmd {
+    Add(bool),
+    Remove(bool),
+}
+
+impl fmt::Display for WorktimeSubcmd {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            WorktimeSubcmd::Add(false) => write!(f, "add"),
+            WorktimeSubcmd::Add(true) => write!(f, "add!"),
+            WorktimeSubcmd::Remove(false) => write!(f, "remove"),
+            WorktimeSubcmd::Remove(true) => write!(f, "remove!"),
+        }
+    }
+}
+
+impl FromStr for WorktimeSubcmd {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "add" => Ok(WorktimeSubcmd::Add(false)),
+            "add!" => Ok(WorktimeSubcmd::Add(true)),
+            "remove" => Ok(WorktimeSubcmd::Remove(false)),
+            "remove!" => Ok(WorktimeSubcmd::Remove(true)),
+            _ => Err(anyhow::anyhow!("unknown worktime subcommand: {}", s)),
+        }
+    }
+}
+
 fn weekday_short(w: Weekday) -> &'static str {
     match w {
         Weekday::Mon => "Mon",
@@ -30,31 +84,6 @@ fn parse_weekday(s: &str) -> Result<Weekday> {
     }
 }
 
-pub enum WorktimeSubcmd {
-    Weekday,
-    WeekdayAdd(bool),
-    WeekdayRemove(bool),
-    Exception,
-    ExceptionAdd(bool),
-    ExceptionRemove(bool),
-}
-
-impl fmt::Display for WorktimeSubcmd {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            WorktimeSubcmd::Weekday => write!(f, "weekday"),
-            WorktimeSubcmd::WeekdayAdd(false) => write!(f, "weekday add"),
-            WorktimeSubcmd::WeekdayAdd(true) => write!(f, "weekday add!"),
-            WorktimeSubcmd::WeekdayRemove(false) => write!(f, "weekday remove"),
-            WorktimeSubcmd::WeekdayRemove(true) => write!(f, "weekday remove!"),
-            WorktimeSubcmd::Exception => write!(f, "exception"),
-            WorktimeSubcmd::ExceptionAdd(false) => write!(f, "exception add"),
-            WorktimeSubcmd::ExceptionAdd(true) => write!(f, "exception add!"),
-            WorktimeSubcmd::ExceptionRemove(false) => write!(f, "exception remove"),
-            WorktimeSubcmd::ExceptionRemove(true) => write!(f, "exception remove!"),
-        }
-    }
-}
 
 #[allow(non_camel_case_types)]
 pub enum WorktimeParams {
@@ -100,62 +129,52 @@ pub enum WorktimeParams {
 
 impl fmt::Display for WorktimeParams {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let wd = WorktimeSubcmd::Weekday;
-        let wa = WorktimeSubcmd::WeekdayAdd(false);
-        let waf = WorktimeSubcmd::WeekdayAdd(true);
-        let wr = WorktimeSubcmd::WeekdayRemove(false);
-        let wrf = WorktimeSubcmd::WeekdayRemove(true);
-        let ex = WorktimeSubcmd::Exception;
-        let ea = WorktimeSubcmd::ExceptionAdd(false);
-        let eaf = WorktimeSubcmd::ExceptionAdd(true);
-        let er = WorktimeSubcmd::ExceptionRemove(false);
-        let erf = WorktimeSubcmd::ExceptionRemove(true);
+        let wd = WorktimeBranch::Weekday;
+        let ex = WorktimeBranch::Exception;
+        let add = WorktimeSubcmd::Add(false);
+        let add_f = WorktimeSubcmd::Add(true);
+        let rm = WorktimeSubcmd::Remove(false);
+        let rm_f = WorktimeSubcmd::Remove(true);
         match self {
             WorktimeParams::M0 => String::new(),
             WorktimeParams::WL => format_screen_spaces!(wd),
-            WorktimeParams::WA => format_screen_spaces!(wa),
-            WorktimeParams::WAW(w) => format_screen_spaces!(wa, weekday_short(*w)),
+            WorktimeParams::WA => format_screen_spaces!(wd, add),
+            WorktimeParams::WAW(w) => format_screen_spaces!(wd, add, weekday_short(*w)),
             WorktimeParams::WAWH(w, s) => {
-                format_screen_spaces!(wa, weekday_short(*w), s.format("%H:%M"))
+                format_screen_spaces!(wd, add, weekday_short(*w), s.format("%H:%M"))
             }
-            WorktimeParams::WAWHH(w, s, e) => {
-                format_screen_spaces!(wa, weekday_short(*w), s.format("%H:%M"), e.format("%H:%M"))
-            }
-            WorktimeParams::WAWHHF(w, s, e) => {
-                format_screen_spaces!(waf, weekday_short(*w), s.format("%H:%M"), e.format("%H:%M"))
-            }
-            WorktimeParams::WR => format_screen_spaces!(wr),
+            WorktimeParams::WAWHH(w, s, e) => format_screen_spaces!(
+                wd, add, weekday_short(*w), s.format("%H:%M"), e.format("%H:%M")
+            ),
+            WorktimeParams::WAWHHF(w, s, e) => format_screen_spaces!(
+                wd, add_f, weekday_short(*w), s.format("%H:%M"), e.format("%H:%M")
+            ),
+            WorktimeParams::WR => format_screen_spaces!(wd, rm),
             WorktimeParams::WRWH(w, s) => {
-                format_screen_spaces!(wr, weekday_short(*w), s.format("%H:%M"))
+                format_screen_spaces!(wd, rm, weekday_short(*w), s.format("%H:%M"))
             }
             WorktimeParams::WRWHF(w, s) => {
-                format_screen_spaces!(wrf, weekday_short(*w), s.format("%H:%M"))
+                format_screen_spaces!(wd, rm_f, weekday_short(*w), s.format("%H:%M"))
             }
             WorktimeParams::EYM(y, m) => format_screen_spaces!(ex, y, m),
-            WorktimeParams::EAYM(y, m) => format_screen_spaces!(ea, y, m),
+            WorktimeParams::EAYM(y, m) => format_screen_spaces!(ex, add, y, m),
             WorktimeParams::ED(d) => format_screen_spaces!(ex, d.format("%Y-%m-%d")),
             WorktimeParams::EDH(d, s) => {
                 format_screen_spaces!(ex, d.format("%Y-%m-%d"), s.format("%H:%M"))
             }
-            WorktimeParams::EDHH(d, s, e) => {
-                format_screen_spaces!(
-                    ex,
-                    d.format("%Y-%m-%d"),
-                    s.format("%H:%M"),
-                    e.format("%H:%M")
-                )
+            WorktimeParams::EDHH(d, s, e) => format_screen_spaces!(
+                ex, d.format("%Y-%m-%d"), s.format("%H:%M"), e.format("%H:%M")
+            ),
+            WorktimeParams::EDHHF(d, s, e) => format_screen_spaces!(
+                ex, add_f, d.format("%Y-%m-%d"), s.format("%H:%M"), e.format("%H:%M")
+            ),
+            WorktimeParams::ERYM(y, m) => format_screen_spaces!(ex, rm, y, m),
+            WorktimeParams::ERD(d) => {
+                format_screen_spaces!(ex, rm, d.format("%Y-%m-%d"))
             }
-            WorktimeParams::EDHHF(d, s, e) => {
-                format_screen_spaces!(
-                    eaf,
-                    d.format("%Y-%m-%d"),
-                    s.format("%H:%M"),
-                    e.format("%H:%M")
-                )
+            WorktimeParams::ERDF(d) => {
+                format_screen_spaces!(ex, rm_f, d.format("%Y-%m-%d"))
             }
-            WorktimeParams::ERYM(y, m) => format_screen_spaces!(er, y, m),
-            WorktimeParams::ERD(d) => format_screen_spaces!(er, d.format("%Y-%m-%d")),
-            WorktimeParams::ERDF(d) => format_screen_spaces!(erf, d.format("%Y-%m-%d")),
         }
         .fmt(f)
     }
@@ -193,96 +212,91 @@ impl FromStr for WorktimeParams {
         let cur_year = now.year();
         let cur_month = now.month();
 
-        let Some(branch) = parts.first() else {
+        let Some(first) = parts.first() else {
             return Ok(WorktimeParams::M0);
         };
 
-        match branch.as_str() {
-            "weekday" => {
-                let mut p = P::new(&parts, 1);
-                match p.peek() {
-                    None => Ok(WorktimeParams::WL),
-                    Some("add" | "add!") => {
-                        let forced = p.next("subcmd")? == "add!";
-                        match p.peek() {
-                            None => {
-                                if forced {
-                                    Err(anyhow::anyhow!("add! requires weekday start end"))
-                                } else {
-                                    Ok(WorktimeParams::WA)
-                                }
+        let branch: WorktimeBranch = first.parse()?;
+        let mut p = P::new(&parts, 1);
+
+        match branch {
+            WorktimeBranch::Weekday => {
+                let Some(tok) = p.peek() else {
+                    return Ok(WorktimeParams::WL);
+                };
+                let subcmd: WorktimeSubcmd = tok.parse()?;
+                p.next("subcmd")?;
+                match subcmd {
+                    WorktimeSubcmd::Add(forced) => match p.peek() {
+                        None => {
+                            if forced {
+                                Err(anyhow::anyhow!("add! requires weekday start end"))
+                            } else {
+                                Ok(WorktimeParams::WA)
                             }
-                            _ => {
-                                let w = parse_weekday(p.next("weekday")?)?;
-                                match p.peek() {
-                                    None => Ok(WorktimeParams::WAW(w)),
-                                    _ => {
-                                        let s: NaiveTime = p.next("start")?.parse()?;
-                                        match p.peek() {
-                                            None => Ok(WorktimeParams::WAWH(w, s)),
-                                            _ => {
-                                                let e: NaiveTime = p.next("end")?.parse()?;
-                                                if forced {
-                                                    Ok(WorktimeParams::WAWHHF(w, s, e))
-                                                } else {
-                                                    Ok(WorktimeParams::WAWHH(w, s, e))
-                                                }
+                        }
+                        _ => {
+                            let w = parse_weekday(p.next("weekday")?)?;
+                            match p.peek() {
+                                None => Ok(WorktimeParams::WAW(w)),
+                                _ => {
+                                    let s: NaiveTime = p.next("start")?.parse()?;
+                                    match p.peek() {
+                                        None => Ok(WorktimeParams::WAWH(w, s)),
+                                        _ => {
+                                            let e: NaiveTime = p.next("end")?.parse()?;
+                                            if forced {
+                                                Ok(WorktimeParams::WAWHHF(w, s, e))
+                                            } else {
+                                                Ok(WorktimeParams::WAWHH(w, s, e))
                                             }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-                    Some("remove" | "remove!") => {
-                        let forced = p.next("subcmd")? == "remove!";
-                        match p.peek() {
-                            None => {
-                                if forced {
-                                    Err(anyhow::anyhow!("remove! requires weekday start"))
-                                } else {
-                                    Ok(WorktimeParams::WR)
-                                }
-                            }
-                            _ => {
-                                let w = parse_weekday(p.next("weekday")?)?;
-                                let s: NaiveTime = p.next("start")?.parse()?;
-                                if forced {
-                                    Ok(WorktimeParams::WRWHF(w, s))
-                                } else {
-                                    Ok(WorktimeParams::WRWH(w, s))
-                                }
+                    },
+                    WorktimeSubcmd::Remove(forced) => match p.peek() {
+                        None => {
+                            if forced {
+                                Err(anyhow::anyhow!("remove! requires weekday start"))
+                            } else {
+                                Ok(WorktimeParams::WR)
                             }
                         }
-                    }
-                    Some(other) => Err(anyhow::anyhow!("unknown weekday subcommand: {}", other)),
+                        _ => {
+                            let w = parse_weekday(p.next("weekday")?)?;
+                            let s: NaiveTime = p.next("start")?.parse()?;
+                            if forced {
+                                Ok(WorktimeParams::WRWHF(w, s))
+                            } else {
+                                Ok(WorktimeParams::WRWH(w, s))
+                            }
+                        }
+                    },
                 }
             }
-            "exception" => {
-                let mut p = P::new(&parts, 1);
-                match p.peek() {
-                    None => Ok(WorktimeParams::EYM(cur_year, cur_month)),
-                    Some("add" | "add!") => {
-                        let forced = p.next("subcmd")? == "add!";
-                        if forced {
-                            let d: NaiveDate = p.next("date")?.parse()?;
-                            let s: NaiveTime = p.next("start")?.parse()?;
-                            let e: NaiveTime = p.next("end")?.parse()?;
-                            Ok(WorktimeParams::EDHHF(d, s, e))
-                        } else {
-                            let y: i32 = p
-                                .next("year")
-                                .and_then(|s| s.parse().map_err(|_| anyhow::anyhow!("invalid year")))?;
-                            let m: u32 = p
-                                .next("month")
-                                .and_then(|s| s.parse().map_err(|_| anyhow::anyhow!("invalid month")))?;
-                            Ok(WorktimeParams::EAYM(y, m))
+            WorktimeBranch::Exception => {
+                let Some(tok) = p.peek() else {
+                    return Ok(WorktimeParams::EYM(cur_year, cur_month));
+                };
+                // Peek: could be a subcmd, a YYYY-MM-DD date, or an integer year
+                if let Ok(subcmd) = tok.parse::<WorktimeSubcmd>() {
+                    p.next("subcmd")?;
+                    match subcmd {
+                        WorktimeSubcmd::Add(forced) => {
+                            if forced {
+                                let d: NaiveDate = p.next("date")?.parse()?;
+                                let s: NaiveTime = p.next("start")?.parse()?;
+                                let e: NaiveTime = p.next("end")?.parse()?;
+                                Ok(WorktimeParams::EDHHF(d, s, e))
+                            } else {
+                                let y: i32 = p.next("year")?.parse().map_err(|_| anyhow::anyhow!("invalid year"))?;
+                                let m: u32 = p.next("month")?.parse().map_err(|_| anyhow::anyhow!("invalid month"))?;
+                                Ok(WorktimeParams::EAYM(y, m))
+                            }
                         }
-                    }
-                    Some("remove" | "remove!") => {
-                        let forced = p.next("subcmd")? == "remove!";
-                        // Peek at next token: could be YYYY-MM-DD or integer year
-                        match p.peek() {
+                        WorktimeSubcmd::Remove(forced) => match p.peek() {
                             None => {
                                 if forced {
                                     Err(anyhow::anyhow!("remove! requires date"))
@@ -299,50 +313,39 @@ impl FromStr for WorktimeParams {
                                 }
                             }
                             _ => {
-                                let y: i32 = p
-                                    .next("year")
-                                    .and_then(|s| s.parse().map_err(|_| anyhow::anyhow!("invalid year")))?;
-                                let m: u32 = p
-                                    .next("month")
-                                    .and_then(|s| s.parse().map_err(|_| anyhow::anyhow!("invalid month")))?;
+                                let y: i32 = p.next("year")?.parse().map_err(|_| anyhow::anyhow!("invalid year"))?;
+                                let m: u32 = p.next("month")?.parse().map_err(|_| anyhow::anyhow!("invalid month"))?;
                                 if forced {
                                     Err(anyhow::anyhow!("remove! requires a date, not year/month"))
                                 } else {
                                     Ok(WorktimeParams::ERYM(y, m))
                                 }
                             }
-                        }
+                        },
                     }
-                    Some(tok) if tok.contains('-') => {
-                        // YYYY-MM-DD date
-                        let d: NaiveDate = p.next("date")?.parse()?;
-                        match p.peek() {
-                            None => Ok(WorktimeParams::ED(d)),
-                            _ => {
-                                let s: NaiveTime = p.next("start")?.parse()?;
-                                match p.peek() {
-                                    None => Ok(WorktimeParams::EDH(d, s)),
-                                    _ => {
-                                        let e: NaiveTime = p.next("end")?.parse()?;
-                                        Ok(WorktimeParams::EDHH(d, s, e))
-                                    }
+                } else if tok.contains('-') {
+                    // YYYY-MM-DD date
+                    let d: NaiveDate = p.next("date")?.parse()?;
+                    match p.peek() {
+                        None => Ok(WorktimeParams::ED(d)),
+                        _ => {
+                            let s: NaiveTime = p.next("start")?.parse()?;
+                            match p.peek() {
+                                None => Ok(WorktimeParams::EDH(d, s)),
+                                _ => {
+                                    let e: NaiveTime = p.next("end")?.parse()?;
+                                    Ok(WorktimeParams::EDHH(d, s, e))
                                 }
                             }
                         }
                     }
-                    _ => {
-                        // Integer year + month
-                        let y: i32 = p
-                            .next("year")
-                            .and_then(|s| s.parse().map_err(|_| anyhow::anyhow!("invalid year")))?;
-                        let m: u32 = p
-                            .next("month")
-                            .and_then(|s| s.parse().map_err(|_| anyhow::anyhow!("invalid month")))?;
-                        Ok(WorktimeParams::EYM(y, m))
-                    }
+                } else {
+                    // Integer year + month
+                    let y: i32 = p.next("year")?.parse().map_err(|_| anyhow::anyhow!("invalid year"))?;
+                    let m: u32 = p.next("month")?.parse().map_err(|_| anyhow::anyhow!("invalid month"))?;
+                    Ok(WorktimeParams::EYM(y, m))
                 }
             }
-            other => Err(anyhow::anyhow!("unknown worktime branch: {}", other)),
         }
     }
 }
