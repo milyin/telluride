@@ -2,8 +2,8 @@ use crate::api::context::BotCtx;
 use crate::api::traits::BookingActor;
 use crate::models::{LessonStatus, ScheduleEntry, UserRole};
 use anyhow::Result;
-use rusty_money::{Money, iso};
-use telluride::markdown::MarkdownStringMessage;
+use rusty_money::iso;
+use telluride::markdown::{MarkdownString, MarkdownStringMessage};
 use telluride::{markdown_format, markdown_string};
 
 pub async fn start(ctx: &BotCtx<impl Send + Sync + Clone>, username: &str) -> Result<()> {
@@ -79,10 +79,25 @@ impl PageInfo {
     pub fn has_next(&self) -> bool { self.end < self.total }
 }
 
-pub fn fmt_money(amount: i64, currency: Option<&'static iso::Currency>) -> String {
+/// Plain formatted money for button labels: "100 $" or "-100 $".
+pub fn fmt_money_plain(amount: i64, currency: Option<&'static iso::Currency>) -> String {
     match currency {
-        Some(c) => Money::from_major(amount, c).to_string(),
+        Some(c) => format!("{} {}", amount, c.symbol),
         None => amount.to_string(),
+    }
+}
+
+/// MarkdownString formatted money for message text: negative amounts are bold.
+pub fn fmt_money(amount: i64, currency: Option<&'static iso::Currency>) -> MarkdownString {
+    let Some(c) = currency else {
+        return MarkdownString::escape(amount.to_string());
+    };
+    let text = format!("{} {}", amount, c.symbol);
+    if amount < 0 {
+        let escaped = MarkdownString::escape(&text).into_string();
+        MarkdownString::from_validated_string(format!("*{}*", escaped))
+    } else {
+        MarkdownString::escape(&text)
     }
 }
 

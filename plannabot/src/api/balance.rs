@@ -7,7 +7,7 @@ use telluride::data_store::UserProxy;
 use telluride::{markdown_format, markdown_string};
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
-use crate::api::common::{PageInfo, fmt_money};
+use crate::api::common::{PageInfo, fmt_money, fmt_money_plain};
 use crate::api::context::BotCtx;
 use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams};
 use crate::models::TelegramName;
@@ -85,7 +85,7 @@ async fn balance_L0<Cmd: BalanceCommand + CallbackBitcode + 'static>(
         let remains = paid - allocated;
 
         let currency = ctx.state.get_student(student).await.and_then(|s| s.currency);
-        let balance_str = fmt_money(remains, currency);
+        let balance_str = fmt_money_plain(remains, currency);
         let label = format!("{}: {}", student, balance_str);
 
         let key = CallbackKey::pack(
@@ -190,7 +190,7 @@ async fn balance_L2<Cmd: BalanceCommand + CallbackBitcode + 'static>(
         let date_str = p.date.with_timezone(&tz).format("%d %b").to_string();
         txns.push((
             p.date,
-            format!("{} +{} paid", date_str, fmt_money(p.sum, currency)),
+            format!("{} +{} paid", date_str, fmt_money_plain(p.sum, currency)),
         ));
     }
 
@@ -208,7 +208,7 @@ async fn balance_L2<Cmd: BalanceCommand + CallbackBitcode + 'static>(
             format!(
                 "{} -{} lesson with {}",
                 date_str,
-                fmt_money(e.cost, currency),
+                fmt_money_plain(e.cost, currency),
                 e.teacher_telegram
             ),
         ));

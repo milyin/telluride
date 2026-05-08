@@ -6,7 +6,7 @@ use telluride::data_store::UserProxy;
 use telluride::{markdown_format, markdown_string};
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
-use crate::api::common::{PageInfo, fmt_money};
+use crate::api::common::{PageInfo, fmt_money, fmt_money_plain};
 use crate::api::context::BotCtx;
 use crate::api::traits::payment::PaymentParams;
 use crate::api::traits::{PaymentActor, PaymentCommand};
@@ -164,7 +164,7 @@ async fn payment_PL<Cmd: PaymentCommand + CallbackBitcode + 'static>(
             "{} {}: {}",
             date,
             time.format("%H:%M"),
-            fmt_money(payment.sum, currency)
+            fmt_money_plain(payment.sum, currency)
         );
         let key = CallbackKey::pack(
             Cmd::payment(PaymentParams::PS(student.clone(), date, time)),
@@ -359,10 +359,8 @@ async fn payment_PN<Cmd: PaymentCommand + CallbackBitcode + 'static>(
         .map(|p| p.sum)
         .sum();
     let balance = paid - allocated;
-    let balance_str = fmt_money(balance, currency);
-
     let mut text = markdown_format!("💰 *New Payment: {}*\n\n", student.to_string());
-    text.push(&markdown_format!("Balance: {}\n\n", balance_str));
+    text.push(&markdown_format!("Balance: {}\n\n", fmt_money(balance, currency)));
     text.push(&markdown_string!(
         "Type the amount after the command below and send:"
     ));
