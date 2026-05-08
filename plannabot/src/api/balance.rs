@@ -204,14 +204,16 @@ async fn balance_L2<Cmd: BalanceCommand + CallbackBitcode + 'static>(
         }
     }
     text.push(&markdown_format!("Paid: {}\n", fmt_money(paid, currency)));
+    text.push(&markdown_format!("Spent: {}\n", fmt_money(spent, currency)));
     text.push(&markdown_format!("Balance: {}\n", fmt_money(balance, currency)));
-    text.push(&markdown_format!("Allocated: {}\n", fmt_money(allocated, currency)));
-    text.push(&markdown_format!("Remains: {}\n", fmt_money(remains, currency)));
+    text.push(&markdown_format!("  Allocated: {}\n", fmt_money(allocated, currency)));
+    text.push(&markdown_format!("  Remains: {}\n", fmt_money(remains, currency)));
 
     // Month name
     let month_label = NaiveDate::from_ymd_opt(year, month, 1)
         .map(|d| d.format("%B %Y").to_string())
         .unwrap_or_else(|| format!("{}/{}", month, year));
+    text.push(&markdown_string!("\nUse /book to view or edit planned lessons\\.\n"));
     text.push(&markdown_format!("\n*Transactions on {}*\n", month_label));
 
     // Collect this month's transactions sorted by datetime
