@@ -58,6 +58,37 @@ impl SheetsClient {
     }
 }
 
+/// Returns the first weekday worktime entry matching teacher + weekday + start_time.
+/// Useful when you hold a unique identifier and need to look up the full record for display.
+pub fn find_weekday_entry<'a>(
+    worktime: &'a [Worktime],
+    teacher: &TelegramName,
+    weekday: Weekday,
+    start: NaiveTime,
+) -> Option<&'a Worktime> {
+    worktime.iter().find(|w| {
+        &w.teacher_telegram == teacher
+            && w.day_of_week == Some(weekday)
+            && w.start_time == start
+            && w.date.is_none()
+    })
+}
+
+/// Returns all exception worktime entries for a teacher on a given date, sorted by start time.
+/// Useful when you hold a date identifier and need to display the full list of periods.
+pub fn find_exception_entries<'a>(
+    worktime: &'a [Worktime],
+    teacher: &TelegramName,
+    date: NaiveDate,
+) -> Vec<&'a Worktime> {
+    let mut entries: Vec<&'a Worktime> = worktime
+        .iter()
+        .filter(|w| &w.teacher_telegram == teacher && w.date == Some(date))
+        .collect();
+    entries.sort_by_key(|w| w.start_time);
+    entries
+}
+
 /// Returns the applicable worktime windows for `teacher` on `date` as [`TimePeriod`]s.
 ///
 /// Specific-date rows take precedence over day-of-week rows.

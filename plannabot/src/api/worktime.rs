@@ -12,6 +12,7 @@ use crate::api::menus::show_date_selection;
 use crate::api::traits::worktime::WorktimeParams;
 use crate::api::traits::WorktimeCommand;
 use crate::models::TelegramName;
+use crate::sheets::worktime::find_weekday_entry;
 
 pub async fn worktime<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
@@ -352,7 +353,12 @@ async fn worktime_WR<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 
     for e in &entries {
         let wd = e.day_of_week.unwrap();
-        let label = format!("{:?} {}", wd, e.start_time.format("%H:%M"));
+        let label = format!(
+            "{:?} {}\u{2013}{}",
+            wd,
+            e.start_time.format("%H:%M"),
+            e.end_time.format("%H:%M")
+        );
         let key = CallbackKey::pack(
             Cmd::worktime(WorktimeParams::WRWH(wd, e.start_time)),
             &user_proxy,
@@ -381,13 +387,15 @@ async fn worktime_WRWH<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     weekday: Weekday,
     start: NaiveTime,
 ) -> Result<()> {
+    let (worktime, _) = ctx.state.sheets.get_worktime().await?;
+    let period_label = find_weekday_entry(&worktime, teacher, weekday, start)
+        .map(|e| format!("{}\u{2013}{}", e.start_time.format("%H:%M"), e.end_time.format("%H:%M")))
+        .unwrap_or_else(|| start.format("%H:%M").to_string());
+
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key = CallbackKey::pack(Cmd::worktime(WorktimeParams::WR), &user_proxy).await;
 
-    let forced_cmd = format!(
-        "/worktime {}",
-        WorktimeParams::WRWHF(weekday, start)
-    );
+    let forced_cmd = format!("/worktime {}", WorktimeParams::WRWHF(weekday, start));
     let keyboard = InlineKeyboardMarkup::new(vec![vec![
         InlineKeyboardButton::callback_key("↩ Back", &back_key),
         InlineKeyboardButton::switch_inline_query_current_chat("🗑 Remove", forced_cmd),
@@ -398,7 +406,7 @@ async fn worktime_WRWH<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
             "🗑 *Remove weekday entry \\- {}*\n\n{} {}\n\nConfirm removal:",
             teacher.to_string(),
             format!("{weekday:?}"),
-            start.format("%H:%M").to_string()
+            period_label
         ),
         Some(keyboard),
     )
@@ -415,6 +423,11 @@ async fn worktime_WRWHF<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     weekday: Weekday,
     start: NaiveTime,
 ) -> Result<()> {
+    let (worktime, _) = ctx.state.sheets.get_worktime().await?;
+    let period_label = find_weekday_entry(&worktime, teacher, weekday, start)
+        .map(|e| format!("{}\u{2013}{}", e.start_time.format("%H:%M"), e.end_time.format("%H:%M")))
+        .unwrap_or_else(|| start.format("%H:%M").to_string());
+
     ctx.state
         .sheets
         .delete_worktime_weekday(teacher, weekday, start)
@@ -424,7 +437,7 @@ async fn worktime_WRWHF<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
         markdown_format!(
             "✅ *Removed\\!*\n\n{} {} removed for {}\\.",
             format!("{weekday:?}"),
-            start.format("%H:%M").to_string(),
+            period_label,
             teacher.to_string()
         ),
         None,

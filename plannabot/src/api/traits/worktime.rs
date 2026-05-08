@@ -103,7 +103,7 @@ pub enum WorktimeParams {
     WAWHHF(Weekday, NaiveTime, NaiveTime),
     /// Weekday remove: show list of entries
     WR,
-    /// Weekday remove confirmation: weekday + start identified
+    /// Weekday remove confirmation: weekday + start (unique ID; full period looked up at render)
     WRWH(Weekday, NaiveTime),
     /// Weekday remove forced: execute delete
     WRWHF(Weekday, NaiveTime),
