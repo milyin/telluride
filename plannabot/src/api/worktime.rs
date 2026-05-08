@@ -9,8 +9,8 @@ use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
 use crate::api::context::BotCtx;
 use crate::api::menus::show_date_selection;
-use crate::api::traits::worktime::WorktimeParams;
 use crate::api::traits::WorktimeCommand;
+use crate::api::traits::worktime::WorktimeParams;
 use crate::models::TelegramName;
 use crate::sheets::worktime::{find_exception_entry, find_weekday_entry};
 
@@ -66,7 +66,10 @@ async fn worktime_M0<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     ]]);
 
     ctx.update_markdown_message(
-        markdown_format!("🕐 *Worktime \\- {}*\n\nSelect category:", teacher.to_string()),
+        markdown_format!(
+            "🕐 *Worktime \\- {}*\n\nSelect category:",
+            teacher.to_string()
+        ),
         Some(keyboard),
     )
     .await
@@ -119,11 +122,7 @@ async fn worktime_WL<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
                     .iter()
                     .map(|(s, e)| format!("{}\u{2013}{}", s.format("%H:%M"), e.format("%H:%M")))
                     .collect();
-                let line = markdown_format!(
-                    "{}: {}\n",
-                    format!("{wd:?}"),
-                    slots_str.join(", ")
-                );
+                let line = markdown_format!("{}: {}\n", format!("{wd:?}"), slots_str.join(", "));
                 text.push(&line);
             }
         }
@@ -166,13 +165,14 @@ async fn worktime_WA<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     let mut row: Vec<InlineKeyboardButton> = Vec::new();
     for wd in weekdays {
-        let key =
-            CallbackKey::pack(Cmd::worktime(WorktimeParams::WAW(wd)), &user_proxy).await;
+        let key = CallbackKey::pack(Cmd::worktime(WorktimeParams::WAW(wd)), &user_proxy).await;
         row.push(InlineKeyboardButton::callback_key(format!("{wd:?}"), &key));
     }
     buttons.push(row);
     let back_key = CallbackKey::pack(Cmd::worktime(WorktimeParams::WL), &user_proxy).await;
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back", &back_key,
+    )]);
 
     ctx.update_markdown_message(
         markdown_format!(
@@ -194,12 +194,17 @@ async fn worktime_WAW<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     weekday: Weekday,
 ) -> Result<()> {
     let mut buttons = hour_buttons(ctx, 0, |h| {
-        Cmd::worktime(WorktimeParams::WAWH(weekday, NaiveTime::from_hms_opt(h, 0, 0).unwrap()))
+        Cmd::worktime(WorktimeParams::WAWH(
+            weekday,
+            NaiveTime::from_hms_opt(h, 0, 0).unwrap(),
+        ))
     })
     .await;
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key = CallbackKey::pack(Cmd::worktime(WorktimeParams::WA), &user_proxy).await;
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back", &back_key,
+    )]);
 
     ctx.update_markdown_message(
         markdown_format!(
@@ -233,7 +238,9 @@ async fn worktime_WAWH<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key =
         CallbackKey::pack(Cmd::worktime(WorktimeParams::WAW(weekday)), &user_proxy).await;
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back", &back_key,
+    )]);
 
     ctx.update_markdown_message(
         markdown_format!(
@@ -259,19 +266,17 @@ async fn worktime_WAWHH<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     end: NaiveTime,
 ) -> Result<()> {
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key =
-        CallbackKey::pack(Cmd::worktime(WorktimeParams::WAWH(weekday, start)), &user_proxy).await;
+    let back_key = CallbackKey::pack(
+        Cmd::worktime(WorktimeParams::WAWH(weekday, start)),
+        &user_proxy,
+    )
+    .await;
 
-    let forced_cmd = format!(
-        "/worktime {}",
-        WorktimeParams::WAWHHF(weekday, start, end)
-    );
-    let keyboard = InlineKeyboardMarkup::new(vec![
-        vec![
-            InlineKeyboardButton::callback_key("↩ Back", &back_key),
-            InlineKeyboardButton::switch_inline_query_current_chat("✅ Add", forced_cmd),
-        ],
-    ]);
+    let forced_cmd = format!("/worktime {}", WorktimeParams::WAWHHF(weekday, start, end));
+    let keyboard = InlineKeyboardMarkup::new(vec![vec![
+        InlineKeyboardButton::callback_key("↩ Back", &back_key),
+        InlineKeyboardButton::switch_inline_query_current_chat("✅ Add", forced_cmd),
+    ]]);
 
     ctx.update_markdown_message(
         markdown_format!(
@@ -368,7 +373,9 @@ async fn worktime_WR<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     }
 
     let back_key = CallbackKey::pack(Cmd::worktime(WorktimeParams::WL), &user_proxy).await;
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back", &back_key,
+    )]);
 
     ctx.update_markdown_message(
         markdown_string!("📅 *Remove weekday entry*\n\nSelect entry to remove:"),
@@ -389,7 +396,13 @@ async fn worktime_WRWH<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 ) -> Result<()> {
     let (worktime, _) = ctx.state.sheets.get_worktime().await?;
     let period_label = find_weekday_entry(&worktime, teacher, weekday, start)
-        .map(|e| format!("{}\u{2013}{}", e.start_time.format("%H:%M"), e.end_time.format("%H:%M")))
+        .map(|e| {
+            format!(
+                "{}\u{2013}{}",
+                e.start_time.format("%H:%M"),
+                e.end_time.format("%H:%M")
+            )
+        })
         .unwrap_or_else(|| start.format("%H:%M").to_string());
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
@@ -425,7 +438,13 @@ async fn worktime_WRWHF<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 ) -> Result<()> {
     let (worktime, _) = ctx.state.sheets.get_worktime().await?;
     let period_label = find_weekday_entry(&worktime, teacher, weekday, start)
-        .map(|e| format!("{}\u{2013}{}", e.start_time.format("%H:%M"), e.end_time.format("%H:%M")))
+        .map(|e| {
+            format!(
+                "{}\u{2013}{}",
+                e.start_time.format("%H:%M"),
+                e.end_time.format("%H:%M")
+            )
+        })
         .unwrap_or_else(|| start.format("%H:%M").to_string());
 
     ctx.state
@@ -435,7 +454,7 @@ async fn worktime_WRWHF<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 
     ctx.update_markdown_message(
         markdown_format!(
-            "✅ *Removed\\!*\n\n{} {} removed for {}\\.",
+            "✅ *Worktime removed\\!*\n\n{} {} removed for {}\\.",
             format!("{weekday:?}"),
             period_label,
             teacher.to_string()
@@ -461,7 +480,9 @@ async fn worktime_EYM<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
         .filter(|w| {
             &w.teacher_telegram == teacher
                 && w.date.is_some()
-                && w.date.map(|d| d.year() == year && d.month() == month).unwrap_or(false)
+                && w.date
+                    .map(|d| d.year() == year && d.month() == month)
+                    .unwrap_or(false)
         })
         .collect();
     entries.sort_by_key(|e| (e.date, e.start_time));
@@ -505,10 +526,8 @@ async fn worktime_EYM<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
             .map(|d| d.format("%b %Y").to_string())
             .unwrap_or_default()
     );
-    let prev_key =
-        CallbackKey::pack(Cmd::worktime(WorktimeParams::EYM(py, pm)), &user_proxy).await;
-    let next_key =
-        CallbackKey::pack(Cmd::worktime(WorktimeParams::EYM(ny, nm)), &user_proxy).await;
+    let prev_key = CallbackKey::pack(Cmd::worktime(WorktimeParams::EYM(py, pm)), &user_proxy).await;
+    let next_key = CallbackKey::pack(Cmd::worktime(WorktimeParams::EYM(ny, nm)), &user_proxy).await;
     let add_key = CallbackKey::pack(
         Cmd::worktime(WorktimeParams::EAYM(year, month)),
         &user_proxy,
@@ -550,7 +569,10 @@ async fn worktime_EAYM<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 
     show_date_selection(
         ctx,
-        markdown_format!("📆 *Add exception \\- {}*\n\nSelect date:", teacher.to_string()),
+        markdown_format!(
+            "📆 *Add exception \\- {}*\n\nSelect date:",
+            teacher.to_string()
+        ),
         year,
         month,
         move |date| Cmd::worktime(WorktimeParams::ED(date)),
@@ -573,11 +595,12 @@ async fn worktime_ED<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     teacher: &TelegramName,
     date: NaiveDate,
 ) -> Result<()> {
-    let mut buttons = hour_buttons(
-        ctx,
-        0,
-        |h| Cmd::worktime(WorktimeParams::EDH(date, NaiveTime::from_hms_opt(h, 0, 0).unwrap())),
-    )
+    let mut buttons = hour_buttons(ctx, 0, |h| {
+        Cmd::worktime(WorktimeParams::EDH(
+            date,
+            NaiveTime::from_hms_opt(h, 0, 0).unwrap(),
+        ))
+    })
     .await;
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key = CallbackKey::pack(
@@ -585,7 +608,9 @@ async fn worktime_ED<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
         &user_proxy,
     )
     .await;
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back", &back_key,
+    )]);
 
     ctx.update_markdown_message(
         markdown_format!(
@@ -608,21 +633,19 @@ async fn worktime_EDH<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
     date: NaiveDate,
     start: NaiveTime,
 ) -> Result<()> {
-    let mut buttons = hour_buttons(
-        ctx,
-        start.hour() + 1,
-        |h| {
-            Cmd::worktime(WorktimeParams::EDHH(
-                date,
-                start,
-                NaiveTime::from_hms_opt(h, 0, 0).unwrap(),
-            ))
-        },
-    )
+    let mut buttons = hour_buttons(ctx, start.hour() + 1, |h| {
+        Cmd::worktime(WorktimeParams::EDHH(
+            date,
+            start,
+            NaiveTime::from_hms_opt(h, 0, 0).unwrap(),
+        ))
+    })
     .await;
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key = CallbackKey::pack(Cmd::worktime(WorktimeParams::ED(date)), &user_proxy).await;
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back", &back_key,
+    )]);
 
     ctx.update_markdown_message(
         markdown_format!(
@@ -732,11 +755,8 @@ async fn worktime_ERYM<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
         CallbackKey::pack(Cmd::worktime(WorktimeParams::ERYM(py, pm)), &user_proxy).await;
     let next_key =
         CallbackKey::pack(Cmd::worktime(WorktimeParams::ERYM(ny, nm)), &user_proxy).await;
-    let back_key = CallbackKey::pack(
-        Cmd::worktime(WorktimeParams::EYM(year, month)),
-        &user_proxy,
-    )
-    .await;
+    let back_key =
+        CallbackKey::pack(Cmd::worktime(WorktimeParams::EYM(year, month)), &user_proxy).await;
 
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
 
@@ -757,7 +777,9 @@ async fn worktime_ERYM<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
             InlineKeyboardButton::callback_key(prev_label, &prev_key),
             InlineKeyboardButton::callback_key(next_label, &next_key),
         ]);
-        buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+        buttons.push(vec![InlineKeyboardButton::callback_key(
+            "↩ Back", &back_key,
+        )]);
 
         ctx.update_markdown_message(
             markdown_format!(
@@ -802,7 +824,9 @@ async fn worktime_ERYM<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
         InlineKeyboardButton::callback_key(prev_label, &prev_key),
         InlineKeyboardButton::callback_key(next_label, &next_key),
     ]);
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back", &back_key,
+    )]);
 
     ctx.update_markdown_message(
         markdown_format!(
@@ -826,7 +850,13 @@ async fn worktime_ERDH<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 ) -> Result<()> {
     let (worktime, _) = ctx.state.sheets.get_worktime().await?;
     let period_label = find_exception_entry(&worktime, teacher, date, start)
-        .map(|e| format!("{}\u{2013}{}", e.start_time.format("%H:%M"), e.end_time.format("%H:%M")))
+        .map(|e| {
+            format!(
+                "{}\u{2013}{}",
+                e.start_time.format("%H:%M"),
+                e.end_time.format("%H:%M")
+            )
+        })
         .unwrap_or_else(|| start.format("%H:%M").to_string());
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
@@ -866,7 +896,13 @@ async fn worktime_ERDHF<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 ) -> Result<()> {
     let (worktime, _) = ctx.state.sheets.get_worktime().await?;
     let period_label = find_exception_entry(&worktime, teacher, date, start)
-        .map(|e| format!("{}\u{2013}{}", e.start_time.format("%H:%M"), e.end_time.format("%H:%M")))
+        .map(|e| {
+            format!(
+                "{}\u{2013}{}",
+                e.start_time.format("%H:%M"),
+                e.end_time.format("%H:%M")
+            )
+        })
         .unwrap_or_else(|| start.format("%H:%M").to_string());
 
     ctx.state
@@ -876,7 +912,7 @@ async fn worktime_ERDHF<Cmd: WorktimeCommand + CallbackBitcode + 'static>(
 
     ctx.update_markdown_message(
         markdown_format!(
-            "✅ *Removed\\!*\n\n{} {} removed for {}\\.",
+            "✅ *Worktime removed\\!*\n\n{} {} removed for {}\\.",
             date.format("%d %b %Y").to_string(),
             period_label,
             teacher.to_string()
@@ -918,9 +954,17 @@ where
 }
 
 fn prev_month(year: i32, month: u32) -> (i32, u32) {
-    if month == 1 { (year - 1, 12) } else { (year, month - 1) }
+    if month == 1 {
+        (year - 1, 12)
+    } else {
+        (year, month - 1)
+    }
 }
 
 fn next_month(year: i32, month: u32) -> (i32, u32) {
-    if month == 12 { (year + 1, 1) } else { (year, month + 1) }
+    if month == 12 {
+        (year + 1, 1)
+    } else {
+        (year, month + 1)
+    }
 }
