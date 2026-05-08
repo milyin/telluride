@@ -164,6 +164,177 @@ pub fn month_availability(
     result
 }
 
+/// Write helpers
+impl SheetsClient {
+    /// Appends a weekday recurring worktime row.
+    pub async fn add_worktime_weekday(
+        &self,
+        teacher: &TelegramName,
+        weekday: Weekday,
+        start: NaiveTime,
+        end: NaiveTime,
+    ) -> Result<()> {
+        let header_range = format!("{SHEET_WORKTIME}!1:1");
+        let rows = self
+            .get_values(&header_range)
+            .await
+            .context("Failed to read Worktime header row")?;
+        let headers = rows.into_iter().next().unwrap_or_default();
+
+        let weekday_str = format!("{weekday:?}");
+        let mut values: std::collections::HashMap<&str, String> = std::collections::HashMap::new();
+        values.insert(Worktime::TEACHER_TELEGRAM, teacher.as_str().to_string());
+        values.insert(Worktime::DAY_OF_WEEK, weekday_str);
+        values.insert(Worktime::START_TIME, start.format("%H:%M").to_string());
+        values.insert(Worktime::END_TIME, end.format("%H:%M").to_string());
+
+        let row: Vec<serde_json::Value> = headers
+            .iter()
+            .map(|h| serde_json::Value::String(values.get(h.as_str()).cloned().unwrap_or_default()))
+            .collect();
+
+        self.append_row(SHEET_WORKTIME, row).await
+    }
+
+    /// Appends a date-specific exception worktime row.
+    pub async fn add_worktime_exception(
+        &self,
+        teacher: &TelegramName,
+        date: NaiveDate,
+        start: NaiveTime,
+        end: NaiveTime,
+    ) -> Result<()> {
+        let header_range = format!("{SHEET_WORKTIME}!1:1");
+        let rows = self
+            .get_values(&header_range)
+            .await
+            .context("Failed to read Worktime header row")?;
+        let headers = rows.into_iter().next().unwrap_or_default();
+
+        let mut values: std::collections::HashMap<&str, String> = std::collections::HashMap::new();
+        values.insert(Worktime::TEACHER_TELEGRAM, teacher.as_str().to_string());
+        values.insert(Worktime::DATE, date.format("%Y-%m-%d").to_string());
+        values.insert(Worktime::START_TIME, start.format("%H:%M").to_string());
+        values.insert(Worktime::END_TIME, end.format("%H:%M").to_string());
+
+        let row: Vec<serde_json::Value> = headers
+            .iter()
+            .map(|h| serde_json::Value::String(values.get(h.as_str()).cloned().unwrap_or_default()))
+            .collect();
+
+        self.append_row(SHEET_WORKTIME, row).await
+    }
+
+    /// Deletes a weekday worktime row identified by teacher + weekday + start_time.
+    pub async fn delete_worktime_weekday(
+        &self,
+        teacher: &TelegramName,
+        weekday: Weekday,
+        start: NaiveTime,
+    ) -> Result<()> {
+        let range = format!("{SHEET_WORKTIME}!A:Z");
+        let rows = self
+            .get_values(&range)
+            .await
+            .context("Failed to get Worktime sheet data")?;
+
+        if rows.is_empty() {
+            return Err(anyhow::anyhow!("Worktime sheet is empty"));
+        }
+
+        let schema = SheetSchema::new(SHEET_WORKTIME.to_string(), rows[0].clone());
+
+        for (row_idx, row) in rows.iter().enumerate().skip(1) {
+            if row.is_empty() || row.iter().all(|c| c.is_empty()) {
+                continue;
+            }
+            let row_teacher =
+                TelegramName::try_from(schema.get_str(row, Worktime::TEACHER_TELEGRAM)).ok();
+            if row_teacher.as_ref() != Some(teacher) {
+                continue;
+            }
+            let row_weekday_str = schema.get_str(row, Worktime::DAY_OF_WEEK).to_lowercase();
+            let row_weekday = match row_weekday_str.as_str() {
+                "mon" | "monday" | "1" => Some(Weekday::Mon),
+                "tue" | "tuesday" | "2" => Some(Weekday::Tue),
+                "wed" | "wednesday" | "3" => Some(Weekday::Wed),
+                "thu" | "thursday" | "4" => Some(Weekday::Thu),
+                "fri" | "friday" | "5" => Some(Weekday::Fri),
+                "sat" | "saturday" | "6" => Some(Weekday::Sat),
+                "sun" | "sunday" | "7" | "0" => Some(Weekday::Sun),
+                _ => None,
+            };
+            if row_weekday != Some(weekday) {
+                continue;
+            }
+            let row_start: Option<NaiveTime> =
+                schema.get_str(row, Worktime::START_TIME).parse().ok();
+            if row_start != Some(start) {
+                continue;
+            }
+            self.delete_row(SHEET_WORKTIME, row_idx).await?;
+            return Ok(());
+        }
+
+        Err(anyhow::anyhow!(
+            "No worktime entry found for {} on {:?} at {}",
+            teacher,
+            weekday,
+            start
+        ))
+    }
+
+    /// Deletes all exception worktime rows for teacher on the given date.
+    pub async fn delete_worktime_exception(
+        &self,
+        teacher: &TelegramName,
+        date: NaiveDate,
+    ) -> Result<()> {
+        let range = format!("{SHEET_WORKTIME}!A:Z");
+        let rows = self
+            .get_values(&range)
+            .await
+            .context("Failed to get Worktime sheet data")?;
+
+        if rows.is_empty() {
+            return Err(anyhow::anyhow!("Worktime sheet is empty"));
+        }
+
+        let schema = SheetSchema::new(SHEET_WORKTIME.to_string(), rows[0].clone());
+
+        // Collect indices in reverse so we can delete without shifting
+        let mut to_delete: Vec<usize> = Vec::new();
+        for (row_idx, row) in rows.iter().enumerate().skip(1) {
+            if row.is_empty() || row.iter().all(|c| c.is_empty()) {
+                continue;
+            }
+            let row_teacher =
+                TelegramName::try_from(schema.get_str(row, Worktime::TEACHER_TELEGRAM)).ok();
+            if row_teacher.as_ref() != Some(teacher) {
+                continue;
+            }
+            let row_date: Option<NaiveDate> =
+                schema.get_str(row, Worktime::DATE).parse().ok();
+            if row_date == Some(date) {
+                to_delete.push(row_idx);
+            }
+        }
+
+        if to_delete.is_empty() {
+            return Err(anyhow::anyhow!(
+                "No exception worktime found for {} on {}",
+                teacher,
+                date
+            ));
+        }
+
+        for &idx in to_delete.iter().rev() {
+            self.delete_row(SHEET_WORKTIME, idx).await?;
+        }
+        Ok(())
+    }
+}
+
 fn last_day_of_month(year: i32, month: u32) -> u32 {
     let next_first = if month == 12 {
         NaiveDate::from_ymd_opt(year + 1, 1, 1)
