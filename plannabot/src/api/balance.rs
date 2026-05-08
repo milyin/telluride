@@ -7,7 +7,8 @@ use telluride::data_store::UserProxy;
 use telluride::{markdown_format, markdown_string};
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
-use crate::api::common::{PageInfo, fmt_money, fmt_money_plain};
+use crate::api::common::{PageInfo, fmt_money, fmt_money_plain, format_entry_label};
+use crate::api::traits::BookingActor;
 use crate::api::context::BotCtx;
 use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams};
 use crate::models::TelegramName;
@@ -74,6 +75,11 @@ async fn balance_L0<Cmd: BalanceCommand + CallbackBitcode + 'static>(
     for student in &students[info.start..info.end] {
         let allocated: i64 = schedule
             .iter()
+            .filter(|e| &e.student_telegram == student && e.status.is_none())
+            .map(|e| e.cost)
+            .sum();
+        let spent: i64 = schedule
+            .iter()
             .filter(|e| &e.student_telegram == student && e.status.is_some())
             .map(|e| e.cost)
             .sum();
@@ -82,7 +88,7 @@ async fn balance_L0<Cmd: BalanceCommand + CallbackBitcode + 'static>(
             .filter(|p| &p.student_telegram == student)
             .map(|p| p.sum)
             .sum();
-        let remains = paid - allocated;
+        let remains = paid - allocated - spent;
 
         let currency = ctx.state.get_student(student).await.and_then(|s| s.currency);
         let balance_str = fmt_money_plain(remains, currency);
@@ -152,21 +158,53 @@ async fn balance_L2<Cmd: BalanceCommand + CallbackBitcode + 'static>(
     let (all_payments, _) = ctx.state.sheets.get_payments().await?;
 
     // All-time totals
-    let allocated: i64 = schedule
+    let student_schedule: Vec<_> = schedule
         .iter()
-        .filter(|e| &e.student_telegram == &student && e.status.is_some())
-        .map(|e| e.cost)
-        .sum();
-    let paid: i64 = all_payments
+        .filter(|e| &e.student_telegram == &student)
+        .collect();
+    let student_payments: Vec<_> = all_payments
         .iter()
         .filter(|p| &p.student_telegram == &student)
-        .map(|p| p.sum)
+        .collect();
+
+    let allocated: i64 = student_schedule
+        .iter()
+        .filter(|e| e.status.is_none())
+        .map(|e| e.cost)
         .sum();
-    let remains = paid - allocated;
+    let spent: i64 = student_schedule
+        .iter()
+        .filter(|e| e.status.is_some())
+        .map(|e| e.cost)
+        .sum();
+    let paid: i64 = student_payments.iter().map(|p| p.sum).sum();
+    let balance = paid - spent;
+    let remains = balance - allocated;
+
+    let alltime_from = student_payments
+        .iter()
+        .map(|p| p.date)
+        .chain(student_schedule.iter().map(|e| e.datetime))
+        .min()
+        .map(|dt| dt.with_timezone(&tz).format("%d %b %Y").to_string());
+    let alltime_to = student_schedule
+        .iter()
+        .map(|e| e.datetime)
+        .max()
+        .map(|dt| dt.with_timezone(&tz).format("%d %b %Y").to_string());
 
     // Build header
     let mut text = markdown_format!("💰 *Balance: {}*\n\n", student.to_string());
-    text.push(&markdown_format!("Balance: {}\n", fmt_money(paid, currency)));
+    match (alltime_from, alltime_to) {
+        (Some(from), Some(to)) => {
+            text.push(&markdown_format!("*All time \\({} — {}\\)*\n", from, to));
+        }
+        _ => {
+            text.push(&markdown_string!("*All time*\n"));
+        }
+    }
+    text.push(&markdown_format!("Paid: {}\n", fmt_money(paid, currency)));
+    text.push(&markdown_format!("Balance: {}\n", fmt_money(balance, currency)));
     text.push(&markdown_format!("Allocated: {}\n", fmt_money(allocated, currency)));
     text.push(&markdown_format!("Remains: {}\n", fmt_money(remains, currency)));
 
@@ -196,7 +234,7 @@ async fn balance_L2<Cmd: BalanceCommand + CallbackBitcode + 'static>(
 
     for e in schedule
         .iter()
-        .filter(|e| &e.student_telegram == &student && e.status.is_some())
+        .filter(|e| &e.student_telegram == &student)
         .filter(|e| {
             let local = e.datetime.with_timezone(&tz);
             local.year() == year && local.month() == month
@@ -206,10 +244,10 @@ async fn balance_L2<Cmd: BalanceCommand + CallbackBitcode + 'static>(
         txns.push((
             e.datetime,
             format!(
-                "{} -{} lesson with {}",
+                "{} {} -{}",
                 date_str,
+                format_entry_label(e, &BookingActor::Student(student.clone())),
                 fmt_money_plain(e.cost, currency),
-                e.teacher_telegram
             ),
         ));
     }
