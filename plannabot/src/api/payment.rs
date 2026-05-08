@@ -78,19 +78,13 @@ async fn payment_P0<Cmd: PaymentCommand + CallbackBitcode + 'static>(
 
     let mut nav_row: Vec<InlineKeyboardButton> = Vec::new();
     if info.has_prev() {
-        let k = CallbackKey::pack(
-            Cmd::payment(PaymentParams::P0(info.page - 1)),
-            &user_proxy,
-        )
-        .await;
+        let k =
+            CallbackKey::pack(Cmd::payment(PaymentParams::P0(info.page - 1)), &user_proxy).await;
         nav_row.push(InlineKeyboardButton::callback_key("<", &k));
     }
     if info.has_next() {
-        let k = CallbackKey::pack(
-            Cmd::payment(PaymentParams::P0(info.page + 1)),
-            &user_proxy,
-        )
-        .await;
+        let k =
+            CallbackKey::pack(Cmd::payment(PaymentParams::P0(info.page + 1)), &user_proxy).await;
         nav_row.push(InlineKeyboardButton::callback_key(">", &k));
     }
     if !nav_row.is_empty() {
@@ -128,8 +122,14 @@ async fn payment_P1<Cmd: PaymentCommand + CallbackBitcode + 'static>(
     let back_key = CallbackKey::pack(Cmd::payment(PaymentParams::P0(0)), &user_proxy).await;
 
     let keyboard = InlineKeyboardMarkup::new(vec![
-        vec![InlineKeyboardButton::callback_key("📋 List Payments", &list_key)],
-        vec![InlineKeyboardButton::callback_key("➕ New Payment", &new_key)],
+        vec![InlineKeyboardButton::callback_key(
+            "📋 List Payments",
+            &list_key,
+        )],
+        vec![InlineKeyboardButton::callback_key(
+            "➕ New Payment",
+            &new_key,
+        )],
         vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)],
     ]);
 
@@ -166,12 +166,7 @@ async fn payment_PL<Cmd: PaymentCommand + CallbackBitcode + 'static>(
         let date = payment.date.date_naive();
         let time = payment.date.time();
         let label = if currency.is_empty() {
-            format!(
-                "{} {}: {}",
-                date,
-                time.format("%H:%M"),
-                payment.sum
-            )
+            format!("{} {}: {}", date, time.format("%H:%M"), payment.sum)
         } else {
             format!(
                 "{} {}: {} {}",
@@ -210,14 +205,25 @@ async fn payment_PL<Cmd: PaymentCommand + CallbackBitcode + 'static>(
         buttons.push(nav_row);
     }
 
-    let back_key =
-        CallbackKey::pack(Cmd::payment(PaymentParams::P1(student.clone())), &user_proxy).await;
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+    let back_key = CallbackKey::pack(
+        Cmd::payment(PaymentParams::P1(student.clone())),
+        &user_proxy,
+    )
+    .await;
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back", &back_key,
+    )]);
 
     let header = if total == 0 {
-        markdown_format!("💰 *Payments: {}*\n\nNo payments found\\.", student.to_string())
+        markdown_format!(
+            "💰 *Payments: {}*\n\nNo payments found\\.",
+            student.to_string()
+        )
     } else {
-        markdown_format!("💰 *Payments: {}*\n\nSelect a payment:", student.to_string())
+        markdown_format!(
+            "💰 *Payments: {}*\n\nSelect a payment:",
+            student.to_string()
+        )
     };
 
     ctx.update_markdown_message(header, Some(InlineKeyboardMarkup::new(buttons)))
@@ -249,7 +255,10 @@ async fn payment_PS<Cmd: PaymentCommand + CallbackBitcode + 'static>(
 
     let mut text = markdown_format!("💰 *Payment: {}*\n\n", student.to_string());
     text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
-    text.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
+    text.push(&markdown_format!(
+        "⏰ Time: {}\n",
+        time.format("%H:%M").to_string()
+    ));
     if currency.is_empty() {
         text.push(&markdown_format!("💵 Amount: {}\n", sum.to_string()));
     } else {
@@ -303,9 +312,12 @@ async fn payment_PD<Cmd: PaymentCommand + CallbackBitcode + 'static>(
     let sum = payment.map(|p| p.sum).unwrap_or(0);
 
     let mut text = markdown_string!("🗑️ *Delete Payment*\n\nDelete this payment?\n\n");
-    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
+    text.push(&markdown_format!("🎓 Student: {}\n", student.to_string()));
     text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
-    text.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
+    text.push(&markdown_format!(
+        "⏰ Time: {}\n",
+        time.format("%H:%M").to_string()
+    ));
     if currency.is_empty() {
         text.push(&markdown_format!("💵 Amount: {}\n", sum.to_string()));
     } else {
@@ -329,10 +341,7 @@ async fn payment_PD<Cmd: PaymentCommand + CallbackBitcode + 'static>(
 
     let keyboard = InlineKeyboardMarkup::new(vec![vec![
         InlineKeyboardButton::callback_key("↩ Back", &back_key),
-        InlineKeyboardButton::switch_inline_query_current_chat(
-            "🗑️ Yes, delete it",
-            confirm_params,
-        ),
+        InlineKeyboardButton::switch_inline_query_current_chat("🗑️ Yes, delete it", confirm_params),
     ]]);
 
     ctx.update_markdown_message(text, Some(keyboard)).await
@@ -352,9 +361,12 @@ async fn payment_PDF<Cmd: Send + Sync + Clone>(
     ctx.state.sheets.delete_payment(&student, dt).await?;
 
     let mut text = markdown_string!("✅ *Payment Deleted*\n\n");
-    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
+    text.push(&markdown_format!("🎓 Student: {}\n", student.to_string()));
     text.push(&markdown_format!("📆 Date: {}\n", date.to_string()));
-    text.push(&markdown_format!("⏰ Time: {}\n", time.format("%H:%M").to_string()));
+    text.push(&markdown_format!(
+        "⏰ Time: {}\n",
+        time.format("%H:%M").to_string()
+    ));
 
     ctx.update_markdown_message(text, None).await
 }
@@ -402,8 +414,11 @@ async fn payment_PN<Cmd: PaymentCommand + CallbackBitcode + 'static>(
     ));
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key =
-        CallbackKey::pack(Cmd::payment(PaymentParams::P1(student.clone())), &user_proxy).await;
+    let back_key = CallbackKey::pack(
+        Cmd::payment(PaymentParams::P1(student.clone())),
+        &user_proxy,
+    )
+    .await;
 
     let new_payment_cmd = format!("/payment new! {} ", student);
     let keyboard = InlineKeyboardMarkup::new(vec![
@@ -443,7 +458,7 @@ async fn payment_PNF<Cmd: Send + Sync + Clone>(
     };
 
     let mut text = markdown_string!("✅ *Payment Added*\n\n");
-    text.push(&markdown_format!("👨\\-🎓 Student: {}\n", student.to_string()));
+    text.push(&markdown_format!("🎓 Student: {}\n", student.to_string()));
     text.push(&markdown_format!("💵 Amount: {}\n", amount_str));
 
     ctx.update_markdown_message(text, None).await
