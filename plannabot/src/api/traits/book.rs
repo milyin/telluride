@@ -452,8 +452,7 @@ fn parse_create(parts: &[String]) -> Result<BookParams> {
     }
     let student: TelegramName = p
         .next("student")?
-        .parse()
-        .map_err(|_| anyhow::anyhow!("expected student TelegramName"))?;
+        .parse()?;
     if p.is_empty() {
         return Ok(BookParams::C2(teacher, student));
     }

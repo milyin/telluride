@@ -269,8 +269,8 @@ impl FromStr for WorktimeParams {
                                 let e: NaiveTime = p.next("end")?.parse()?;
                                 Ok(WorktimeParams::EDHHF(d, s, e))
                             } else {
-                                let y: i32 = p.next("year")?.parse().map_err(|_| anyhow::anyhow!("invalid year"))?;
-                                let m: u32 = p.next("month")?.parse().map_err(|_| anyhow::anyhow!("invalid month"))?;
+                                let y: i32 = p.next("year")?.parse()?;
+                                let m: u32 = p.next("month")?.parse()?;
                                 Ok(WorktimeParams::EAYM(y, m))
                             }
                         }
@@ -292,8 +292,8 @@ impl FromStr for WorktimeParams {
                                 }
                             }
                             _ => {
-                                let y: i32 = p.next("year")?.parse().map_err(|_| anyhow::anyhow!("invalid year"))?;
-                                let m: u32 = p.next("month")?.parse().map_err(|_| anyhow::anyhow!("invalid month"))?;
+                                let y: i32 = p.next("year")?.parse()?;
+                                let m: u32 = p.next("month")?.parse()?;
                                 if forced {
                                     Err(anyhow::anyhow!("remove! requires a date, not year/month"))
                                 } else {
@@ -320,8 +320,8 @@ impl FromStr for WorktimeParams {
                     }
                 } else {
                     // Integer year + month
-                    let y: i32 = p.next("year")?.parse().map_err(|_| anyhow::anyhow!("invalid year"))?;
-                    let m: u32 = p.next("month")?.parse().map_err(|_| anyhow::anyhow!("invalid month"))?;
+                    let y: i32 = p.next("year")?.parse()?;
+                    let m: u32 = p.next("month")?.parse()?;
                     Ok(WorktimeParams::EYM(y, m))
                 }
             }

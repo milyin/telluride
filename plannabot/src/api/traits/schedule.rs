@@ -28,9 +28,7 @@ impl FromStr for ScheduleParams {
         let Some(first) = p.next_opt() else {
             return Ok(ScheduleParams::L0);
         };
-        let w: i32 = first
-            .parse()
-            .map_err(|_| anyhow::anyhow!("expected integer week_offset, got: {}", first))?;
+        let w: i32 = first.parse()?;
         p.finish()?;
         Ok(ScheduleParams::L1(w))
     }
