@@ -1,8 +1,10 @@
+use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::{fmt, ops::Deref, str::FromStr};
 
 use anyhow::bail;
 use chrono::{DateTime, Timelike, Utc};
+use chrono_tz::Tz;
 
 // ── Duration ─────────────────────────────────────────────────────────────────
 
@@ -203,5 +205,109 @@ impl TimePeriod {
             h += 1;
         }
         slots
+    }
+}
+
+// ── Timezone ──────────────────────────────────────────────────────────────────
+
+/// A validated IANA timezone.
+///
+/// Accepts IANA names (`Europe/Berlin`) or numeric UTC offsets (`+3`, `-5`, `0`).
+/// Displays as a compact form: `Etc/GMT-3` → `+3`, IANA names as-is.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Timezone(pub Tz);
+
+impl fmt::Display for Timezone {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = self.0.name();
+        if let Some(rest) = s.strip_prefix("Etc/GMT") {
+            return match rest.parse::<i32>() {
+                Ok(n) => write!(f, "{:+}", -n), // POSIX inversion: Etc/GMT-3 = UTC+3
+                Err(_) if rest.is_empty() => write!(f, "+0"),
+                Err(_) => write!(f, "{s}"),
+            };
+        }
+        write!(f, "{s}")
+    }
+}
+
+impl FromStr for Timezone {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> anyhow::Result<Self> {
+        let s = s.trim();
+        if let Ok(tz) = Tz::from_str(s) {
+            return Ok(Timezone(tz));
+        }
+        let hours: f64 = s.parse().map_err(|_| {
+            anyhow::anyhow!("unknown timezone '{}': not an IANA name or numeric offset", s)
+        })?;
+        if !hours.is_finite() {
+            return Err(anyhow::anyhow!("invalid timezone offset '{s}'"));
+        }
+        let h = hours.round() as i32;
+        if !(-14..=12).contains(&h) {
+            return Err(anyhow::anyhow!("timezone offset {h}h is out of range [-14, +12]"));
+        }
+        let name = match h.cmp(&0) {
+            Ordering::Equal => "Etc/GMT".to_string(),
+            Ordering::Greater => format!("Etc/GMT-{h}"),
+            Ordering::Less => format!("Etc/GMT+{}", -h),
+        };
+        Tz::from_str(&name)
+            .map(Timezone)
+            .map_err(|_| anyhow::anyhow!("cannot resolve offset {h}h to an Etc/GMT zone"))
+    }
+}
+
+impl Deref for Timezone {
+    type Target = Tz;
+    fn deref(&self) -> &Tz {
+        &self.0
+    }
+}
+
+impl TryFrom<&str> for Timezone {
+    type Error = anyhow::Error;
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        s.parse()
+    }
+}
+
+// ── Currency ──────────────────────────────────────────────────────────────────
+
+/// A validated ISO 4217 currency code.
+///
+/// Constructed via [`FromStr`], which validates against the `rusty_money` ISO registry.
+/// Displays as the 3-letter ISO alpha code (`USD`, `EUR`, …).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Currency(pub &'static rusty_money::iso::Currency);
+
+impl fmt::Display for Currency {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.iso_alpha_code)
+    }
+}
+
+impl FromStr for Currency {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> anyhow::Result<Self> {
+        let code = s.trim().to_uppercase();
+        rusty_money::iso::find(&code)
+            .map(Currency)
+            .ok_or_else(|| anyhow::anyhow!("unknown ISO 4217 currency code '{s}'"))
+    }
+}
+
+impl Deref for Currency {
+    type Target = rusty_money::iso::Currency;
+    fn deref(&self) -> &rusty_money::iso::Currency {
+        self.0
+    }
+}
+
+impl TryFrom<&str> for Currency {
+    type Error = anyhow::Error;
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        s.parse()
     }
 }

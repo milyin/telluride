@@ -5,44 +5,22 @@ use anyhow::Result;
 use telluride::utils::split_with_screened_spaces;
 
 use crate::models::TelegramName;
+use crate::types::{Currency, Timezone};
 
-// ---------------------------------------------------------------------------
-// ParsedCurrency — validated ISO 4217 currency, impossible to construct invalid
-// ---------------------------------------------------------------------------
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct ParsedCurrency(pub &'static rusty_money::iso::Currency);
-
-impl fmt::Display for ParsedCurrency {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0.iso_alpha_code)
-    }
-}
-
-impl FromStr for ParsedCurrency {
-    type Err = anyhow::Error;
-    fn from_str(s: &str) -> Result<Self> {
-        let code = s.trim().to_uppercase();
-        rusty_money::iso::find(&code)
-            .map(ParsedCurrency)
-            .ok_or_else(|| anyhow::anyhow!("unknown ISO 4217 currency code '{s}'"))
-    }
-}
-
-/// Serialises `Option<ParsedCurrency>`: `None` → `"-"`, `Some(c)` → ISO code.
+/// Serialises `Option<Currency>`: `None` → `"-"`, `Some(c)` → ISO code.
 /// Parses back: `"-"` → `None`, valid code → `Some(c)`, invalid → error.
-fn fmt_opt_currency(opt: &Option<ParsedCurrency>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+fn fmt_opt_currency(opt: &Option<Currency>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match opt {
         None => write!(f, "-"),
         Some(c) => write!(f, "{c}"),
     }
 }
 
-fn parse_opt_currency(s: &str) -> Result<Option<ParsedCurrency>> {
+fn parse_opt_currency(s: &str) -> Result<Option<Currency>> {
     if s.trim() == "-" {
         Ok(None)
     } else {
-        s.parse::<ParsedCurrency>().map(Some)
+        s.parse::<Currency>().map(Some)
     }
 }
 
@@ -118,9 +96,9 @@ pub enum UserParams {
     /// Teacher add: show instructions + template button
     UTA,
     /// Student add! forced: execute insertion (@u, tz, currency, name)
-    USAF(TelegramName, String, ParsedCurrency, String),
+    USAF(TelegramName, Timezone, Currency, String),
     /// Teacher add! forced: execute insertion (@u, tz, name)
-    UTAF(TelegramName, String, String),
+    UTAF(TelegramName, Timezone, String),
     /// Student delete: show list (page)
     USD(i32),
     /// Teacher delete: show list (page)
@@ -142,9 +120,9 @@ pub enum UserParams {
     /// Teacher edit with name: show full info + pre-filled edit button
     UTEN(TelegramName),
     /// Student edit! forced: execute edit (@u, tz, currency, name); currency "-" means remove
-    USENF(TelegramName, String, Option<ParsedCurrency>, String),
+    USENF(TelegramName, Timezone, Option<Currency>, String),
     /// Teacher edit! forced: execute edit (@u, tz, name)
-    UTENF(TelegramName, String, String),
+    UTENF(TelegramName, Timezone, String),
 }
 
 impl fmt::Display for UserParams {
@@ -224,11 +202,11 @@ impl FromStr for UserParams {
                     .get(2)
                     .ok_or_else(|| anyhow::anyhow!("missing @username"))?
                     .parse()?;
-                let tz = parts
+                let tz: Timezone = parts
                     .get(3)
                     .ok_or_else(|| anyhow::anyhow!("missing timezone"))?
-                    .clone();
-                let currency: ParsedCurrency = parts
+                    .parse()?;
+                let currency: Currency = parts
                     .get(4)
                     .ok_or_else(|| anyhow::anyhow!("missing currency"))?
                     .parse()?;
@@ -244,10 +222,10 @@ impl FromStr for UserParams {
                     .get(2)
                     .ok_or_else(|| anyhow::anyhow!("missing @username"))?
                     .parse()?;
-                let tz = parts
+                let tz: Timezone = parts
                     .get(3)
                     .ok_or_else(|| anyhow::anyhow!("missing timezone"))?
-                    .clone();
+                    .parse()?;
                 let display_name = parts[4..].join(" ");
                 if display_name.is_empty() {
                     return Err(anyhow::anyhow!("missing name"));
@@ -305,11 +283,11 @@ impl FromStr for UserParams {
                     .get(2)
                     .ok_or_else(|| anyhow::anyhow!("missing @username"))?
                     .parse()?;
-                let tz = parts
+                let tz: Timezone = parts
                     .get(3)
                     .ok_or_else(|| anyhow::anyhow!("missing timezone"))?
-                    .clone();
-                let currency: Option<ParsedCurrency> = parse_opt_currency(
+                    .parse()?;
+                let currency: Option<Currency> = parse_opt_currency(
                     parts.get(4).ok_or_else(|| anyhow::anyhow!("missing currency (use '-' to remove)"))?,
                 )?;
                 let display_name = parts[5..].join(" ");
@@ -324,10 +302,10 @@ impl FromStr for UserParams {
                     .get(2)
                     .ok_or_else(|| anyhow::anyhow!("missing @username"))?
                     .parse()?;
-                let tz = parts
+                let tz: Timezone = parts
                     .get(3)
                     .ok_or_else(|| anyhow::anyhow!("missing timezone"))?
-                    .clone();
+                    .parse()?;
                 let display_name = parts[4..].join(" ");
                 if display_name.is_empty() {
                     return Err(anyhow::anyhow!("missing name"));

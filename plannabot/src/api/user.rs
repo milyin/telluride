@@ -1,10 +1,9 @@
 use crate::api::common::PageInfo;
 use crate::api::context::BotCtx;
-use crate::api::traits::user::ParsedCurrency;
 use crate::api::traits::{UserCommand, UserParams};
+use crate::types::{Currency, Timezone};
 use crate::models::{Student, Teacher, TelegramName};
 use anyhow::Result;
-use chrono_tz::Tz;
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::UserProxy;
 use telluride::markdown::MarkdownString;
@@ -45,22 +44,6 @@ pub async fn user<Cmd: UserCommand + CallbackBitcode + 'static>(
             exec_teacher_edit(ctx, name, tz, display_name).await
         }
     }
-}
-
-// ---------------------------------------------------------------------------
-// Helper: short timezone label
-// ---------------------------------------------------------------------------
-
-fn tz_short(tz: Tz) -> String {
-    let s = tz.to_string();
-    if let Some(rest) = s.strip_prefix("Etc/GMT") {
-        return match rest.parse::<i32>() {
-            Ok(n) => format!("{:+}", -n), // POSIX inversion: Etc/GMT-3 = UTC+3
-            Err(_) if rest.is_empty() => "+0".to_string(),
-            Err(_) => s,
-        };
-    }
-    s
 }
 
 // ---------------------------------------------------------------------------
@@ -205,13 +188,13 @@ async fn show_teacher_add<Cmd: UserCommand + CallbackBitcode + 'static>(
 async fn exec_student_add<Cmd: UserCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     name: TelegramName,
-    tz: String,
-    currency: ParsedCurrency,
+    tz: Timezone,
+    currency: Currency,
     display_name: String,
 ) -> Result<()> {
     ctx.state
         .sheets
-        .add_student(&name, &tz, currency.0.iso_alpha_code, &display_name)
+        .add_student(&name, &tz.to_string(), currency.0.iso_alpha_code, &display_name)
         .await?;
     let _ = ctx.state.refresh().await;
 
@@ -226,12 +209,12 @@ async fn exec_student_add<Cmd: UserCommand + CallbackBitcode + 'static>(
 async fn exec_teacher_add<Cmd: UserCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     name: TelegramName,
-    tz: String,
+    tz: Timezone,
     display_name: String,
 ) -> Result<()> {
     ctx.state
         .sheets
-        .add_teacher(&name, &tz, &display_name)
+        .add_teacher(&name, &tz.to_string(), &display_name)
         .await?;
     let _ = ctx.state.refresh().await;
 
@@ -255,12 +238,11 @@ enum ListAction {
 
 fn student_button_label(s: &Student) -> String {
     let currency_str = s.currency.map(|c| c.iso_alpha_code).unwrap_or("-");
-    format!("{} {} · {} · {}", s.name, s.telegram_name, tz_short(s.timezone), currency_str)
+    format!("{} {} · {} · {}", s.name, s.telegram_name, Timezone(s.timezone), currency_str)
 }
 
-
 fn teacher_button_label(t: &Teacher) -> String {
-    format!("{} {} · {}", t.name, t.telegram_name, tz_short(t.timezone))
+    format!("{} {} · {}", t.name, t.telegram_name, Timezone(t.timezone))
 }
 
 async fn show_student_list<Cmd: UserCommand + CallbackBitcode + 'static>(
@@ -421,7 +403,7 @@ async fn show_student_delete_confirm<Cmd: UserCommand + CallbackBitcode + 'stati
                 • Board: {}",
                 name.to_string(),
                 MarkdownString::escape(student.name),
-                MarkdownString::escape(tz_short(student.timezone)),
+                MarkdownString::escape(Timezone(student.timezone).to_string()),
                 MarkdownString::escape(currency_str.to_string()),
                 MarkdownString::escape(zoom_str.to_string()),
                 MarkdownString::escape(board_str.to_string())
@@ -460,7 +442,7 @@ async fn show_teacher_delete_confirm<Cmd: UserCommand + CallbackBitcode + 'stati
                 • Admin: {}",
                 name.to_string(),
                 MarkdownString::escape(teacher.name),
-                MarkdownString::escape(tz_short(teacher.timezone)),
+                MarkdownString::escape(Timezone(teacher.timezone).to_string()),
                 admin_str
             )
         }
@@ -516,15 +498,15 @@ async fn show_student_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
 
     let (text, edit_cmd) = match ctx.state.get_student(&name).await {
         Some(student) => {
-            let currency_opt: Option<ParsedCurrency> = student.currency.map(ParsedCurrency);
+            let currency_opt: Option<Currency> = student.currency.map(Currency);
             let currency_display = currency_opt.as_ref().map(|c| c.0.iso_alpha_code).unwrap_or("-");
             let zoom_str = student.zoom_url.as_deref().unwrap_or("—");
             let board_str = student.board_url.as_deref().unwrap_or("—");
-            let tz_str = tz_short(student.timezone);
+            let tz = Timezone(student.timezone);
 
             let edit_params = UserParams::USENF(
                 name.clone(),
-                tz_str.clone(),
+                tz,
                 currency_opt,
                 student.name.clone(),
             );
@@ -538,7 +520,7 @@ async fn show_student_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
                 Click below to edit timezone, currency, and name\\.",
                 name.to_string(),
                 MarkdownString::escape(student.name),
-                MarkdownString::escape(tz_str),
+                MarkdownString::escape(tz.to_string()),
                 MarkdownString::escape(currency_display.to_string()),
                 MarkdownString::escape(zoom_str.to_string()),
                 MarkdownString::escape(board_str.to_string())
@@ -548,7 +530,7 @@ async fn show_student_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
         None => {
             let edit_params = UserParams::USENF(
                 name.clone(),
-                "TZ".to_string(),
+                Timezone(chrono_tz::UTC),
                 None,
                 "Name Surname".to_string(),
             );
@@ -579,11 +561,11 @@ async fn show_teacher_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
     let (text, edit_cmd) = match ctx.state.get_teacher(&name).await {
         Some(teacher) => {
             let admin_str = if teacher.admin { "yes" } else { "no" };
-            let tz_str = tz_short(teacher.timezone);
+            let tz = Timezone(teacher.timezone);
 
             let edit_params = UserParams::UTENF(
                 name.clone(),
-                tz_str.clone(),
+                tz,
                 teacher.name.clone(),
             );
             let info = markdown_format!(
@@ -594,7 +576,7 @@ async fn show_teacher_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
                 Click below to edit timezone and name\\.",
                 name.to_string(),
                 MarkdownString::escape(teacher.name),
-                MarkdownString::escape(tz_str),
+                MarkdownString::escape(tz.to_string()),
                 admin_str
             );
             (info, format!("/user {edit_params}"))
@@ -602,7 +584,7 @@ async fn show_teacher_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
         None => {
             let edit_params = UserParams::UTENF(
                 name.clone(),
-                "TZ".to_string(),
+                Timezone(chrono_tz::UTC),
                 "Name Surname".to_string(),
             );
             let info = markdown_format!(
@@ -629,14 +611,14 @@ async fn show_teacher_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
 async fn exec_student_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     name: TelegramName,
-    tz: String,
-    currency: Option<ParsedCurrency>,
+    tz: Timezone,
+    currency: Option<Currency>,
     display_name: String,
 ) -> Result<()> {
     let currency_str = currency.as_ref().map(|c| c.0.iso_alpha_code).unwrap_or("");
     ctx.state
         .sheets
-        .update_student(&name, &tz, currency_str, &display_name)
+        .update_student(&name, &tz.to_string(), currency_str, &display_name)
         .await?;
     let _ = ctx.state.refresh().await;
     let text = markdown_format!("✅ Student {} updated successfully\\.", name.to_string());
@@ -646,12 +628,12 @@ async fn exec_student_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
 async fn exec_teacher_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     name: TelegramName,
-    tz: String,
+    tz: Timezone,
     display_name: String,
 ) -> Result<()> {
     ctx.state
         .sheets
-        .update_teacher(&name, &tz, &display_name)
+        .update_teacher(&name, &tz.to_string(), &display_name)
         .await?;
     let _ = ctx.state.refresh().await;
     let text = markdown_format!("✅ Teacher {} updated successfully\\.", name.to_string());
