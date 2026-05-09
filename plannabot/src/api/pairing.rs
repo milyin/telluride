@@ -1,4 +1,5 @@
-use crate::api::common::PageInfo;
+use crate::api::common::{fmt_money, PageInfo};
+use crate::api::user::student_one_line;
 use crate::api::context::BotCtx;
 use crate::api::traits::{PairingParams, StudentCommand};
 use crate::models::{TelegramName, TeacherStudentPairing};
@@ -62,7 +63,9 @@ async fn show_list<Cmd: StudentCommand + CallbackBitcode + 'static>(
         let mut msg = markdown_string!("*Your students:*");
         for p in &pairings {
             let dur = minutes_to_duration(p.duration_minutes);
-            msg.push(&markdown_format!("\n• {} — {}, cost {}", p.student_telegram.to_string(), MarkdownString::escape(dur.to_string()), p.cost));
+            let currency = ctx.state.get_student(&p.student_telegram).await.and_then(|s| s.currency);
+            let cost_str = fmt_money(p.cost, currency);
+            msg.push(&markdown_format!("\n• {} — {}, cost {}", p.student_telegram.to_string(), MarkdownString::escape(dur.to_string()), cost_str));
         }
         msg
     };
@@ -110,7 +113,7 @@ async fn show_add_selection<Cmd: StudentCommand + CallbackBitcode + 'static>(
         let total_pages = (total + PAGE_SIZE - 1) / PAGE_SIZE;
         let mut msg = markdown_format!("*Add student \\(page {}/{}\\):*\n\nSelect a student:", info.page + 1, total_pages);
         for s in &available[info.start..info.end] {
-            msg.push(&markdown_format!("\n• {} \\({}\\)", s.telegram_name.to_string(), MarkdownString::escape(s.name.clone())));
+            msg.push(&markdown_format!("\n• {}", MarkdownString::escape(student_one_line(s))));
         }
         msg
     };
@@ -157,17 +160,31 @@ async fn show_add_form<Cmd: StudentCommand + CallbackBitcode + 'static>(
     let add_cmd = format!("/student {}", PairingParams::PANF(student.clone(), default_dur, 0));
 
     let text = match ctx.state.get_student(&student).await {
-        Some(s) => markdown_format!(
-            "*Add student: {}*\n\n\
-            • Name: {}\n\
-            • Timezone: {}\n\n\
-            Fill in duration and cost, then send the command\\.",
-            student.to_string(),
-            MarkdownString::escape(s.name),
-            MarkdownString::escape(s.timezone.to_string())
-        ),
+        Some(s) => {
+            let currency_str = s.currency.map(|c| c.iso_alpha_code).unwrap_or("—");
+            markdown_format!(
+                "*Add student: {}*\n\n\
+                • Name: {}\n\
+                • Timezone: {}\n\
+                • Currency: {}\n\n\
+                Click the button below to prefill the command, then edit the values and send it\\.\n\n\
+                Format: `/student add\\! {} <duration> <cost>`\n\n\
+                • `duration` — lesson length \\(`1h`, `90m`, `1h30m`, …\\)\n\
+                • `cost` — lesson price \\(integer\\)",
+                student.to_string(),
+                MarkdownString::escape(s.name),
+                MarkdownString::escape(s.timezone.to_string()),
+                MarkdownString::escape(currency_str.to_string()),
+                student.to_string()
+            )
+        }
         None => markdown_format!(
-            "*Add student: {}*\n\nFill in duration and cost, then send the command\\.",
+            "*Add student: {}*\n\n\
+            Click the button below to prefill the command, then edit the values and send it\\.\n\n\
+            Format: `/student add\\! {} <duration> <cost>`\n\n\
+            • `duration` — lesson length \\(`1h`, `90m`, `1h30m`, …\\)\n\
+            • `cost` — lesson price \\(integer\\)",
+            student.to_string(),
             student.to_string()
         ),
     };
@@ -228,14 +245,20 @@ async fn show_edit_form<Cmd: StudentCommand + CallbackBitcode + 'static>(
     let text = match pairing {
         Some(p) => {
             let dur_display = minutes_to_duration(p.duration_minutes);
+            let currency = ctx.state.get_student(&student).await.and_then(|s| s.currency);
+            let cost_str = fmt_money(p.cost, currency);
             markdown_format!(
                 "*Edit student: {}*\n\n\
                 • Duration: {}\n\
                 • Cost: {}\n\n\
-                Edit duration and cost, then send the command\\.",
+                Click the button below to prefill the command with the current values, then edit and send it\\.\n\n\
+                Format: `/student edit\\! {} <duration> <cost>`\n\n\
+                • `duration` — lesson length \\(`1h`, `90m`, `1h30m`, …\\)\n\
+                • `cost` — lesson price \\(integer\\)",
                 student.to_string(),
                 MarkdownString::escape(dur_display.to_string()),
-                p.cost
+                cost_str,
+                student.to_string()
             )
         }
         None => markdown_format!(
@@ -295,18 +318,23 @@ async fn show_remove_confirm<Cmd: StudentCommand + CallbackBitcode + 'static>(
     let text = match ctx.state.get_pairing(&student, teacher).await {
         Some(p) => {
             let dur = minutes_to_duration(p.duration_minutes);
+            let currency = ctx.state.get_student(&student).await.and_then(|s| s.currency);
+            let cost_str = fmt_money(p.cost, currency);
             markdown_format!(
-                "*Remove student: {}*\n\n\
+                "*Remove {} from your students*\n\n\
                 • Duration: {}\n\
                 • Cost: {}\n\n\
-                Confirm removal:",
+                This removes the pairing — the student account is not deleted\\.\n\
+                Confirm:",
                 student.to_string(),
                 MarkdownString::escape(dur.to_string()),
-                p.cost
+                cost_str
             )
         }
         None => markdown_format!(
-            "*Remove student: {}*\n\nConfirm removal:",
+            "*Remove {} from your students*\n\n\
+            This removes the pairing — the student account is not deleted\\.\n\
+            Confirm:",
             student.to_string()
         ),
     };
@@ -367,7 +395,9 @@ async fn show_paired_list<Cmd: StudentCommand + CallbackBitcode + 'static>(
         );
         for p in &pairings[info.start..info.end] {
             let dur = minutes_to_duration(p.duration_minutes);
-            msg.push(&markdown_format!("\n• {} — {}, cost {}", p.student_telegram.to_string(), MarkdownString::escape(dur.to_string()), p.cost));
+            let currency = ctx.state.get_student(&p.student_telegram).await.and_then(|s| s.currency);
+            let cost_str = fmt_money(p.cost, currency);
+            msg.push(&markdown_format!("\n• {} — {}, cost {}", p.student_telegram.to_string(), MarkdownString::escape(dur.to_string()), cost_str));
         }
         msg
     };

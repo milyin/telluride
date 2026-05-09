@@ -22,6 +22,7 @@ pub async fn help(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
         /balance \\- View student balances\n\
         /book \\- Book a lesson for a student\n\
         /payment \\- View student balances and record payments\n\
+        /student \\- Manage your students\n\
         /worktime \\- Manage your working hours\n\
         /admin \\- Enter admin mode\n\
         /refresh \\- Forcedly refresh the data\n\n\

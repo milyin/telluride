@@ -331,7 +331,7 @@ async fn show_user_selection<Cmd: UserCommand + CallbackBitcode + 'static>(
     ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
 }
 
-fn student_one_line(s: &Student) -> String {
+pub fn student_one_line(s: &Student) -> String {
     let currency_str = s.currency.map(|c| c.iso_alpha_code).unwrap_or("-");
     format!("{} · {} · {} · {}", s.telegram_name, s.name, Timezone(s.timezone), currency_str)
 }
