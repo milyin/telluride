@@ -113,7 +113,7 @@ pub enum BookParams {
         TelegramName,
         NaiveDate,
         NaiveTime,
-        LessonStatus,
+        Option<LessonStatus>,
     ),
 }
 
@@ -168,7 +168,11 @@ impl fmt::Display for BookParams {
             }
             BookParams::S0(t, s2, date, time) => format_screen_spaces!(s, t, s2, date, time),
             BookParams::SF(t, s2, date, time, status) => {
-                format_screen_spaces!(sf, t, s2, date, time, status)
+                let status_str = match status {
+                    None => "clear".to_string(),
+                    Some(s) => s.as_sheet_str().to_string(),
+                };
+                format_screen_spaces!(sf, t, s2, date, time, status_str)
             }
         }
         .fmt(f)
@@ -281,7 +285,12 @@ impl FromStr for BookParams {
                 let student: TelegramName = p.next("student")?.parse()?;
                 let date: NaiveDate = p.next("date")?.parse()?;
                 let time: NaiveTime = p.next("time")?.parse()?;
-                let status: LessonStatus = p.next("status")?.parse()?;
+                let status_str = p.next("status")?;
+                let status: Option<LessonStatus> = if status_str == "clear" {
+                    None
+                } else {
+                    Some(status_str.parse()?)
+                };
                 p.finish()?;
                 Ok(BookParams::SF(teacher, student, date, time, status))
             }
@@ -434,7 +443,11 @@ impl From<&BookParams> for MarkdownString {
                     "⏰ Time: {}\n",
                     time.format("%H:%M").to_string()
                 ));
-                s.push(&markdown_format!("📊 Status: {}\n", status.to_string()));
+                let status_display = match status {
+                    None => "clear".to_string(),
+                    Some(s) => s.to_string(),
+                };
+                s.push(&markdown_format!("📊 Status: {}\n", status_display));
             }
         }
         s

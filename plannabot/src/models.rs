@@ -63,19 +63,19 @@ sheet_struct! {
 }
 
 /// Status of a scheduled lesson.
-/// `None` in the sheet field means the lesson is planned.
+/// `None` in the sheet field means the lesson is planned (future) or passed (past), depending on datetime.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LessonStatus {
-    Passed,
     Absent,
+    Cancelled,
 }
 
 impl LessonStatus {
-    /// Parse from a sheet string. Returns `None` for empty or unrecognised values (= planned).
+    /// Parse from a sheet string. Returns `None` for empty or unrecognised values (= auto planned/passed).
     pub fn from_str(s: &str) -> Option<Self> {
         match s.trim().to_lowercase().as_str() {
-            "passed" | "done" | "completed" => Some(LessonStatus::Passed),
             "absent" => Some(LessonStatus::Absent),
+            "cancelled" => Some(LessonStatus::Cancelled),
             _ => None,
         }
     }
@@ -83,8 +83,8 @@ impl LessonStatus {
     /// The string written to the sheet for this status.
     pub fn as_sheet_str(&self) -> &'static str {
         match self {
-            LessonStatus::Passed => "passed",
             LessonStatus::Absent => "absent",
+            LessonStatus::Cancelled => "cancelled",
         }
     }
 }

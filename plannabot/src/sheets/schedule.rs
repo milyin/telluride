@@ -231,7 +231,7 @@ impl SheetsClient {
         student: &TelegramName,
         date: NaiveDate,
         time: NaiveTime,
-        status: &crate::models::LessonStatus,
+        status: Option<&crate::models::LessonStatus>,
     ) -> Result<()> {
         let target_dt = date.and_time(time).and_utc();
 
@@ -273,9 +273,13 @@ impl SheetsClient {
 
             let row_num = row_idx + 1;
             let cell_range = format!("{SHEET_SCHEDULE}!{status_col_letter}{row_num}");
+            let status_value = match status {
+                Some(s) => s.as_sheet_str(),
+                None => "",
+            };
             self.update_values(
                 &cell_range,
-                vec![vec![serde_json::json!(status.as_sheet_str())]],
+                vec![vec![serde_json::json!(status_value)]],
             )
             .await
             .context("Failed to write lesson status")?;

@@ -13,7 +13,7 @@ use crate::api::menus::show_annotated_list;
 use crate::api::traits::BookingActor;
 use crate::api::context::BotCtx;
 use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams};
-use crate::models::TelegramName;
+use crate::models::{LessonStatus, TelegramName};
 
 pub async fn balance<Cmd: BalanceCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
@@ -68,16 +68,18 @@ async fn balance_L0<Cmd: BalanceCommand + CallbackBitcode + 'static>(
     let (schedule, _) = ctx.state.sheets.get_schedule().await?;
     let (all_payments, _) = ctx.state.sheets.get_payments().await?;
 
+    let now = Utc::now();
     let mut items: Vec<(TelegramName, MarkdownString)> = Vec::new();
     for student in &students {
         let allocated: i64 = schedule
             .iter()
-            .filter(|e| &e.student_telegram == student && e.status.is_none())
+            .filter(|e| &e.student_telegram == student && e.status.is_none() && e.datetime > now)
             .map(|e| e.cost)
             .sum();
         let spent: i64 = schedule
             .iter()
-            .filter(|e| &e.student_telegram == student && e.status.is_some())
+            .filter(|e| &e.student_telegram == student && e.status != Some(LessonStatus::Cancelled))
+            .filter(|e| e.status.is_some() || e.datetime <= now)
             .map(|e| e.cost)
             .sum();
         let paid: i64 = all_payments
@@ -147,14 +149,16 @@ async fn balance_L2<Cmd: BalanceCommand + CallbackBitcode + 'static>(
         .filter(|p| &p.student_telegram == &student)
         .collect();
 
+    let now = Utc::now();
     let allocated: i64 = student_schedule
         .iter()
-        .filter(|e| e.status.is_none())
+        .filter(|e| e.status.is_none() && e.datetime > now)
         .map(|e| e.cost)
         .sum();
     let spent: i64 = student_schedule
         .iter()
-        .filter(|e| e.status.is_some())
+        .filter(|e| e.status != Some(LessonStatus::Cancelled))
+        .filter(|e| e.status.is_some() || e.datetime <= now)
         .map(|e| e.cost)
         .sum();
     let paid: i64 = student_payments.iter().map(|p| p.sum).sum();

@@ -2,6 +2,7 @@ use crate::api::context::BotCtx;
 use crate::api::traits::BookingActor;
 use crate::models::{LessonStatus, ScheduleEntry, UserRole};
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use rusty_money::iso;
 use telluride::markdown::{MarkdownString, MarkdownStringMessage};
 use telluride::{markdown_format, markdown_string};
@@ -36,11 +37,12 @@ pub async fn start(ctx: &BotCtx<impl Send + Sync + Clone>, username: &str) -> Re
     Ok(())
 }
 
-pub fn status_label(status: &Option<LessonStatus>) -> &'static str {
+pub fn status_label(status: &Option<LessonStatus>, datetime: DateTime<Utc>) -> &'static str {
     match status {
+        None if datetime <= Utc::now() => "✅",
         None => "📅",
-        Some(LessonStatus::Passed) => "✅",
         Some(LessonStatus::Absent) => "🚫",
+        Some(LessonStatus::Cancelled) => "❌",
     }
 }
 
@@ -52,7 +54,7 @@ pub fn format_entry_label(entry: &ScheduleEntry, actor: &BookingActor) -> String
     let duration = format_duration(entry.duration_minutes as i64);
     format!(
         "{} {} {} {} {}",
-        status_label(&entry.status),
+        status_label(&entry.status, entry.datetime),
         entry.datetime.time().format("%H:%M"),
         duration,
         role_icon,

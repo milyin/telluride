@@ -10,7 +10,7 @@ use crate::api::common::{PageInfo, fmt_money, fmt_money_plain};
 use crate::api::context::BotCtx;
 use crate::api::traits::payment::PaymentParams;
 use crate::api::traits::{PaymentActor, PaymentCommand};
-use crate::models::TelegramName;
+use crate::models::{LessonStatus, TelegramName};
 
 pub async fn payment<Cmd: PaymentCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
@@ -348,9 +348,11 @@ async fn payment_PN<Cmd: PaymentCommand + CallbackBitcode + 'static>(
 
     let currency = ctx.state.get_student(&student).await.and_then(|s| s.currency);
 
-    let allocated: i64 = schedule
+    let now = Utc::now();
+    let spent: i64 = schedule
         .iter()
-        .filter(|e| e.student_telegram == student && e.status.is_some())
+        .filter(|e| e.student_telegram == student && e.status != Some(LessonStatus::Cancelled))
+        .filter(|e| e.status.is_some() || e.datetime <= now)
         .map(|e| e.cost)
         .sum();
     let paid: i64 = all_payments
@@ -358,7 +360,7 @@ async fn payment_PN<Cmd: PaymentCommand + CallbackBitcode + 'static>(
         .filter(|p| p.student_telegram == student)
         .map(|p| p.sum)
         .sum();
-    let balance = paid - allocated;
+    let balance = paid - spent;
     let mut text = markdown_format!("💰 *New Payment: {}*\n\n", student.to_string());
     text.push(&markdown_format!("Balance: {}\n\n", fmt_money(balance, currency)));
     text.push(&markdown_string!(

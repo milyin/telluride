@@ -1043,15 +1043,9 @@ async fn book_S0<Cmd: BookCommand + CallbackBitcode + 'static>(
     )));
     text.push(&markdown_string!("\nSelect new status:"));
 
-    let passed_params = format!(
+    let clear_params = format!(
         "/book {}",
-        BookParams::SF(
-            teacher.clone(),
-            student.clone(),
-            date,
-            time,
-            LessonStatus::Passed
-        )
+        BookParams::SF(teacher.clone(), student.clone(), date, time, None)
     );
     let absent_params = format!(
         "/book {}",
@@ -1060,7 +1054,17 @@ async fn book_S0<Cmd: BookCommand + CallbackBitcode + 'static>(
             student.clone(),
             date,
             time,
-            LessonStatus::Absent
+            Some(LessonStatus::Absent)
+        )
+    );
+    let cancelled_params = format!(
+        "/book {}",
+        BookParams::SF(
+            teacher.clone(),
+            student.clone(),
+            date,
+            time,
+            Some(LessonStatus::Cancelled)
         )
     );
 
@@ -1073,8 +1077,9 @@ async fn book_S0<Cmd: BookCommand + CallbackBitcode + 'static>(
 
     let keyboard = InlineKeyboardMarkup::new(vec![vec![
         InlineKeyboardButton::callback_key("↩ Back", &back_key),
-        InlineKeyboardButton::switch_inline_query_current_chat("✅ Passed", passed_params),
+        InlineKeyboardButton::switch_inline_query_current_chat("🗑 Clear", clear_params),
         InlineKeyboardButton::switch_inline_query_current_chat("🚫 Absent", absent_params),
+        InlineKeyboardButton::switch_inline_query_current_chat("❌ Cancelled", cancelled_params),
     ]]);
 
     ctx.update_markdown_message(text, Some(keyboard)).await?;
@@ -1087,11 +1092,11 @@ async fn book_SF<Cmd: Send + Sync + Clone>(
     student: TelegramName,
     date: NaiveDate,
     time: NaiveTime,
-    status: LessonStatus,
+    status: Option<LessonStatus>,
 ) -> Result<()> {
     ctx.state
         .sheets
-        .update_schedule_status(&teacher, &student, date, time, &status)
+        .update_schedule_status(&teacher, &student, date, time, status.as_ref())
         .await?;
 
     let mut text = markdown_string!("✅ *Status Updated*\n\n");
