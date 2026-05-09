@@ -49,10 +49,8 @@ impl FromStr for BalanceParams {
         if p.is_empty() {
             return Ok(BalanceParams::L1(student));
         }
-        let year: i32 = p.next("year")?.parse()
-            .map_err(|_| anyhow::anyhow!("invalid year"))?;
-        let month: u32 = p.next("month")?.parse()
-            .map_err(|_| anyhow::anyhow!("invalid month"))?;
+        let year: i32 = p.next("year")?.parse()?;
+        let month: u32 = p.next("month")?.parse()?;
         p.finish()?;
         Ok(BalanceParams::L2(student, year, month))
     }
