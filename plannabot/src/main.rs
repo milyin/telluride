@@ -2,6 +2,7 @@ mod api;
 mod bot;
 mod config;
 mod models;
+mod notification_task;
 mod sheets;
 mod state;
 mod types;
@@ -200,6 +201,8 @@ async fn main() {
             log::debug!("Unhandled update: {:?}", update.kind);
             respond(())
         });
+
+    tokio::spawn(notification_task::run(bot.clone(), Arc::clone(&state)));
 
     Dispatcher::builder(bot, handler)
         .dependencies(dptree::deps![

@@ -10,7 +10,8 @@ pub async fn help(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
         /help \\- Display this help message\n\
         /schedule \\- Show your planned lessons\n\
         /balance \\- View your balance\n\
-        /book \\- Book a lesson"
+        /book \\- Book a lesson\n\
+        /notification \\- Manage lesson reminders"
     );
     ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
     Ok(())

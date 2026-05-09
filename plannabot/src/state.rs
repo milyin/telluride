@@ -61,6 +61,10 @@ pub struct BotState {
 
     /// The time of the last successful data reload from the spreadsheet.
     last_reload: Mutex<Option<DateTime<Utc>>>,
+
+    /// (student_telegram, lesson_datetime) pairs for which a notification has
+    /// already been sent this process lifetime. Never cleared on reload.
+    sent_notifications: RwLock<HashSet<(TelegramName, DateTime<Utc>)>>,
 }
 
 pub struct BotStats {
@@ -88,6 +92,7 @@ impl BotState {
             last_errors: RwLock::new(Vec::new()),
             notified_teachers: RwLock::new(HashSet::new()),
             last_reload: Mutex::new(None),
+            sent_notifications: RwLock::new(HashSet::new()),
         }
     }
 
@@ -407,6 +412,20 @@ impl BotState {
     /// Looks up a teacher directly by telegram name.
     pub async fn get_teacher(&self, telegram_name: &TelegramName) -> Option<crate::models::Teacher> {
         self.teachers.read().await.get(telegram_name.as_str()).cloned()
+    }
+
+    // -----------------------------------------------------------------------
+    // Notification tracking API
+    // -----------------------------------------------------------------------
+
+    /// Records that a notification for `(student, lesson_dt)` has been sent.
+    pub async fn mark_notification_sent(&self, student: TelegramName, lesson_dt: DateTime<Utc>) {
+        self.sent_notifications.write().await.insert((student, lesson_dt));
+    }
+
+    /// Returns `true` if a notification for `(student, lesson_dt)` was already sent.
+    pub async fn is_notification_sent(&self, student: &TelegramName, lesson_dt: DateTime<Utc>) -> bool {
+        self.sent_notifications.read().await.contains(&(student.clone(), lesson_dt))
     }
 
     // -----------------------------------------------------------------------

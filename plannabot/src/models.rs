@@ -3,7 +3,7 @@ use std::fmt;
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc, Weekday};
 use chrono_tz::Tz;
 
-pub use crate::types::{TelegramName, TimePeriod};
+pub use crate::types::{Duration, TelegramName, TimePeriod};
 
 macro_rules! sheet_struct {
     (
@@ -48,6 +48,10 @@ sheet_struct! {
         pub name: String,
         pub timezone: Tz,
         pub currency: Option<&'static rusty_money::iso::Currency>,
+        /// Telegram ChatId (0 = not yet recorded).
+        pub chat_id: i64,
+        /// How long before the lesson to send a reminder. `None` = no reminder.
+        pub notification_delay: Option<Duration>,
     }
 }
 
@@ -59,6 +63,8 @@ sheet_struct! {
         pub name: String,
         pub timezone: Tz,
         pub admin: bool,
+        /// Telegram ChatId (0 = not yet recorded).
+        pub chat_id: i64,
     }
 }
 

@@ -11,6 +11,7 @@ use std::str::FromStr;
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc, Weekday};
 use chrono_tz::Tz;
+use crate::types::Duration;
 
 use crate::models::{LessonStatus, SheetParseError, TelegramName};
 
@@ -401,6 +402,29 @@ impl FromSheet for Option<Weekday> {
             Ok(d) => Some(d),
             Err(msg) => {
                 push_error(schema, row_num, col_name, msg, errors);
+                None
+            }
+        }
+    }
+}
+
+/// Empty cell → `None` (silent). Non-empty but unparseable → `None` + error logged.
+impl FromSheet for Option<Duration> {
+    fn from_sheet(
+        schema: &SheetSchema,
+        row: &[String],
+        row_num: usize,
+        col_name: &str,
+        errors: &mut Vec<SheetParseError>,
+    ) -> Self {
+        let raw = schema.get_str(row, col_name);
+        if raw.trim().is_empty() {
+            return None;
+        }
+        match raw.parse::<Duration>() {
+            Ok(d) => Some(d),
+            Err(e) => {
+                push_error(schema, row_num, col_name, e.to_string(), errors);
                 None
             }
         }

@@ -106,6 +106,10 @@ async fn teacher_handle(
         .try_send_errors_to_teacher(&bot, msg.chat.id, &teacher.telegram_name)
         .await;
 
+    if teacher.chat_id != msg.chat.id.0 {
+        let _ = state.sheets.update_teacher_chat_id(&teacher.telegram_name, msg.chat.id.0).await;
+    }
+
     let user_id: UserId = msg.from.as_ref().unwrap().id;
     let ctx = BotCtx { bot, chat_id: msg.chat.id, state, user_id, callback_storage, message_id };
 

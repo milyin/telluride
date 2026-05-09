@@ -47,6 +47,7 @@ impl SheetsClient {
             let teacher = Teacher {
                 timezone: schema.get_field::<Tz>(row, row_num, Teacher::TIMEZONE, &mut errors),
                 admin: schema.get_field::<bool>(row, row_num, Teacher::ADMIN, &mut errors),
+                chat_id: schema.get_field::<i64>(row, row_num, Teacher::CHAT_ID, &mut errors),
                 custom: schema.get_custom(row, TEACHERS_COLS),
                 telegram_name: telegram_name.clone(),
                 name: schema.get_field::<String>(row, row_num, Teacher::NAME, &mut errors),
@@ -153,6 +154,57 @@ impl SheetsClient {
             }
             if let Some(idx) = schema.get_col(Teacher::NAME) {
                 updated_row[idx] = name.to_string();
+            }
+
+            let sheet_row = row_idx + 1;
+            let last_col = col_index_to_letter(updated_row.len().saturating_sub(1));
+            let update_range = format!("{SHEET_TEACHERS}!A{sheet_row}:{last_col}{sheet_row}");
+            let values: Vec<Vec<serde_json::Value>> = vec![updated_row
+                .into_iter()
+                .map(serde_json::Value::String)
+                .collect()];
+            self.update_values(&update_range, values).await?;
+            return Ok(());
+        }
+
+        Err(anyhow::anyhow!("Teacher {} not found in sheet", telegram_name))
+    }
+
+    /// Updates the `chat_id` column for an existing teacher row.
+    pub async fn update_teacher_chat_id(
+        &self,
+        telegram_name: &TelegramName,
+        chat_id: i64,
+    ) -> Result<()> {
+        let range = format!("{SHEET_TEACHERS}!A:Z");
+        let rows = self
+            .get_values(&range)
+            .await
+            .context("Failed to get Teachers sheet data")?;
+
+        if rows.is_empty() {
+            return Err(anyhow::anyhow!("Teachers sheet is empty"));
+        }
+
+        let schema = SheetSchema::new(SHEET_TEACHERS.to_string(), rows[0].clone());
+
+        for (row_idx, row) in rows.iter().enumerate().skip(1) {
+            if row.is_empty() || row.iter().all(|c| c.is_empty()) {
+                continue;
+            }
+            let row_name = TelegramName::try_from(schema.get_str(row, Teacher::TELEGRAM_NAME)).ok();
+            if row_name.as_ref() != Some(telegram_name) {
+                continue;
+            }
+
+            let mut updated_row: Vec<String> = row.clone();
+            let needed_len = schema.headers.len();
+            if updated_row.len() < needed_len {
+                updated_row.resize(needed_len, String::new());
+            }
+
+            if let Some(idx) = schema.get_col(Teacher::CHAT_ID) {
+                updated_row[idx] = chat_id.to_string();
             }
 
             let sheet_row = row_idx + 1;

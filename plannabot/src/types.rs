@@ -9,7 +9,7 @@ use chrono_tz::Tz;
 // ── Duration ─────────────────────────────────────────────────────────────────
 
 /// Wraps `humantime::Duration` with compact `Display` formatting (`"1h30m"` instead of `"1h 30m"`).
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Duration(humantime::Duration);
 
 impl fmt::Display for Duration {

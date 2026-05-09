@@ -1,6 +1,7 @@
 pub mod admin;
 pub mod balance;
 pub mod book;
+pub mod notification;
 pub mod common;
 pub mod context;
 pub mod impersonate;

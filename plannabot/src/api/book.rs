@@ -628,6 +628,21 @@ async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
     ));
     text.push(&markdown_format!("📊 Status: {}\n", status_str));
 
+    if let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await {
+        if let Some(zoom) = &pairing.zoom_url {
+            text.push(&markdown_format!(
+                "🎥 Zoom: {}\n",
+                MarkdownString::escape(zoom.clone())
+            ));
+        }
+        if let Some(board) = &pairing.board_url {
+            text.push(&markdown_format!(
+                "📋 Board: {}\n",
+                MarkdownString::escape(board.clone())
+            ));
+        }
+    }
+
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key = CallbackKey::pack(Cmd::book(BookParams::U1(date)), &user_proxy).await;
 

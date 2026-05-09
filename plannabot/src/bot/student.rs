@@ -1,6 +1,6 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor, ScheduleCommand, ScheduleParams};
+use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor, NotificationCommand, NotificationParams, ScheduleCommand, ScheduleParams};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole, UserRole};
 use crate::state::BotState;
@@ -26,6 +26,8 @@ pub enum StudentCommand {
         description = "book a lesson (optionally provide: teacher_name date hour duration)"
     )]
     Book(String),
+    #[command(description = "manage lesson notifications")]
+    Notification(String),
 }
 
 impl telluride::command::CallbackBitcode for StudentCommand {}
@@ -45,6 +47,12 @@ impl ScheduleCommand for StudentCommand {
 impl BalanceCommand for StudentCommand {
     fn balance(params: BalanceParams) -> Self {
         StudentCommand::Balance(params.to_string())
+    }
+}
+
+impl NotificationCommand for StudentCommand {
+    fn notification(params: NotificationParams) -> Self {
+        StudentCommand::Notification(params.to_string())
     }
 }
 
@@ -83,6 +91,10 @@ async fn student_handle(
         return Ok(());
     };
 
+    if student.chat_id != msg.chat.id.0 {
+        let _ = state.sheets.update_student_chat_id(&student.telegram_name, msg.chat.id.0).await;
+    }
+
     let user_id = msg.from.as_ref().unwrap().id;
     let ctx = BotCtx { bot, chat_id: msg.chat.id, state, user_id, callback_storage, message_id };
 
@@ -97,6 +109,9 @@ async fn student_handle(
         }
         StudentCommand::Book(params) => {
             api::book::book(&ctx, params, &BookingActor::Student(student.telegram_name.clone())).await
+        }
+        StudentCommand::Notification(params) => {
+            api::notification::notification(&ctx, params, &student).await
         }
     };
 

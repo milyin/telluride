@@ -12,6 +12,7 @@ pub async fn help(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
         /schedule \\- Show the impersonated student's planned lessons\n\
         /balance \\- View the impersonated student's balance\n\
         /book \\- Book a lesson as the impersonated student\n\
+        /notification \\- Manage lesson reminders\n\
         /quit \\- Exit impersonation mode"
     );
     ctx.bot.send_markdown_message(ctx.chat_id, text).await?;

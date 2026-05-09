@@ -1,6 +1,6 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor, ScheduleCommand, ScheduleParams};
+use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor, NotificationCommand, NotificationParams, ScheduleCommand, ScheduleParams};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -28,6 +28,8 @@ pub enum ImpersonateStudentCommand {
         description = "book a lesson as the impersonated student (optionally provide: teacher_name date hour duration)"
     )]
     Book(String),
+    #[command(description = "manage lesson notifications for the impersonated student")]
+    Notification(String),
     #[command(description = "exit impersonation mode")]
     Quit,
 }
@@ -49,6 +51,12 @@ impl ScheduleCommand for ImpersonateStudentCommand {
 impl BalanceCommand for ImpersonateStudentCommand {
     fn balance(params: BalanceParams) -> Self {
         ImpersonateStudentCommand::Balance(params.to_string())
+    }
+}
+
+impl NotificationCommand for ImpersonateStudentCommand {
+    fn notification(params: NotificationParams) -> Self {
+        ImpersonateStudentCommand::Notification(params.to_string())
     }
 }
 
@@ -110,6 +118,9 @@ async fn impersonate_student_handle(
         }
         ImpersonateStudentCommand::Book(params) => {
             api::book::book(&ctx, params, &BookingActor::Student(impersonated_name.clone())).await
+        }
+        ImpersonateStudentCommand::Notification(params) => {
+            api::notification::notification(&ctx, params, &impersonated_student).await
         }
         ImpersonateStudentCommand::Quit => {
             api::impersonate_student::quit(&ctx, &acting_teacher).await

@@ -1,6 +1,7 @@
 pub mod balance;
 pub mod book;
 pub mod impersonate;
+pub mod notification;
 pub mod payment;
 pub mod schedule;
 pub mod student;
@@ -9,6 +10,7 @@ pub mod worktime;
 pub use balance::{BalanceActor, BalanceParams};
 pub use book::{BookParams, BookingActor};
 pub use impersonate::ImpersonateParams;
+pub use notification::{NotificationCommand, NotificationParams};
 pub use payment::{PaymentActor, PaymentParams};
 pub use schedule::ScheduleParams;
 pub use student::{PairingParams, StudentCommand};
