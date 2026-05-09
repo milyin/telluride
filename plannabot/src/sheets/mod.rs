@@ -467,7 +467,7 @@ impl SheetsClient {
     }
 
     /// Applies number/date/time/currency formatting to known columns.
-    async fn apply_column_formats(&self, sheet_name: &str, schema: &SheetSchema) -> Result<()> {
+    pub(crate) async fn apply_column_formats(&self, sheet_name: &str, schema: &SheetSchema) -> Result<()> {
         let sheet_id = self.get_sheet_id(sheet_name).await?;
 
         let mut requests: Vec<api::Request> = Vec::new();
@@ -481,7 +481,7 @@ impl SheetsClient {
                     range: Some(api::GridRange {
                         sheet_id: Some(sheet_id),
                         start_row_index: Some(1),
-                        end_row_index: None,
+                        end_row_index: Some(1_000_000),
                         start_column_index: Some(idx as i32),
                         end_column_index: Some(idx as i32 + 1),
                     }),

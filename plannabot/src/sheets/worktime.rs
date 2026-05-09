@@ -236,12 +236,14 @@ impl SheetsClient {
         values.insert(Worktime::START_TIME, start.format("%H:%M").to_string());
         values.insert(Worktime::END_TIME, end.format("%H:%M").to_string());
 
+        let schema = SheetSchema::new(SHEET_WORKTIME.to_string(), headers.clone());
         let row: Vec<serde_json::Value> = headers
             .iter()
             .map(|h| serde_json::Value::String(values.get(h.as_str()).cloned().unwrap_or_default()))
             .collect();
 
-        self.append_row(SHEET_WORKTIME, row).await
+        self.append_row(SHEET_WORKTIME, row).await?;
+        self.apply_column_formats(SHEET_WORKTIME, &schema).await
     }
 
     /// Appends a date-specific exception worktime row.
@@ -265,12 +267,14 @@ impl SheetsClient {
         values.insert(Worktime::START_TIME, start.format("%H:%M").to_string());
         values.insert(Worktime::END_TIME, end.format("%H:%M").to_string());
 
+        let schema = SheetSchema::new(SHEET_WORKTIME.to_string(), headers.clone());
         let row: Vec<serde_json::Value> = headers
             .iter()
             .map(|h| serde_json::Value::String(values.get(h.as_str()).cloned().unwrap_or_default()))
             .collect();
 
-        self.append_row(SHEET_WORKTIME, row).await
+        self.append_row(SHEET_WORKTIME, row).await?;
+        self.apply_column_formats(SHEET_WORKTIME, &schema).await
     }
 
     /// Deletes a weekday worktime row identified by teacher + weekday + start_time.

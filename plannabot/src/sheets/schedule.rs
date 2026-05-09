@@ -151,6 +151,7 @@ impl SheetsClient {
         values.insert("duration_minutes", duration_minutes.to_string());
         values.insert("cost", cost.to_string());
 
+        let schema = SheetSchema::new(SHEET_SCHEDULE.to_string(), headers.clone());
         let row: Vec<serde_json::Value> = headers
             .iter()
             .map(|h| {
@@ -160,7 +161,8 @@ impl SheetsClient {
             })
             .collect();
 
-        self.append_row(SHEET_SCHEDULE, row).await
+        self.append_row(SHEET_SCHEDULE, row).await?;
+        self.apply_column_formats(SHEET_SCHEDULE, &schema).await
     }
 
     /// Deletes a planned lesson row from the Schedule sheet.

@@ -157,6 +157,7 @@ impl SheetsClient {
         values.insert("date", date_str);
         values.insert("sum", sum.to_string());
 
+        let schema = SheetSchema::new(SHEET_PAYMENTS.to_string(), headers.clone());
         let row: Vec<serde_json::Value> = headers
             .iter()
             .map(|h| {
@@ -166,6 +167,7 @@ impl SheetsClient {
             })
             .collect();
 
-        self.append_row(SHEET_PAYMENTS, row).await
+        self.append_row(SHEET_PAYMENTS, row).await?;
+        self.apply_column_formats(SHEET_PAYMENTS, &schema).await
     }
 }
