@@ -213,29 +213,32 @@ impl TimePeriod {
 /// A validated IANA timezone.
 ///
 /// Accepts IANA names (`Europe/Berlin`) or numeric UTC offsets (`+3`, `-5`, `0`).
-/// Displays as a compact form: `Etc/GMT-3` → `+3`, IANA names as-is.
+/// Displays as the IANA name. Use [`to_param`](Self::to_param) for command-line serialization.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Timezone(pub Tz);
 
 impl fmt::Display for Timezone {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = self.0.name();
-        if name.starts_with("Etc/") {
+        write!(f, "{}", self.0.name())
+    }
+}
+
+impl Timezone {
+    /// Returns the form suitable for command-line parameters:
+    /// numeric offset (`+3`, `-10`, `+0`) for `Etc/` zones, IANA name for all others.
+    pub fn to_param(&self) -> String {
+        if self.0.name().starts_with("Etc/") {
             use chrono::{Offset as _, TimeZone as _, Utc};
-            let fix = Utc.timestamp_opt(0, 0).unwrap()
+            let hours = Utc.timestamp_opt(0, 0).unwrap()
                 .with_timezone(&self.0)
                 .offset()
-                .fix();
-            let total_secs = fix.local_minus_utc();
-            let hours = total_secs / 3600;
-            let mins = (total_secs.abs() % 3600) / 60;
-            return if mins == 0 {
-                write!(f, "UTC{:+}", hours)
-            } else {
-                write!(f, "UTC{:+}:{:02}", hours, mins)
-            };
+                .fix()
+                .local_minus_utc()
+                / 3600;
+            format!("{:+}", hours)
+        } else {
+            self.0.name().to_string()
         }
-        write!(f, "{name}")
     }
 }
 

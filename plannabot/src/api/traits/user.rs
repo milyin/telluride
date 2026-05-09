@@ -145,12 +145,12 @@ impl fmt::Display for UserParams {
             UserParams::USA => write!(f, "{student} {add}"),
             UserParams::UTA => write!(f, "{teacher} {add}"),
             UserParams::USAF(name, tz, currency, display_name) => {
-                write!(f, "{student} {add_f} {name} {tz} ")?;
+                write!(f, "{student} {add_f} {name} {} ", tz.to_param())?;
                 fmt::Display::fmt(currency, f)?;
                 write!(f, " {display_name}")
             }
             UserParams::UTAF(name, tz, display_name) => {
-                write!(f, "{teacher} {add_f} {name} {tz} {display_name}")
+                write!(f, "{teacher} {add_f} {name} {} {display_name}", tz.to_param())
             }
             UserParams::USD(page) => write!(f, "{student} {del} {page}"),
             UserParams::UTD(page) => write!(f, "{teacher} {del} {page}"),
@@ -163,12 +163,12 @@ impl fmt::Display for UserParams {
             UserParams::USEN(name) => write!(f, "{student} {edit} {name}"),
             UserParams::UTEN(name) => write!(f, "{teacher} {edit} {name}"),
             UserParams::USENF(name, tz, currency, display_name) => {
-                write!(f, "{student} {edit_f} {name} {tz} ")?;
+                write!(f, "{student} {edit_f} {name} {} ", tz.to_param())?;
                 fmt_opt_currency(currency, f)?;
                 write!(f, " {display_name}")
             }
             UserParams::UTENF(name, tz, display_name) => {
-                write!(f, "{teacher} {edit_f} {name} {tz} {display_name}")
+                write!(f, "{teacher} {edit_f} {name} {} {display_name}", tz.to_param())
             }
         }
     }
