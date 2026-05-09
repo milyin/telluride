@@ -3,6 +3,7 @@ pub mod book;
 pub mod impersonate;
 pub mod payment;
 pub mod schedule;
+pub mod student;
 pub mod user;
 pub mod worktime;
 pub use balance::{BalanceActor, BalanceParams};
@@ -10,6 +11,7 @@ pub use book::{BookParams, BookingActor};
 pub use impersonate::ImpersonateParams;
 pub use payment::{PaymentActor, PaymentParams};
 pub use schedule::ScheduleParams;
+pub use student::{PairingParams, StudentCommand};
 pub use user::{UserCommand, UserParams};
 pub use worktime::WorktimeParams;
 

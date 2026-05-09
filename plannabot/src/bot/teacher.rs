@@ -1,6 +1,6 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor, PaymentActor, PaymentCommand, PaymentParams, ScheduleCommand, ScheduleParams, WorktimeCommand, WorktimeParams};
+use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor, PairingParams, PaymentActor, PaymentCommand, PaymentParams, ScheduleCommand, ScheduleParams, StudentCommand, WorktimeCommand, WorktimeParams};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -34,6 +34,8 @@ pub enum TeacherCommand {
     Payment(String),
     #[command(description = "manage your working hours")]
     Worktime(String),
+    #[command(description = "manage your students")]
+    Student(String),
 }
 
 impl telluride::command::CallbackBitcode for TeacherCommand {}
@@ -65,6 +67,12 @@ impl BalanceCommand for TeacherCommand {
 impl WorktimeCommand for TeacherCommand {
     fn worktime(params: WorktimeParams) -> Self {
         TeacherCommand::Worktime(params.to_string())
+    }
+}
+
+impl StudentCommand for TeacherCommand {
+    fn student(params: PairingParams) -> Self {
+        TeacherCommand::Student(params.to_string())
     }
 }
 
@@ -120,6 +128,9 @@ async fn teacher_handle(
         }
         TeacherCommand::Worktime(ref params) => {
             api::worktime::worktime(&ctx, params, &teacher.telegram_name).await
+        }
+        TeacherCommand::Student(ref params) => {
+            api::pairing::student(&ctx, params, &teacher.telegram_name).await
         }
     };
 

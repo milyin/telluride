@@ -7,6 +7,7 @@ pub mod impersonate;
 pub mod impersonate_student;
 pub mod impersonate_teacher;
 pub mod menus;
+pub mod pairing;
 pub mod payment;
 pub mod schedule;
 pub mod student;

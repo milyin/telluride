@@ -82,6 +82,125 @@ impl SheetsClient {
             .collect())
     }
 
+    /// Appends a new pairing row to the `Pairings` sheet.
+    pub async fn add_pairing(
+        &self,
+        teacher: &TelegramName,
+        student: &TelegramName,
+        duration_minutes: u64,
+        cost: i64,
+    ) -> Result<()> {
+        let header_range = format!("{SHEET_PAIRINGS}!1:1");
+        let rows = self
+            .get_values(&header_range)
+            .await
+            .context("Failed to read Pairings header row")?;
+        let headers = rows.into_iter().next().unwrap_or_default();
+
+        let mut values: std::collections::HashMap<&str, String> = std::collections::HashMap::new();
+        values.insert(TeacherStudentPairing::TEACHER_TELEGRAM, teacher.as_str().to_string());
+        values.insert(TeacherStudentPairing::STUDENT_TELEGRAM, student.as_str().to_string());
+        values.insert(TeacherStudentPairing::COST, cost.to_string());
+        values.insert(TeacherStudentPairing::DURATION_MINUTES, duration_minutes.to_string());
+
+        let row: Vec<serde_json::Value> = headers
+            .iter()
+            .map(|h| serde_json::Value::String(values.get(h.as_str()).cloned().unwrap_or_default()))
+            .collect();
+
+        self.append_row(SHEET_PAIRINGS, row).await
+    }
+
+    /// Updates the `cost` and `duration_minutes` of an existing pairing row.
+    pub async fn update_pairing(
+        &self,
+        teacher: &TelegramName,
+        student: &TelegramName,
+        duration_minutes: u64,
+        cost: i64,
+    ) -> Result<()> {
+        let range = format!("{SHEET_PAIRINGS}!A:Z");
+        let rows = self
+            .get_values(&range)
+            .await
+            .context("Failed to get Pairings sheet data")?;
+
+        if rows.is_empty() {
+            return Err(anyhow::anyhow!("Pairings sheet is empty"));
+        }
+
+        let schema = SheetSchema::new(SHEET_PAIRINGS.to_string(), rows[0].clone());
+
+        for (row_idx, row) in rows.iter().enumerate().skip(1) {
+            if row.is_empty() || row.iter().all(|c| c.is_empty()) {
+                continue;
+            }
+            let row_teacher = TelegramName::try_from(schema.get_str(row, TeacherStudentPairing::TEACHER_TELEGRAM)).ok();
+            let row_student = TelegramName::try_from(schema.get_str(row, TeacherStudentPairing::STUDENT_TELEGRAM)).ok();
+            if row_teacher.as_ref() != Some(teacher) || row_student.as_ref() != Some(student) {
+                continue;
+            }
+
+            let mut updated_row: Vec<String> = row.clone();
+            let needed_len = schema.headers.len();
+            if updated_row.len() < needed_len {
+                updated_row.resize(needed_len, String::new());
+            }
+
+            if let Some(idx) = schema.get_col(TeacherStudentPairing::COST) {
+                updated_row[idx] = cost.to_string();
+            }
+            if let Some(idx) = schema.get_col(TeacherStudentPairing::DURATION_MINUTES) {
+                updated_row[idx] = duration_minutes.to_string();
+            }
+
+            let sheet_row = row_idx + 1;
+            let last_col = super::col_index_to_letter(updated_row.len().saturating_sub(1));
+            let update_range = format!("{SHEET_PAIRINGS}!A{sheet_row}:{last_col}{sheet_row}");
+            let values: Vec<Vec<serde_json::Value>> = vec![updated_row
+                .into_iter()
+                .map(serde_json::Value::String)
+                .collect()];
+            self.update_values(&update_range, values).await?;
+            return Ok(());
+        }
+
+        Err(anyhow::anyhow!("Pairing {teacher} ↔ {student} not found in sheet"))
+    }
+
+    /// Deletes the pairing row for the given teacher ↔ student pair.
+    pub async fn delete_pairing(
+        &self,
+        teacher: &TelegramName,
+        student: &TelegramName,
+    ) -> Result<()> {
+        let range = format!("{SHEET_PAIRINGS}!A:Z");
+        let rows = self
+            .get_values(&range)
+            .await
+            .context("Failed to get Pairings sheet data")?;
+
+        if rows.is_empty() {
+            return Err(anyhow::anyhow!("Pairings sheet is empty"));
+        }
+
+        let schema = SheetSchema::new(SHEET_PAIRINGS.to_string(), rows[0].clone());
+
+        for (row_idx, row) in rows.iter().enumerate().skip(1) {
+            if row.is_empty() || row.iter().all(|c| c.is_empty()) {
+                continue;
+            }
+            let row_teacher = TelegramName::try_from(schema.get_str(row, TeacherStudentPairing::TEACHER_TELEGRAM)).ok();
+            let row_student = TelegramName::try_from(schema.get_str(row, TeacherStudentPairing::STUDENT_TELEGRAM)).ok();
+            if row_teacher.as_ref() == Some(teacher) && row_student.as_ref() == Some(student) {
+                self.delete_row(SHEET_PAIRINGS, row_idx).await?;
+                return Ok(());
+            }
+        }
+
+        Err(anyhow::anyhow!("Pairing {teacher} ↔ {student} not found in sheet"))
+    }
+
     /// Returns the teacher(s) assigned to the given student, if any.
     pub async fn get_teachers_for_student(
         &self,
