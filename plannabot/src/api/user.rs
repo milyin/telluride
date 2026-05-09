@@ -437,21 +437,15 @@ async fn show_student_delete_confirm<Cmd: UserCommand + CallbackBitcode + 'stati
     let text = match ctx.state.get_student(&name).await {
         Some(student) => {
             let currency_str = student.currency.map(|c| c.iso_alpha_code).unwrap_or("-");
-            let zoom_str = student.zoom_url.as_deref().unwrap_or("—");
-            let board_str = student.board_url.as_deref().unwrap_or("—");
             markdown_format!(
                 "*Student: {}*\n\n\
                 • Name: {}\n\
                 • Timezone: {}\n\
-                • Currency: {}\n\
-                • Zoom: {}\n\
-                • Board: {}",
+                • Currency: {}",
                 name.to_string(),
                 MarkdownString::escape(student.name),
                 MarkdownString::escape(Timezone(student.timezone).to_string()),
-                MarkdownString::escape(currency_str.to_string()),
-                MarkdownString::escape(zoom_str.to_string()),
-                MarkdownString::escape(board_str.to_string())
+                MarkdownString::escape(currency_str.to_string())
             )
         }
         None => markdown_format!(
@@ -545,8 +539,6 @@ async fn show_student_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
         Some(student) => {
             let currency_opt: Option<Currency> = student.currency.map(Currency);
             let currency_display = currency_opt.as_ref().map(|c| c.0.iso_alpha_code).unwrap_or("-");
-            let zoom_str = student.zoom_url.as_deref().unwrap_or("—");
-            let board_str = student.board_url.as_deref().unwrap_or("—");
             let tz = Timezone(student.timezone);
 
             let edit_params = UserParams::USENF(
@@ -559,16 +551,12 @@ async fn show_student_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
                 "*Student: {}*\n\n\
                 • Name: {}\n\
                 • Timezone: {}\n\
-                • Currency: {}\n\
-                • Zoom: {}\n\
-                • Board: {}\n\n\
+                • Currency: {}\n\n\
                 Click below to edit timezone, currency, and name\\.",
                 name.to_string(),
                 MarkdownString::escape(student.name),
                 MarkdownString::escape(tz.to_string()),
-                MarkdownString::escape(currency_display.to_string()),
-                MarkdownString::escape(zoom_str.to_string()),
-                MarkdownString::escape(board_str.to_string())
+                MarkdownString::escape(currency_display.to_string())
             );
             (info, format!("/user {edit_params}"))
         }

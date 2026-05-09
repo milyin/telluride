@@ -48,8 +48,6 @@ sheet_struct! {
         pub name: String,
         pub timezone: Tz,
         pub currency: Option<&'static rusty_money::iso::Currency>,
-        pub zoom_url: Option<String>,
-        pub board_url: Option<String>,
     }
 }
 
@@ -152,6 +150,8 @@ sheet_struct! {
         pub student_telegram: TelegramName,
         pub cost: i64,
         pub duration_minutes: u64,
+        pub zoom_url: Option<String>,
+        pub board_url: Option<String>,
     }
 }
 

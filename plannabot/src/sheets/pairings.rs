@@ -55,11 +55,21 @@ impl SheetsClient {
                 .parse()
                 .unwrap_or(60);
 
+            let zoom_url = {
+                let s = schema.get_str(row, TeacherStudentPairing::ZOOM_URL);
+                if s.is_empty() { None } else { Some(s.to_string()) }
+            };
+            let board_url = {
+                let s = schema.get_str(row, TeacherStudentPairing::BOARD_URL);
+                if s.is_empty() { None } else { Some(s.to_string()) }
+            };
             pairings.push(TeacherStudentPairing {
                 teacher_telegram,
                 student_telegram,
                 cost,
                 duration_minutes,
+                zoom_url,
+                board_url,
                 custom: schema.get_custom(row, super::PAIRINGS_COLS),
             });
         }
@@ -102,6 +112,8 @@ impl SheetsClient {
         values.insert(TeacherStudentPairing::STUDENT_TELEGRAM, student.as_str().to_string());
         values.insert(TeacherStudentPairing::COST, cost.to_string());
         values.insert(TeacherStudentPairing::DURATION_MINUTES, duration_minutes.to_string());
+        values.insert(TeacherStudentPairing::ZOOM_URL, String::new());
+        values.insert(TeacherStudentPairing::BOARD_URL, String::new());
 
         let row: Vec<serde_json::Value> = headers
             .iter()
@@ -152,6 +164,79 @@ impl SheetsClient {
             }
             if let Some(idx) = schema.get_col(TeacherStudentPairing::DURATION_MINUTES) {
                 updated_row[idx] = duration_minutes.to_string();
+            }
+
+            let sheet_row = row_idx + 1;
+            let last_col = super::col_index_to_letter(updated_row.len().saturating_sub(1));
+            let update_range = format!("{SHEET_PAIRINGS}!A{sheet_row}:{last_col}{sheet_row}");
+            let values: Vec<Vec<serde_json::Value>> = vec![updated_row
+                .into_iter()
+                .map(serde_json::Value::String)
+                .collect()];
+            self.update_values(&update_range, values).await?;
+            return Ok(());
+        }
+
+        Err(anyhow::anyhow!("Pairing {teacher} ↔ {student} not found in sheet"))
+    }
+
+    /// Updates the `zoom_url` of an existing pairing row.
+    pub async fn update_pairing_zoom(
+        &self,
+        teacher: &TelegramName,
+        student: &TelegramName,
+        url: &str,
+    ) -> Result<()> {
+        self.update_pairing_url_field(teacher, student, TeacherStudentPairing::ZOOM_URL, url).await
+    }
+
+    /// Updates the `board_url` of an existing pairing row.
+    pub async fn update_pairing_board(
+        &self,
+        teacher: &TelegramName,
+        student: &TelegramName,
+        url: &str,
+    ) -> Result<()> {
+        self.update_pairing_url_field(teacher, student, TeacherStudentPairing::BOARD_URL, url).await
+    }
+
+    async fn update_pairing_url_field(
+        &self,
+        teacher: &TelegramName,
+        student: &TelegramName,
+        field: &str,
+        value: &str,
+    ) -> Result<()> {
+        let range = format!("{SHEET_PAIRINGS}!A:Z");
+        let rows = self
+            .get_values(&range)
+            .await
+            .context("Failed to get Pairings sheet data")?;
+
+        if rows.is_empty() {
+            return Err(anyhow::anyhow!("Pairings sheet is empty"));
+        }
+
+        let schema = SheetSchema::new(SHEET_PAIRINGS.to_string(), rows[0].clone());
+
+        for (row_idx, row) in rows.iter().enumerate().skip(1) {
+            if row.is_empty() || row.iter().all(|c| c.is_empty()) {
+                continue;
+            }
+            let row_teacher = TelegramName::try_from(schema.get_str(row, TeacherStudentPairing::TEACHER_TELEGRAM)).ok();
+            let row_student = TelegramName::try_from(schema.get_str(row, TeacherStudentPairing::STUDENT_TELEGRAM)).ok();
+            if row_teacher.as_ref() != Some(teacher) || row_student.as_ref() != Some(student) {
+                continue;
+            }
+
+            let mut updated_row: Vec<String> = row.clone();
+            let needed_len = schema.headers.len();
+            if updated_row.len() < needed_len {
+                updated_row.resize(needed_len, String::new());
+            }
+
+            if let Some(idx) = schema.get_col(field) {
+                updated_row[idx] = value.to_string();
             }
 
             let sheet_row = row_idx + 1;

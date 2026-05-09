@@ -53,10 +53,20 @@ pub enum PairingParams {
     PANF(TelegramName, Duration, i64),
     /// Edit flow: show paired students paginated (page)
     PE(i32),
-    /// Edit flow: show prefilled cost/duration form for this student
+    /// Edit flow: show 3-button choice (lesson/zoom/board) for this student
     PEN(TelegramName),
-    /// Edit! forced: execute update pairing (name, duration, cost)
-    PENF(TelegramName, Duration, i64),
+    /// Edit → Lesson: show prefilled duration/cost form
+    PENL(TelegramName),
+    /// Edit → Lesson! forced: execute lesson update (name, duration, cost)
+    PENLF(TelegramName, Duration, i64),
+    /// Edit → Zoom: show prefilled zoom URL form
+    PENZ(TelegramName),
+    /// Edit → Zoom! forced: execute zoom URL update (name, url)
+    PENZF(TelegramName, String),
+    /// Edit → Board: show prefilled board URL form
+    PENB(TelegramName),
+    /// Edit → Board! forced: execute board URL update (name, url)
+    PENBF(TelegramName, String),
     /// Remove flow: show paired students paginated (page)
     PR(i32),
     /// Remove flow: show confirmation for this student
@@ -70,7 +80,6 @@ impl fmt::Display for PairingParams {
         let add = PairingSubcmd::Add(false);
         let add_f = PairingSubcmd::Add(true);
         let edit = PairingSubcmd::Edit(false);
-        let edit_f = PairingSubcmd::Edit(true);
         let remove = PairingSubcmd::Remove(false);
         let remove_f = PairingSubcmd::Remove(true);
 
@@ -83,7 +92,12 @@ impl fmt::Display for PairingParams {
             PairingParams::PE(0) => write!(f, "{edit}"),
             PairingParams::PE(page) => write!(f, "{edit} {page}"),
             PairingParams::PEN(name) => write!(f, "{edit} {name}"),
-            PairingParams::PENF(name, dur, cost) => write!(f, "{edit_f} {name} {dur} {cost}"),
+            PairingParams::PENL(name) => write!(f, "{edit} lesson {name}"),
+            PairingParams::PENLF(name, dur, cost) => write!(f, "{edit} lesson! {name} {dur} {cost}"),
+            PairingParams::PENZ(name) => write!(f, "{edit} zoom {name}"),
+            PairingParams::PENZF(name, url) => write!(f, "{edit} zoom! {name} {url}"),
+            PairingParams::PENB(name) => write!(f, "{edit} board {name}"),
+            PairingParams::PENBF(name, url) => write!(f, "{edit} board! {name} {url}"),
             PairingParams::PR(0) => write!(f, "{remove}"),
             PairingParams::PR(page) => write!(f, "{remove} {page}"),
             PairingParams::PRN(name) => write!(f, "{remove} {name}"),
@@ -121,14 +135,41 @@ impl FromStr for PairingParams {
             PairingSubcmd::Edit(false) => match p.next_opt() {
                 None => Ok(PairingParams::PE(0)),
                 Some(s) if s.starts_with('@') => Ok(PairingParams::PEN(s.parse()?)),
+                Some(s) if s == "lesson" => {
+                    let name: TelegramName = p.next("@username")?.parse()?;
+                    Ok(PairingParams::PENL(name))
+                }
+                Some(s) if s == "lesson!" => {
+                    let name: TelegramName = p.next("@username")?.parse()?;
+                    let dur: Duration = p.next("duration")?.parse()?;
+                    let cost: i64 = p.next("cost")?.parse()?;
+                    p.finish()?;
+                    Ok(PairingParams::PENLF(name, dur, cost))
+                }
+                Some(s) if s == "zoom" => {
+                    let name: TelegramName = p.next("@username")?.parse()?;
+                    Ok(PairingParams::PENZ(name))
+                }
+                Some(s) if s == "zoom!" => {
+                    let name: TelegramName = p.next("@username")?.parse()?;
+                    let url = p.next("url")?.to_string();
+                    p.finish()?;
+                    Ok(PairingParams::PENZF(name, url))
+                }
+                Some(s) if s == "board" => {
+                    let name: TelegramName = p.next("@username")?.parse()?;
+                    Ok(PairingParams::PENB(name))
+                }
+                Some(s) if s == "board!" => {
+                    let name: TelegramName = p.next("@username")?.parse()?;
+                    let url = p.next("url")?.to_string();
+                    p.finish()?;
+                    Ok(PairingParams::PENBF(name, url))
+                }
                 Some(s) => Ok(PairingParams::PE(s.parse().unwrap_or(0))),
             },
             PairingSubcmd::Edit(true) => {
-                let name: TelegramName = p.next("@username")?.parse()?;
-                let dur: Duration = p.next("duration")?.parse()?;
-                let cost: i64 = p.next("cost")?.parse()?;
-                p.finish()?;
-                Ok(PairingParams::PENF(name, dur, cost))
+                Err(anyhow::anyhow!("use 'edit lesson!' / 'edit zoom!' / 'edit board!' instead of 'edit!'"))
             }
             PairingSubcmd::Remove(false) => match p.next_opt() {
                 None => Ok(PairingParams::PR(0)),

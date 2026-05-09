@@ -45,8 +45,6 @@ impl SheetsClient {
                 timezone: schema.get_field::<Tz>(row, row_num, Student::TIMEZONE, &mut errors),
                 name: schema.get_field(row, row_num, Student::NAME, &mut errors),
                 currency: schema.get_field(row, row_num, Student::CURRENCY, &mut errors),
-                zoom_url: schema.get_field(row, row_num, Student::ZOOM_URL, &mut errors),
-                board_url: schema.get_field(row, row_num, Student::BOARD_URL, &mut errors),
                 custom: schema.get_custom(row, STUDENTS_COLS),
                 telegram_name: telegram_name.clone(),
             };
