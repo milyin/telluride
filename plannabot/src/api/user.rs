@@ -1,5 +1,8 @@
 use crate::api::common::PageInfo;
 use crate::api::context::BotCtx;
+
+const USER_PAGE_SIZE: usize = 12;
+const USER_COLS: usize = 3;
 use crate::api::traits::{UserCommand, UserParams};
 use crate::types::{Currency, Timezone};
 use crate::models::{Student, Teacher, TelegramName};
@@ -87,18 +90,16 @@ async fn show_student_submenu<Cmd: UserCommand + CallbackBitcode + 'static>(
     let back_key = CallbackKey::pack(Cmd::user(UserParams::U0), &user_proxy).await;
 
     let total = students.len();
-    let info = PageInfo::new(page, total);
-    let total_pages = (total + PageInfo::PAGE_SIZE - 1) / PageInfo::PAGE_SIZE;
+    let info = PageInfo::with_size(page, total, USER_PAGE_SIZE);
+    let total_pages = (total + USER_PAGE_SIZE - 1) / USER_PAGE_SIZE;
 
-    let mut text = if total == 0 {
+    let header = if total == 0 {
         markdown_string!("*Students:* none registered\\.")
     } else {
         markdown_format!("*Students \\(page {}/{}\\):*", info.page + 1, total_pages)
     };
-    for student in &students[info.start..info.end] {
-        text.push(&markdown_format!("\n• {}", student_one_line(student)));
-    }
-    text.push(&markdown_string!("\n\nManage students:"));
+    let page_lines: Vec<String> = students[info.start..info.end].iter().map(|s| student_one_line(s)).collect();
+    let text = build_paged_list_text(header, &page_lines, markdown_string!("Manage students:"));
 
     let mut buttons = vec![vec![
         InlineKeyboardButton::callback_key("Add", &add_key),
@@ -135,18 +136,16 @@ async fn show_teacher_submenu<Cmd: UserCommand + CallbackBitcode + 'static>(
     let back_key = CallbackKey::pack(Cmd::user(UserParams::U0), &user_proxy).await;
 
     let total = teachers.len();
-    let info = PageInfo::new(page, total);
-    let total_pages = (total + PageInfo::PAGE_SIZE - 1) / PageInfo::PAGE_SIZE;
+    let info = PageInfo::with_size(page, total, USER_PAGE_SIZE);
+    let total_pages = (total + USER_PAGE_SIZE - 1) / USER_PAGE_SIZE;
 
-    let mut text = if total == 0 {
+    let header = if total == 0 {
         markdown_string!("*Teachers:* none registered\\.")
     } else {
         markdown_format!("*Teachers \\(page {}/{}\\):*", info.page + 1, total_pages)
     };
-    for teacher in &teachers[info.start..info.end] {
-        text.push(&markdown_format!("\n• {}", teacher_one_line(teacher)));
-    }
-    text.push(&markdown_string!("\n\nManage teachers:"));
+    let page_lines: Vec<String> = teachers[info.start..info.end].iter().map(|t| teacher_one_line(t)).collect();
+    let text = build_paged_list_text(header, &page_lines, markdown_string!("Manage teachers:"));
 
     let mut buttons = vec![vec![
         InlineKeyboardButton::callback_key("Add", &add_key),
@@ -271,13 +270,65 @@ async fn exec_teacher_add<Cmd: UserCommand + CallbackBitcode + 'static>(
 }
 
 // ---------------------------------------------------------------------------
-// Shared paged list (Delete or Edit)
+// Shared paged list helpers
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Copy)]
 enum ListAction {
     Delete,
     Edit,
+}
+
+fn build_paged_list_text(header: MarkdownString, lines: &[String], footer: MarkdownString) -> MarkdownString {
+    let mut text = header;
+    for line in lines {
+        text.push(&markdown_format!("\n• {}", line));
+    }
+    text.push(&markdown_string!("\n\n"));
+    text.push(&footer);
+    text
+}
+
+async fn show_user_selection<Cmd: UserCommand + CallbackBitcode + 'static>(
+    ctx: &BotCtx<Cmd>,
+    text: MarkdownString,
+    item_btns: Vec<(String, UserParams)>,
+    prev_param: Option<UserParams>,
+    next_param: Option<UserParams>,
+    back_param: UserParams,
+) -> Result<()> {
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
+    let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+
+    let mut row: Vec<InlineKeyboardButton> = Vec::new();
+    for (label, param) in item_btns {
+        let key = CallbackKey::pack(Cmd::user(param), &user_proxy).await;
+        row.push(InlineKeyboardButton::callback_key(label, &key));
+        if row.len() == USER_COLS {
+            buttons.push(std::mem::take(&mut row));
+        }
+    }
+    if !row.is_empty() {
+        buttons.push(row);
+    }
+
+    let mut nav_row: Vec<InlineKeyboardButton> = Vec::new();
+    if let Some(prev) = prev_param {
+        let k = CallbackKey::pack(Cmd::user(prev), &user_proxy).await;
+        nav_row.push(InlineKeyboardButton::callback_key("◀", &k));
+    }
+    if let Some(next) = next_param {
+        let k = CallbackKey::pack(Cmd::user(next), &user_proxy).await;
+        nav_row.push(InlineKeyboardButton::callback_key("▶", &k));
+    }
+    if !nav_row.is_empty() {
+        buttons.push(nav_row);
+    }
+
+    let back_key = CallbackKey::pack(Cmd::user(back_param), &user_proxy).await;
+    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
 }
 
 fn student_one_line(s: &Student) -> String {
@@ -295,64 +346,39 @@ async fn show_student_list<Cmd: UserCommand + CallbackBitcode + 'static>(
     action: ListAction,
 ) -> Result<()> {
     let students = ctx.state.get_all_students().await;
-    let back_to_submenu = CallbackKey::pack(Cmd::user(UserParams::US(0)), &UserProxy::new(ctx.callback_storage.clone(), ctx.user_id)).await;
-
-    if students.is_empty() {
-        return ctx
-            .update_markdown_message(
-                markdown_string!("No students registered\\."),
-                Some(InlineKeyboardMarkup::new(vec![vec![
-                    InlineKeyboardButton::callback_key("↩ Back", &back_to_submenu),
-                ]])),
-            )
-            .await;
-    }
-
     let total = students.len();
-    let info = PageInfo::new(page, total);
-    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+    let info = PageInfo::with_size(page, total, USER_PAGE_SIZE);
+    let total_pages = (total + USER_PAGE_SIZE - 1) / USER_PAGE_SIZE;
 
-    for student in &students[info.start..info.end] {
-        let label = student_one_line(student);
-        let param = match action {
-            ListAction::Delete => UserParams::USDN(student.telegram_name.clone()),
-            ListAction::Edit => UserParams::USEN(student.telegram_name.clone()),
-        };
-        let key = CallbackKey::pack(Cmd::user(param), &user_proxy).await;
-        buttons.push(vec![InlineKeyboardButton::callback_key(label, &key)]);
-    }
-
-    let mut nav_row: Vec<InlineKeyboardButton> = Vec::new();
-    if info.has_prev() {
-        let p = match action {
-            ListAction::Delete => UserParams::USD(info.page - 1),
-            ListAction::Edit => UserParams::USE(info.page - 1),
-        };
-        let k = CallbackKey::pack(Cmd::user(p), &user_proxy).await;
-        nav_row.push(InlineKeyboardButton::callback_key("◀", &k));
-    }
-    if info.has_next() {
-        let p = match action {
-            ListAction::Delete => UserParams::USD(info.page + 1),
-            ListAction::Edit => UserParams::USE(info.page + 1),
-        };
-        let k = CallbackKey::pack(Cmd::user(p), &user_proxy).await;
-        nav_row.push(InlineKeyboardButton::callback_key("▶", &k));
-    }
-    if !nav_row.is_empty() {
-        buttons.push(nav_row);
-    }
-
-    let back_key = CallbackKey::pack(Cmd::user(UserParams::US(0)), &user_proxy).await;
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
-
-    let title = match action {
+    let header = if total == 0 {
+        markdown_string!("*Students:* none registered\\.")
+    } else {
+        markdown_format!("*Students \\(page {}/{}\\):*", info.page + 1, total_pages)
+    };
+    let footer = match action {
         ListAction::Delete => markdown_string!("Select student to delete:"),
         ListAction::Edit => markdown_string!("Select student to edit:"),
     };
-    ctx.update_markdown_message(title, Some(InlineKeyboardMarkup::new(buttons)))
-        .await
+    let page_lines: Vec<String> = students[info.start..info.end].iter().map(|s| student_one_line(s)).collect();
+    let text = build_paged_list_text(header, &page_lines, footer);
+
+    let item_btns = students[info.start..info.end].iter().map(|s| {
+        let param = match action {
+            ListAction::Delete => UserParams::USDN(s.telegram_name.clone()),
+            ListAction::Edit => UserParams::USEN(s.telegram_name.clone()),
+        };
+        (s.telegram_name.to_string(), param)
+    }).collect();
+    let prev_param = info.has_prev().then(|| match action {
+        ListAction::Delete => UserParams::USD(info.page - 1),
+        ListAction::Edit => UserParams::USE(info.page - 1),
+    });
+    let next_param = info.has_next().then(|| match action {
+        ListAction::Delete => UserParams::USD(info.page + 1),
+        ListAction::Edit => UserParams::USE(info.page + 1),
+    });
+
+    show_user_selection(ctx, text, item_btns, prev_param, next_param, UserParams::US(0)).await
 }
 
 async fn show_teacher_list<Cmd: UserCommand + CallbackBitcode + 'static>(
@@ -361,64 +387,39 @@ async fn show_teacher_list<Cmd: UserCommand + CallbackBitcode + 'static>(
     action: ListAction,
 ) -> Result<()> {
     let teachers = ctx.state.get_all_teachers().await;
-    let back_to_submenu = CallbackKey::pack(Cmd::user(UserParams::UT(0)), &UserProxy::new(ctx.callback_storage.clone(), ctx.user_id)).await;
-
-    if teachers.is_empty() {
-        return ctx
-            .update_markdown_message(
-                markdown_string!("No teachers registered\\."),
-                Some(InlineKeyboardMarkup::new(vec![vec![
-                    InlineKeyboardButton::callback_key("↩ Back", &back_to_submenu),
-                ]])),
-            )
-            .await;
-    }
-
     let total = teachers.len();
-    let info = PageInfo::new(page, total);
-    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+    let info = PageInfo::with_size(page, total, USER_PAGE_SIZE);
+    let total_pages = (total + USER_PAGE_SIZE - 1) / USER_PAGE_SIZE;
 
-    for teacher in &teachers[info.start..info.end] {
-        let label = teacher_one_line(teacher);
-        let param = match action {
-            ListAction::Delete => UserParams::UTDN(teacher.telegram_name.clone()),
-            ListAction::Edit => UserParams::UTEN(teacher.telegram_name.clone()),
-        };
-        let key = CallbackKey::pack(Cmd::user(param), &user_proxy).await;
-        buttons.push(vec![InlineKeyboardButton::callback_key(label, &key)]);
-    }
-
-    let mut nav_row: Vec<InlineKeyboardButton> = Vec::new();
-    if info.has_prev() {
-        let p = match action {
-            ListAction::Delete => UserParams::UTD(info.page - 1),
-            ListAction::Edit => UserParams::UTE(info.page - 1),
-        };
-        let k = CallbackKey::pack(Cmd::user(p), &user_proxy).await;
-        nav_row.push(InlineKeyboardButton::callback_key("◀", &k));
-    }
-    if info.has_next() {
-        let p = match action {
-            ListAction::Delete => UserParams::UTD(info.page + 1),
-            ListAction::Edit => UserParams::UTE(info.page + 1),
-        };
-        let k = CallbackKey::pack(Cmd::user(p), &user_proxy).await;
-        nav_row.push(InlineKeyboardButton::callback_key("▶", &k));
-    }
-    if !nav_row.is_empty() {
-        buttons.push(nav_row);
-    }
-
-    let back_key = CallbackKey::pack(Cmd::user(UserParams::UT(0)), &user_proxy).await;
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
-
-    let title = match action {
+    let header = if total == 0 {
+        markdown_string!("*Teachers:* none registered\\.")
+    } else {
+        markdown_format!("*Teachers \\(page {}/{}\\):*", info.page + 1, total_pages)
+    };
+    let footer = match action {
         ListAction::Delete => markdown_string!("Select teacher to delete:"),
         ListAction::Edit => markdown_string!("Select teacher to edit:"),
     };
-    ctx.update_markdown_message(title, Some(InlineKeyboardMarkup::new(buttons)))
-        .await
+    let page_lines: Vec<String> = teachers[info.start..info.end].iter().map(|t| teacher_one_line(t)).collect();
+    let text = build_paged_list_text(header, &page_lines, footer);
+
+    let item_btns = teachers[info.start..info.end].iter().map(|t| {
+        let param = match action {
+            ListAction::Delete => UserParams::UTDN(t.telegram_name.clone()),
+            ListAction::Edit => UserParams::UTEN(t.telegram_name.clone()),
+        };
+        (t.telegram_name.to_string(), param)
+    }).collect();
+    let prev_param = info.has_prev().then(|| match action {
+        ListAction::Delete => UserParams::UTD(info.page - 1),
+        ListAction::Edit => UserParams::UTE(info.page - 1),
+    });
+    let next_param = info.has_next().then(|| match action {
+        ListAction::Delete => UserParams::UTD(info.page + 1),
+        ListAction::Edit => UserParams::UTE(info.page + 1),
+    });
+
+    show_user_selection(ctx, text, item_btns, prev_param, next_param, UserParams::UT(0)).await
 }
 
 // ---------------------------------------------------------------------------

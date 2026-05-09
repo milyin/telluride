@@ -70,9 +70,12 @@ pub struct PageInfo {
 impl PageInfo {
     pub const PAGE_SIZE: usize = 10;
     pub fn new(page: i32, total: usize) -> Self {
+        Self::with_size(page, total, Self::PAGE_SIZE)
+    }
+    pub fn with_size(page: i32, total: usize, page_size: usize) -> Self {
         let page_idx = page.max(0) as usize;
-        let start = (page_idx * Self::PAGE_SIZE).min(total);
-        let end = (start + Self::PAGE_SIZE).min(total);
+        let start = (page_idx * page_size).min(total);
+        let end = (start + page_size).min(total);
         Self { start, end, page, total }
     }
     pub fn has_prev(&self) -> bool { self.page > 0 }
