@@ -81,10 +81,10 @@ pub enum UserParams {
     USAF(TelegramName, String, String, String),
     /// Teacher add! forced: execute insertion (@u, tz, name)
     UTAF(TelegramName, String, String),
-    /// Student delete: show list
-    USD,
-    /// Teacher delete: show list
-    UTD,
+    /// Student delete: show list (page)
+    USD(i32),
+    /// Teacher delete: show list (page)
+    UTD(i32),
     /// Student delete with name: show full info + confirm button
     USDN(TelegramName),
     /// Teacher delete with name: show full info + confirm button
@@ -93,10 +93,10 @@ pub enum UserParams {
     USDNF(TelegramName),
     /// Teacher delete! forced: execute deletion
     UTDNF(TelegramName),
-    /// Student edit: show list
-    USE,
-    /// Teacher edit: show list
-    UTE,
+    /// Student edit: show list (page)
+    USE(i32),
+    /// Teacher edit: show list (page)
+    UTE(i32),
     /// Student edit with name: show full info + pre-filled edit button
     USEN(TelegramName),
     /// Teacher edit with name: show full info + pre-filled edit button
@@ -130,14 +130,14 @@ impl fmt::Display for UserParams {
             UserParams::UTAF(name, tz, display_name) => {
                 write!(f, "{teacher} {add_f} {name} {tz} {display_name}")
             }
-            UserParams::USD => write!(f, "{student} {del}"),
-            UserParams::UTD => write!(f, "{teacher} {del}"),
+            UserParams::USD(page) => write!(f, "{student} {del} {page}"),
+            UserParams::UTD(page) => write!(f, "{teacher} {del} {page}"),
             UserParams::USDN(name) => write!(f, "{student} {del} {name}"),
             UserParams::UTDN(name) => write!(f, "{teacher} {del} {name}"),
             UserParams::USDNF(name) => write!(f, "{student} {del_f} {name}"),
             UserParams::UTDNF(name) => write!(f, "{teacher} {del_f} {name}"),
-            UserParams::USE => write!(f, "{student} {edit}"),
-            UserParams::UTE => write!(f, "{teacher} {edit}"),
+            UserParams::USE(page) => write!(f, "{student} {edit} {page}"),
+            UserParams::UTE(page) => write!(f, "{teacher} {edit} {page}"),
             UserParams::USEN(name) => write!(f, "{student} {edit} {name}"),
             UserParams::UTEN(name) => write!(f, "{teacher} {edit} {name}"),
             UserParams::USENF(name, tz, currency, display_name) => {
@@ -212,15 +212,17 @@ impl FromStr for UserParams {
             }
 
             (UserRole::Student, UserSubcmd::Delete(false)) => {
-                match parts.get(2) {
-                    None => Ok(UserParams::USD),
-                    Some(n) => Ok(UserParams::USDN(n.parse()?)),
+                match parts.get(2).map(|s| s.as_str()) {
+                    None => Ok(UserParams::USD(0)),
+                    Some(s) if s.starts_with('@') => Ok(UserParams::USDN(s.parse()?)),
+                    Some(s) => Ok(UserParams::USD(s.parse().unwrap_or(0))),
                 }
             }
             (UserRole::Teacher, UserSubcmd::Delete(false)) => {
-                match parts.get(2) {
-                    None => Ok(UserParams::UTD),
-                    Some(n) => Ok(UserParams::UTDN(n.parse()?)),
+                match parts.get(2).map(|s| s.as_str()) {
+                    None => Ok(UserParams::UTD(0)),
+                    Some(s) if s.starts_with('@') => Ok(UserParams::UTDN(s.parse()?)),
+                    Some(s) => Ok(UserParams::UTD(s.parse().unwrap_or(0))),
                 }
             }
 
@@ -240,15 +242,17 @@ impl FromStr for UserParams {
             }
 
             (UserRole::Student, UserSubcmd::Edit(false)) => {
-                match parts.get(2) {
-                    None => Ok(UserParams::USE),
-                    Some(n) => Ok(UserParams::USEN(n.parse()?)),
+                match parts.get(2).map(|s| s.as_str()) {
+                    None => Ok(UserParams::USE(0)),
+                    Some(s) if s.starts_with('@') => Ok(UserParams::USEN(s.parse()?)),
+                    Some(s) => Ok(UserParams::USE(s.parse().unwrap_or(0))),
                 }
             }
             (UserRole::Teacher, UserSubcmd::Edit(false)) => {
-                match parts.get(2) {
-                    None => Ok(UserParams::UTE),
-                    Some(n) => Ok(UserParams::UTEN(n.parse()?)),
+                match parts.get(2).map(|s| s.as_str()) {
+                    None => Ok(UserParams::UTE(0)),
+                    Some(s) if s.starts_with('@') => Ok(UserParams::UTEN(s.parse()?)),
+                    Some(s) => Ok(UserParams::UTE(s.parse().unwrap_or(0))),
                 }
             }
 

@@ -264,6 +264,22 @@ impl BotState {
         is_teacher && is_student
     }
 
+    /// Returns all students sorted by telegram name.
+    pub async fn get_all_students(&self) -> Vec<crate::models::Student> {
+        let students = self.students.read().await;
+        let mut list: Vec<_> = students.values().cloned().collect();
+        list.sort_by_key(|s| s.telegram_name.clone());
+        list
+    }
+
+    /// Returns all teachers sorted by telegram name.
+    pub async fn get_all_teachers(&self) -> Vec<crate::models::Teacher> {
+        let teachers = self.teachers.read().await;
+        let mut list: Vec<_> = teachers.values().cloned().collect();
+        list.sort_by_key(|t| t.telegram_name.clone());
+        list
+    }
+
     /// Returns a sorted list of all registered student telegram names.
     pub async fn get_student_names(&self) -> Vec<TelegramName> {
         let students = self.students.read().await;
