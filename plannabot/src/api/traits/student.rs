@@ -5,6 +5,7 @@ use anyhow::Result;
 use telluride::utils::{split_with_screened_spaces, ParamParser};
 
 use crate::models::TelegramName;
+use crate::types::Duration;
 
 pub enum PairingSubcmd {
     Add(bool),
@@ -48,14 +49,14 @@ pub enum PairingParams {
     PA(i32),
     /// Add flow: show cost/duration form for this student
     PAN(TelegramName),
-    /// Add! forced: execute add pairing (name, duration_minutes, cost)
-    PANF(TelegramName, u64, i64),
+    /// Add! forced: execute add pairing (name, duration, cost)
+    PANF(TelegramName, Duration, i64),
     /// Edit flow: show paired students paginated (page)
     PE(i32),
     /// Edit flow: show prefilled cost/duration form for this student
     PEN(TelegramName),
-    /// Edit! forced: execute update pairing (name, duration_minutes, cost)
-    PENF(TelegramName, u64, i64),
+    /// Edit! forced: execute update pairing (name, duration, cost)
+    PENF(TelegramName, Duration, i64),
     /// Remove flow: show paired students paginated (page)
     PR(i32),
     /// Remove flow: show confirmation for this student
@@ -112,7 +113,7 @@ impl FromStr for PairingParams {
             },
             PairingSubcmd::Add(true) => {
                 let name: TelegramName = p.next("@username")?.parse()?;
-                let dur: u64 = p.next("duration_minutes")?.parse()?;
+                let dur: Duration = p.next("duration")?.parse()?;
                 let cost: i64 = p.next("cost")?.parse()?;
                 p.finish()?;
                 Ok(PairingParams::PANF(name, dur, cost))
@@ -124,7 +125,7 @@ impl FromStr for PairingParams {
             },
             PairingSubcmd::Edit(true) => {
                 let name: TelegramName = p.next("@username")?.parse()?;
-                let dur: u64 = p.next("duration_minutes")?.parse()?;
+                let dur: Duration = p.next("duration")?.parse()?;
                 let cost: i64 = p.next("cost")?.parse()?;
                 p.finish()?;
                 Ok(PairingParams::PENF(name, dur, cost))
