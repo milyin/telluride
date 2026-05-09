@@ -125,6 +125,16 @@ impl FromSheetValue for NaiveTime {
                 return Ok(t);
             }
         }
+        // Google Sheets returns time as a decimal fraction of the day when
+        // the cell has no explicit TIME format (e.g. "0,3333333333" = 08:00).
+        if let Ok(frac) = s.replace(',', ".").parse::<f64>() {
+            if frac >= 0.0 && frac < 1.0 {
+                let total_secs = (frac * 86400.0).round() as u32;
+                if let Some(t) = NaiveTime::from_hms_opt(total_secs / 3600, (total_secs % 3600) / 60, total_secs % 60) {
+                    return Ok(t);
+                }
+            }
+        }
         Err(format!("cannot parse time '{s}'"))
     }
 }

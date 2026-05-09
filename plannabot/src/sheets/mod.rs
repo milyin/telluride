@@ -339,6 +339,7 @@ impl SheetsClient {
             .hub
             .spreadsheets()
             .values_get(&self.spreadsheet_id, range)
+            .value_render_option("FORMATTED_VALUE")
             .doit()
             .await
             .with_context(|| format!("Failed to get values for range '{range}'"))?;
