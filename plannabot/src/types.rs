@@ -219,15 +219,23 @@ pub struct Timezone(pub Tz);
 
 impl fmt::Display for Timezone {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = self.0.name();
-        if let Some(rest) = s.strip_prefix("Etc/GMT") {
-            return match rest.parse::<i32>() {
-                Ok(n) => write!(f, "{:+}", -n), // POSIX inversion: Etc/GMT-3 = UTC+3
-                Err(_) if rest.is_empty() => write!(f, "+0"),
-                Err(_) => write!(f, "{s}"),
+        let name = self.0.name();
+        if name.starts_with("Etc/") {
+            use chrono::{Offset as _, TimeZone as _, Utc};
+            let fix = Utc.timestamp_opt(0, 0).unwrap()
+                .with_timezone(&self.0)
+                .offset()
+                .fix();
+            let total_secs = fix.local_minus_utc();
+            let hours = total_secs / 3600;
+            let mins = (total_secs.abs() % 3600) / 60;
+            return if mins == 0 {
+                write!(f, "UTC{:+}", hours)
+            } else {
+                write!(f, "UTC{:+}:{:02}", hours, mins)
             };
         }
-        write!(f, "{s}")
+        write!(f, "{name}")
     }
 }
 
@@ -311,3 +319,4 @@ impl TryFrom<&str> for Currency {
         s.parse()
     }
 }
+

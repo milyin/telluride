@@ -87,10 +87,10 @@ impl FromStr for UserSubcmd {
 pub enum UserParams {
     /// No args: show student/teacher role selection
     U0,
-    /// Student submenu: Add / Edit / Delete
-    US,
-    /// Teacher submenu: Add / Edit / Delete
-    UT,
+    /// Student submenu with paginated list (page)
+    US(i32),
+    /// Teacher submenu with paginated list (page)
+    UT(i32),
     /// Student add: show instructions + template button
     USA,
     /// Teacher add: show instructions + template button
@@ -138,8 +138,10 @@ impl fmt::Display for UserParams {
 
         match self {
             UserParams::U0 => write!(f, ""),
-            UserParams::US => write!(f, "{student}"),
-            UserParams::UT => write!(f, "{teacher}"),
+            UserParams::US(0) => write!(f, "{student}"),
+            UserParams::US(page) => write!(f, "{student} {page}"),
+            UserParams::UT(0) => write!(f, "{teacher}"),
+            UserParams::UT(page) => write!(f, "{teacher} {page}"),
             UserParams::USA => write!(f, "{student} {add}"),
             UserParams::UTA => write!(f, "{teacher} {add}"),
             UserParams::USAF(name, tz, currency, display_name) => {
@@ -187,10 +189,17 @@ impl FromStr for UserParams {
 
         let Some(second) = p.next_opt() else {
             return Ok(match role {
-                UserRole::Student => UserParams::US,
-                UserRole::Teacher => UserParams::UT,
+                UserRole::Student => UserParams::US(0),
+                UserRole::Teacher => UserParams::UT(0),
             });
         };
+
+        if let Ok(page) = second.parse::<i32>() {
+            return Ok(match role {
+                UserRole::Student => UserParams::US(page),
+                UserRole::Teacher => UserParams::UT(page),
+            });
+        }
 
         let subcmd: UserSubcmd = second.parse()?;
 

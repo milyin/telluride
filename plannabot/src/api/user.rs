@@ -17,8 +17,8 @@ pub async fn user<Cmd: UserCommand + CallbackBitcode + 'static>(
     let params: UserParams = params.parse()?;
     match params {
         UserParams::U0 => show_role_selection(ctx).await,
-        UserParams::US => show_student_submenu(ctx).await,
-        UserParams::UT => show_teacher_submenu(ctx).await,
+        UserParams::US(page) => show_student_submenu(ctx, page).await,
+        UserParams::UT(page) => show_teacher_submenu(ctx, page).await,
         UserParams::USA => show_student_add(ctx).await,
         UserParams::UTA => show_teacher_add(ctx).await,
         UserParams::USAF(name, tz, currency, display_name) => {
@@ -55,8 +55,8 @@ async fn show_role_selection<Cmd: UserCommand + CallbackBitcode + 'static>(
 ) -> Result<()> {
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
 
-    let student_key = CallbackKey::pack(Cmd::user(UserParams::US), &user_proxy).await;
-    let teacher_key = CallbackKey::pack(Cmd::user(UserParams::UT), &user_proxy).await;
+    let student_key = CallbackKey::pack(Cmd::user(UserParams::US(0)), &user_proxy).await;
+    let teacher_key = CallbackKey::pack(Cmd::user(UserParams::UT(0)), &user_proxy).await;
 
     let buttons = vec![
         vec![InlineKeyboardButton::callback_key("Student", &student_key)],
@@ -76,7 +76,9 @@ async fn show_role_selection<Cmd: UserCommand + CallbackBitcode + 'static>(
 
 async fn show_student_submenu<Cmd: UserCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
+    page: i32,
 ) -> Result<()> {
+    let students = ctx.state.get_all_students().await;
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
 
     let add_key = CallbackKey::pack(Cmd::user(UserParams::USA), &user_proxy).await;
@@ -84,25 +86,47 @@ async fn show_student_submenu<Cmd: UserCommand + CallbackBitcode + 'static>(
     let del_key = CallbackKey::pack(Cmd::user(UserParams::USD(0)), &user_proxy).await;
     let back_key = CallbackKey::pack(Cmd::user(UserParams::U0), &user_proxy).await;
 
-    let buttons = vec![
-        vec![
-            InlineKeyboardButton::callback_key("Add", &add_key),
-            InlineKeyboardButton::callback_key("Edit", &edit_key),
-            InlineKeyboardButton::callback_key("Delete", &del_key),
-        ],
-        vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)],
-    ];
+    let total = students.len();
+    let info = PageInfo::new(page, total);
+    let total_pages = (total + PageInfo::PAGE_SIZE - 1) / PageInfo::PAGE_SIZE;
 
-    ctx.update_markdown_message(
-        markdown_string!("Manage students:"),
-        Some(InlineKeyboardMarkup::new(buttons)),
-    )
-    .await
+    let mut text = if total == 0 {
+        markdown_string!("*Students:* none registered\\.")
+    } else {
+        markdown_format!("*Students \\(page {}/{}\\):*", info.page + 1, total_pages)
+    };
+    for student in &students[info.start..info.end] {
+        text.push(&markdown_format!("\n• {}", student_one_line(student)));
+    }
+    text.push(&markdown_string!("\n\nManage students:"));
+
+    let mut buttons = vec![vec![
+        InlineKeyboardButton::callback_key("Add", &add_key),
+        InlineKeyboardButton::callback_key("Edit", &edit_key),
+        InlineKeyboardButton::callback_key("Delete", &del_key),
+    ]];
+    let mut nav_row: Vec<InlineKeyboardButton> = Vec::new();
+    if info.has_prev() {
+        let k = CallbackKey::pack(Cmd::user(UserParams::US(info.page - 1)), &user_proxy).await;
+        nav_row.push(InlineKeyboardButton::callback_key("◀", &k));
+    }
+    if info.has_next() {
+        let k = CallbackKey::pack(Cmd::user(UserParams::US(info.page + 1)), &user_proxy).await;
+        nav_row.push(InlineKeyboardButton::callback_key("▶", &k));
+    }
+    if !nav_row.is_empty() {
+        buttons.push(nav_row);
+    }
+    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
 }
 
 async fn show_teacher_submenu<Cmd: UserCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
+    page: i32,
 ) -> Result<()> {
+    let teachers = ctx.state.get_all_teachers().await;
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
 
     let add_key = CallbackKey::pack(Cmd::user(UserParams::UTA), &user_proxy).await;
@@ -110,20 +134,40 @@ async fn show_teacher_submenu<Cmd: UserCommand + CallbackBitcode + 'static>(
     let del_key = CallbackKey::pack(Cmd::user(UserParams::UTD(0)), &user_proxy).await;
     let back_key = CallbackKey::pack(Cmd::user(UserParams::U0), &user_proxy).await;
 
-    let buttons = vec![
-        vec![
-            InlineKeyboardButton::callback_key("Add", &add_key),
-            InlineKeyboardButton::callback_key("Edit", &edit_key),
-            InlineKeyboardButton::callback_key("Delete", &del_key),
-        ],
-        vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)],
-    ];
+    let total = teachers.len();
+    let info = PageInfo::new(page, total);
+    let total_pages = (total + PageInfo::PAGE_SIZE - 1) / PageInfo::PAGE_SIZE;
 
-    ctx.update_markdown_message(
-        markdown_string!("Manage teachers:"),
-        Some(InlineKeyboardMarkup::new(buttons)),
-    )
-    .await
+    let mut text = if total == 0 {
+        markdown_string!("*Teachers:* none registered\\.")
+    } else {
+        markdown_format!("*Teachers \\(page {}/{}\\):*", info.page + 1, total_pages)
+    };
+    for teacher in &teachers[info.start..info.end] {
+        text.push(&markdown_format!("\n• {}", teacher_one_line(teacher)));
+    }
+    text.push(&markdown_string!("\n\nManage teachers:"));
+
+    let mut buttons = vec![vec![
+        InlineKeyboardButton::callback_key("Add", &add_key),
+        InlineKeyboardButton::callback_key("Edit", &edit_key),
+        InlineKeyboardButton::callback_key("Delete", &del_key),
+    ]];
+    let mut nav_row: Vec<InlineKeyboardButton> = Vec::new();
+    if info.has_prev() {
+        let k = CallbackKey::pack(Cmd::user(UserParams::UT(info.page - 1)), &user_proxy).await;
+        nav_row.push(InlineKeyboardButton::callback_key("◀", &k));
+    }
+    if info.has_next() {
+        let k = CallbackKey::pack(Cmd::user(UserParams::UT(info.page + 1)), &user_proxy).await;
+        nav_row.push(InlineKeyboardButton::callback_key("▶", &k));
+    }
+    if !nav_row.is_empty() {
+        buttons.push(nav_row);
+    }
+    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
 }
 
 // ---------------------------------------------------------------------------
@@ -134,7 +178,7 @@ async fn show_student_add<Cmd: UserCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
 ) -> Result<()> {
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key = CallbackKey::pack(Cmd::user(UserParams::US), &user_proxy).await;
+    let back_key = CallbackKey::pack(Cmd::user(UserParams::US(0)), &user_proxy).await;
 
     let text = markdown_string!(
         "*Add student*\n\n\
@@ -162,7 +206,7 @@ async fn show_teacher_add<Cmd: UserCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
 ) -> Result<()> {
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key = CallbackKey::pack(Cmd::user(UserParams::UT), &user_proxy).await;
+    let back_key = CallbackKey::pack(Cmd::user(UserParams::UT(0)), &user_proxy).await;
 
     let text = markdown_string!(
         "*Add teacher*\n\n\
@@ -236,13 +280,13 @@ enum ListAction {
     Edit,
 }
 
-fn student_button_label(s: &Student) -> String {
+fn student_one_line(s: &Student) -> String {
     let currency_str = s.currency.map(|c| c.iso_alpha_code).unwrap_or("-");
-    format!("{} {} · {} · {}", s.name, s.telegram_name, Timezone(s.timezone), currency_str)
+    format!("{} · {} · {} · {}", s.telegram_name, s.name, Timezone(s.timezone), currency_str)
 }
 
-fn teacher_button_label(t: &Teacher) -> String {
-    format!("{} {} · {}", t.name, t.telegram_name, Timezone(t.timezone))
+fn teacher_one_line(t: &Teacher) -> String {
+    format!("{} · {} · {}", t.telegram_name, t.name, Timezone(t.timezone))
 }
 
 async fn show_student_list<Cmd: UserCommand + CallbackBitcode + 'static>(
@@ -251,7 +295,7 @@ async fn show_student_list<Cmd: UserCommand + CallbackBitcode + 'static>(
     action: ListAction,
 ) -> Result<()> {
     let students = ctx.state.get_all_students().await;
-    let back_to_submenu = CallbackKey::pack(Cmd::user(UserParams::US), &UserProxy::new(ctx.callback_storage.clone(), ctx.user_id)).await;
+    let back_to_submenu = CallbackKey::pack(Cmd::user(UserParams::US(0)), &UserProxy::new(ctx.callback_storage.clone(), ctx.user_id)).await;
 
     if students.is_empty() {
         return ctx
@@ -270,7 +314,7 @@ async fn show_student_list<Cmd: UserCommand + CallbackBitcode + 'static>(
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
 
     for student in &students[info.start..info.end] {
-        let label = student_button_label(student);
+        let label = student_one_line(student);
         let param = match action {
             ListAction::Delete => UserParams::USDN(student.telegram_name.clone()),
             ListAction::Edit => UserParams::USEN(student.telegram_name.clone()),
@@ -300,7 +344,7 @@ async fn show_student_list<Cmd: UserCommand + CallbackBitcode + 'static>(
         buttons.push(nav_row);
     }
 
-    let back_key = CallbackKey::pack(Cmd::user(UserParams::US), &user_proxy).await;
+    let back_key = CallbackKey::pack(Cmd::user(UserParams::US(0)), &user_proxy).await;
     buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
 
     let title = match action {
@@ -317,7 +361,7 @@ async fn show_teacher_list<Cmd: UserCommand + CallbackBitcode + 'static>(
     action: ListAction,
 ) -> Result<()> {
     let teachers = ctx.state.get_all_teachers().await;
-    let back_to_submenu = CallbackKey::pack(Cmd::user(UserParams::UT), &UserProxy::new(ctx.callback_storage.clone(), ctx.user_id)).await;
+    let back_to_submenu = CallbackKey::pack(Cmd::user(UserParams::UT(0)), &UserProxy::new(ctx.callback_storage.clone(), ctx.user_id)).await;
 
     if teachers.is_empty() {
         return ctx
@@ -336,7 +380,7 @@ async fn show_teacher_list<Cmd: UserCommand + CallbackBitcode + 'static>(
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
 
     for teacher in &teachers[info.start..info.end] {
-        let label = teacher_button_label(teacher);
+        let label = teacher_one_line(teacher);
         let param = match action {
             ListAction::Delete => UserParams::UTDN(teacher.telegram_name.clone()),
             ListAction::Edit => UserParams::UTEN(teacher.telegram_name.clone()),
@@ -366,7 +410,7 @@ async fn show_teacher_list<Cmd: UserCommand + CallbackBitcode + 'static>(
         buttons.push(nav_row);
     }
 
-    let back_key = CallbackKey::pack(Cmd::user(UserParams::UT), &user_proxy).await;
+    let back_key = CallbackKey::pack(Cmd::user(UserParams::UT(0)), &user_proxy).await;
     buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
 
     let title = match action {
