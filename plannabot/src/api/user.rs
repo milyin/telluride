@@ -1,5 +1,6 @@
 use crate::api::common::PageInfo;
 use crate::api::context::BotCtx;
+use crate::api::traits::user::ParsedCurrency;
 use crate::api::traits::{UserCommand, UserParams};
 use crate::models::{Student, Teacher, TelegramName};
 use anyhow::Result;
@@ -158,7 +159,7 @@ async fn show_student_add<Cmd: UserCommand + CallbackBitcode + 'static>(
         Format: `/user student add\\! @username TZ USD Name Surname`\n\n\
         • `@username` — Telegram username\n\
         • `TZ` — timezone: IANA name \\(`Europe/Berlin`\\) or UTC offset \\(`\\+3`, `\\-5`, `0`\\)\n\
-        • `USD` — ISO currency code \\(`USD`, `EUR`, `RUB`, …\\)\n\
+        • `USD` — ISO 4217 currency code \\(`USD`, `EUR`, `RUB`, …\\); invalid codes are rejected\n\
         • `Name Surname` — display name \\(spaces OK, must be last\\)"
     );
 
@@ -205,12 +206,12 @@ async fn exec_student_add<Cmd: UserCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     name: TelegramName,
     tz: String,
-    currency: String,
+    currency: ParsedCurrency,
     display_name: String,
 ) -> Result<()> {
     ctx.state
         .sheets
-        .add_student(&name, &tz, &currency, &display_name)
+        .add_student(&name, &tz, currency.0.iso_alpha_code, &display_name)
         .await?;
     let _ = ctx.state.refresh().await;
 
@@ -256,6 +257,7 @@ fn student_button_label(s: &Student) -> String {
     let currency_str = s.currency.map(|c| c.iso_alpha_code).unwrap_or("-");
     format!("{} {} · {} · {}", s.name, s.telegram_name, tz_short(s.timezone), currency_str)
 }
+
 
 fn teacher_button_label(t: &Teacher) -> String {
     format!("{} {} · {}", t.name, t.telegram_name, tz_short(t.timezone))
@@ -514,7 +516,8 @@ async fn show_student_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
 
     let (text, edit_cmd) = match ctx.state.get_student(&name).await {
         Some(student) => {
-            let currency_str = student.currency.map(|c| c.iso_alpha_code).unwrap_or("").to_string();
+            let currency_opt: Option<ParsedCurrency> = student.currency.map(ParsedCurrency);
+            let currency_display = currency_opt.as_ref().map(|c| c.0.iso_alpha_code).unwrap_or("-");
             let zoom_str = student.zoom_url.as_deref().unwrap_or("—");
             let board_str = student.board_url.as_deref().unwrap_or("—");
             let tz_str = tz_short(student.timezone);
@@ -522,7 +525,7 @@ async fn show_student_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
             let edit_params = UserParams::USENF(
                 name.clone(),
                 tz_str.clone(),
-                currency_str.clone(),
+                currency_opt,
                 student.name.clone(),
             );
             let info = markdown_format!(
@@ -536,7 +539,7 @@ async fn show_student_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
                 name.to_string(),
                 MarkdownString::escape(student.name),
                 MarkdownString::escape(tz_str),
-                MarkdownString::escape(currency_str),
+                MarkdownString::escape(currency_display.to_string()),
                 MarkdownString::escape(zoom_str.to_string()),
                 MarkdownString::escape(board_str.to_string())
             );
@@ -546,7 +549,7 @@ async fn show_student_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
             let edit_params = UserParams::USENF(
                 name.clone(),
                 "TZ".to_string(),
-                "USD".to_string(),
+                None,
                 "Name Surname".to_string(),
             );
             let info = markdown_format!(
@@ -627,12 +630,13 @@ async fn exec_student_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     name: TelegramName,
     tz: String,
-    currency: String,
+    currency: Option<ParsedCurrency>,
     display_name: String,
 ) -> Result<()> {
+    let currency_str = currency.as_ref().map(|c| c.0.iso_alpha_code).unwrap_or("");
     ctx.state
         .sheets
-        .update_student(&name, &tz, &currency, &display_name)
+        .update_student(&name, &tz, currency_str, &display_name)
         .await?;
     let _ = ctx.state.refresh().await;
     let text = markdown_format!("✅ Student {} updated successfully\\.", name.to_string());

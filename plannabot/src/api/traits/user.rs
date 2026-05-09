@@ -6,6 +6,46 @@ use telluride::utils::split_with_screened_spaces;
 
 use crate::models::TelegramName;
 
+// ---------------------------------------------------------------------------
+// ParsedCurrency — validated ISO 4217 currency, impossible to construct invalid
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct ParsedCurrency(pub &'static rusty_money::iso::Currency);
+
+impl fmt::Display for ParsedCurrency {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.iso_alpha_code)
+    }
+}
+
+impl FromStr for ParsedCurrency {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self> {
+        let code = s.trim().to_uppercase();
+        rusty_money::iso::find(&code)
+            .map(ParsedCurrency)
+            .ok_or_else(|| anyhow::anyhow!("unknown ISO 4217 currency code '{s}'"))
+    }
+}
+
+/// Serialises `Option<ParsedCurrency>`: `None` → `"-"`, `Some(c)` → ISO code.
+/// Parses back: `"-"` → `None`, valid code → `Some(c)`, invalid → error.
+fn fmt_opt_currency(opt: &Option<ParsedCurrency>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match opt {
+        None => write!(f, "-"),
+        Some(c) => write!(f, "{c}"),
+    }
+}
+
+fn parse_opt_currency(s: &str) -> Result<Option<ParsedCurrency>> {
+    if s.trim() == "-" {
+        Ok(None)
+    } else {
+        s.parse::<ParsedCurrency>().map(Some)
+    }
+}
+
 pub enum UserRole {
     Student,
     Teacher,
@@ -78,7 +118,7 @@ pub enum UserParams {
     /// Teacher add: show instructions + template button
     UTA,
     /// Student add! forced: execute insertion (@u, tz, currency, name)
-    USAF(TelegramName, String, String, String),
+    USAF(TelegramName, String, ParsedCurrency, String),
     /// Teacher add! forced: execute insertion (@u, tz, name)
     UTAF(TelegramName, String, String),
     /// Student delete: show list (page)
@@ -101,8 +141,8 @@ pub enum UserParams {
     USEN(TelegramName),
     /// Teacher edit with name: show full info + pre-filled edit button
     UTEN(TelegramName),
-    /// Student edit! forced: execute edit (@u, tz, currency, name)
-    USENF(TelegramName, String, String, String),
+    /// Student edit! forced: execute edit (@u, tz, currency, name); currency "-" means remove
+    USENF(TelegramName, String, Option<ParsedCurrency>, String),
     /// Teacher edit! forced: execute edit (@u, tz, name)
     UTENF(TelegramName, String, String),
 }
@@ -125,7 +165,9 @@ impl fmt::Display for UserParams {
             UserParams::USA => write!(f, "{student} {add}"),
             UserParams::UTA => write!(f, "{teacher} {add}"),
             UserParams::USAF(name, tz, currency, display_name) => {
-                write!(f, "{student} {add_f} {name} {tz} {currency} {display_name}")
+                write!(f, "{student} {add_f} {name} {tz} ")?;
+                fmt::Display::fmt(currency, f)?;
+                write!(f, " {display_name}")
             }
             UserParams::UTAF(name, tz, display_name) => {
                 write!(f, "{teacher} {add_f} {name} {tz} {display_name}")
@@ -141,7 +183,9 @@ impl fmt::Display for UserParams {
             UserParams::USEN(name) => write!(f, "{student} {edit} {name}"),
             UserParams::UTEN(name) => write!(f, "{teacher} {edit} {name}"),
             UserParams::USENF(name, tz, currency, display_name) => {
-                write!(f, "{student} {edit_f} {name} {tz} {currency} {display_name}")
+                write!(f, "{student} {edit_f} {name} {tz} ")?;
+                fmt_opt_currency(currency, f)?;
+                write!(f, " {display_name}")
             }
             UserParams::UTENF(name, tz, display_name) => {
                 write!(f, "{teacher} {edit_f} {name} {tz} {display_name}")
@@ -184,10 +228,10 @@ impl FromStr for UserParams {
                     .get(3)
                     .ok_or_else(|| anyhow::anyhow!("missing timezone"))?
                     .clone();
-                let currency = parts
+                let currency: ParsedCurrency = parts
                     .get(4)
                     .ok_or_else(|| anyhow::anyhow!("missing currency"))?
-                    .clone();
+                    .parse()?;
                 let display_name = parts[5..].join(" ");
                 if display_name.is_empty() {
                     return Err(anyhow::anyhow!("missing name"));
@@ -265,10 +309,9 @@ impl FromStr for UserParams {
                     .get(3)
                     .ok_or_else(|| anyhow::anyhow!("missing timezone"))?
                     .clone();
-                let currency = parts
-                    .get(4)
-                    .ok_or_else(|| anyhow::anyhow!("missing currency"))?
-                    .clone();
+                let currency: Option<ParsedCurrency> = parse_opt_currency(
+                    parts.get(4).ok_or_else(|| anyhow::anyhow!("missing currency (use '-' to remove)"))?,
+                )?;
                 let display_name = parts[5..].join(" ");
                 if display_name.is_empty() {
                     return Err(anyhow::anyhow!("missing name"));
