@@ -1,6 +1,6 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, ImpersonateCommand, ImpersonateParams, PaymentActor, PaymentCommand, PaymentParams};
+use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, ImpersonateCommand, ImpersonateParams, PaymentActor, PaymentCommand, PaymentParams, UserCommand, UserParams};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -28,6 +28,8 @@ pub enum AdminCommand {
     Impersonate(String),
     #[command(description = "view student payments")]
     Payment(String),
+    #[command(description = "manage students and teachers")]
+    User(String),
     #[command(description = "exit admin mode")]
     Quit,
 }
@@ -49,6 +51,12 @@ impl BalanceCommand for AdminCommand {
 impl PaymentCommand for AdminCommand {
     fn payment(params: PaymentParams) -> Self {
         AdminCommand::Payment(params.to_string())
+    }
+}
+
+impl UserCommand for AdminCommand {
+    fn user(params: UserParams) -> Self {
+        AdminCommand::User(params.to_string())
     }
 }
 
@@ -97,6 +105,7 @@ async fn admin_handle(
         AdminCommand::Payment(ref params) => {
             api::payment::payment(&ctx, params, &PaymentActor::Admin).await
         }
+        AdminCommand::User(ref params) => api::user::user(&ctx, params).await,
         AdminCommand::Quit => api::admin::quit(&ctx).await,
     };
 

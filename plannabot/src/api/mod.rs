@@ -12,4 +12,5 @@ pub mod schedule;
 pub mod student;
 pub mod teacher;
 pub mod traits;
+pub mod user;
 pub mod worktime;

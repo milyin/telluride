@@ -1,11 +1,11 @@
-//! Student data reader for the `Students` sheet tab.
+//! Student data reader and writer for the `Students` sheet tab.
 
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 use chrono_tz::Tz;
 
-use super::{SheetSchema, SheetsClient, SHEET_STUDENTS, STUDENTS_COLS};
+use super::{SheetSchema, SheetsClient, SHEET_STUDENTS, STUDENTS_COLS, col_index_to_letter};
 use crate::models::{SheetParseError, Student, TelegramName};
 
 impl SheetsClient {
@@ -55,5 +55,123 @@ impl SheetsClient {
         }
 
         Ok((students, errors))
+    }
+
+    /// Appends a new student row to the `Students` sheet.
+    pub async fn add_student(
+        &self,
+        telegram_name: &TelegramName,
+        tz: &str,
+        currency: &str,
+        name: &str,
+    ) -> Result<()> {
+        let header_range = format!("{SHEET_STUDENTS}!1:1");
+        let rows = self
+            .get_values(&header_range)
+            .await
+            .context("Failed to read Students header row")?;
+        let headers = rows.into_iter().next().unwrap_or_default();
+
+        let mut values: HashMap<&str, String> = HashMap::new();
+        values.insert(Student::TELEGRAM_NAME, telegram_name.as_str().to_string());
+        values.insert(Student::NAME, name.to_string());
+        values.insert(Student::TIMEZONE, tz.to_string());
+        values.insert(Student::CURRENCY, currency.to_string());
+
+        let row: Vec<serde_json::Value> = headers
+            .iter()
+            .map(|h| serde_json::Value::String(values.get(h.as_str()).cloned().unwrap_or_default()))
+            .collect();
+
+        self.append_row(SHEET_STUDENTS, row).await
+    }
+
+    /// Deletes the student row identified by `telegram_name`.
+    pub async fn delete_student(&self, telegram_name: &TelegramName) -> Result<()> {
+        let range = format!("{SHEET_STUDENTS}!A:Z");
+        let rows = self
+            .get_values(&range)
+            .await
+            .context("Failed to get Students sheet data")?;
+
+        if rows.is_empty() {
+            return Err(anyhow::anyhow!("Students sheet is empty"));
+        }
+
+        let schema = SheetSchema::new(SHEET_STUDENTS.to_string(), rows[0].clone());
+
+        for (row_idx, row) in rows.iter().enumerate().skip(1) {
+            if row.is_empty() || row.iter().all(|c| c.is_empty()) {
+                continue;
+            }
+            let row_name = TelegramName::try_from(schema.get_str(row, Student::TELEGRAM_NAME)).ok();
+            if row_name.as_ref() == Some(telegram_name) {
+                self.delete_row(SHEET_STUDENTS, row_idx).await?;
+                return Ok(());
+            }
+        }
+
+        Err(anyhow::anyhow!("Student {} not found in sheet", telegram_name))
+    }
+
+    /// Updates the timezone, currency, and name fields of an existing student row.
+    pub async fn update_student(
+        &self,
+        telegram_name: &TelegramName,
+        tz: &str,
+        currency: &str,
+        name: &str,
+    ) -> Result<()> {
+        let range = format!("{SHEET_STUDENTS}!A:Z");
+        let rows = self
+            .get_values(&range)
+            .await
+            .context("Failed to get Students sheet data")?;
+
+        if rows.is_empty() {
+            return Err(anyhow::anyhow!("Students sheet is empty"));
+        }
+
+        let schema = SheetSchema::new(SHEET_STUDENTS.to_string(), rows[0].clone());
+
+        for (row_idx, row) in rows.iter().enumerate().skip(1) {
+            if row.is_empty() || row.iter().all(|c| c.is_empty()) {
+                continue;
+            }
+            let row_name = TelegramName::try_from(schema.get_str(row, Student::TELEGRAM_NAME)).ok();
+            if row_name.as_ref() != Some(telegram_name) {
+                continue;
+            }
+
+            // Build a full row with updated fields
+            let mut updated_row: Vec<String> = row.clone();
+            // Ensure row is long enough to cover all known columns
+            let needed_len = schema.headers.len();
+            if updated_row.len() < needed_len {
+                updated_row.resize(needed_len, String::new());
+            }
+
+            if let Some(idx) = schema.get_col(Student::TIMEZONE) {
+                updated_row[idx] = tz.to_string();
+            }
+            if let Some(idx) = schema.get_col(Student::CURRENCY) {
+                updated_row[idx] = currency.to_string();
+            }
+            if let Some(idx) = schema.get_col(Student::NAME) {
+                updated_row[idx] = name.to_string();
+            }
+
+            let sheet_row = row_idx + 1; // 1-based row number
+            let last_col = col_index_to_letter(updated_row.len().saturating_sub(1));
+            let update_range = format!("{SHEET_STUDENTS}!A{sheet_row}:{last_col}{sheet_row}");
+            let values: Vec<Vec<serde_json::Value>> = vec![updated_row
+                .into_iter()
+                .map(serde_json::Value::String)
+                .collect()];
+            self.update_values(&update_range, values).await?;
+            return Ok(());
+        }
+
+        Err(anyhow::anyhow!("Student {} not found in sheet", telegram_name))
     }
 }
