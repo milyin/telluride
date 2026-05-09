@@ -71,7 +71,7 @@ async fn notification_N0<Cmd: NotificationCommand + BookCommand + CallbackBitcod
     ));
     text.push(&markdown_format!(
         "📆 Date: {}\n",
-        local_dt.format("%Y\\-%m\\-%d").to_string()
+        local_dt.format("%Y-%m-%d").to_string()
     ));
     text.push(&markdown_format!(
         "⏰ Time: {}\n",
@@ -84,16 +84,16 @@ async fn notification_N0<Cmd: NotificationCommand + BookCommand + CallbackBitcod
 
     if let Some(p) = &pairing {
         if let Some(zoom) = &p.zoom_url {
-            text.push(&markdown_format!(
-                "🎥 Zoom: {}\n",
-                MarkdownString::escape(zoom.clone())
-            ));
+            if !zoom.is_empty() {
+                let url = zoom.replace('\\', "\\\\").replace(')', "\\)");
+                text.push(&MarkdownString::from_validated_string(format!("[🎥 Zoom]({})\n", url)));
+            }
         }
         if let Some(board) = &p.board_url {
-            text.push(&markdown_format!(
-                "📋 Board: {}\n",
-                MarkdownString::escape(board.clone())
-            ));
+            if !board.is_empty() {
+                let url = board.replace('\\', "\\\\").replace(')', "\\)");
+                text.push(&MarkdownString::from_validated_string(format!("[📋 Board]({})\n", url)));
+            }
         }
     }
 
@@ -196,7 +196,7 @@ pub fn format_notification_message(
     text.push(&markdown_format!("🏫 Teacher: {}\n", teacher.to_string()));
     text.push(&markdown_format!(
         "📆 {}\n",
-        local_dt.format("%Y\\-%m\\-%d at %H:%M").to_string()
+        local_dt.format("%Y-%m-%d at %H:%M").to_string()
     ));
     text.push(&markdown_format!(
         "⏱ Duration: {}\n",
@@ -205,18 +205,14 @@ pub fn format_notification_message(
 
     if let Some(zoom) = zoom_url {
         if !zoom.is_empty() {
-            text.push(&markdown_format!(
-                "🎥 Zoom: {}\n",
-                MarkdownString::escape(zoom.to_string())
-            ));
+            let url = zoom.replace('\\', "\\\\").replace(')', "\\)");
+            text.push(&MarkdownString::from_validated_string(format!("[🎥 Zoom]({})\n", url)));
         }
     }
     if let Some(board) = board_url {
         if !board.is_empty() {
-            text.push(&markdown_format!(
-                "📋 Board: {}\n",
-                MarkdownString::escape(board.to_string())
-            ));
+            let url = board.replace('\\', "\\\\").replace(')', "\\)");
+            text.push(&MarkdownString::from_validated_string(format!("[📋 Board]({})\n", url)));
         }
     }
 

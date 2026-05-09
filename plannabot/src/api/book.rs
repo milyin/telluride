@@ -630,16 +630,16 @@ async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
 
     if let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await {
         if let Some(zoom) = &pairing.zoom_url {
-            text.push(&markdown_format!(
-                "🎥 Zoom: {}\n",
-                MarkdownString::escape(zoom.clone())
-            ));
+            if !zoom.is_empty() {
+                let url = zoom.replace('\\', "\\\\").replace(')', "\\)");
+                text.push(&MarkdownString::from_validated_string(format!("[🎥 Zoom]({})\n", url)));
+            }
         }
         if let Some(board) = &pairing.board_url {
-            text.push(&markdown_format!(
-                "📋 Board: {}\n",
-                MarkdownString::escape(board.clone())
-            ));
+            if !board.is_empty() {
+                let url = board.replace('\\', "\\\\").replace(')', "\\)");
+                text.push(&MarkdownString::from_validated_string(format!("[📋 Board]({})\n", url)));
+            }
         }
     }
 
