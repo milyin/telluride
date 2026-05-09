@@ -70,7 +70,7 @@ pub async fn book<Cmd: BookCommand + CallbackBitcode + 'static>(
             book_R3(ctx, teacher, student, od, ot, nd, nt).await
         }
         BookParams::RF(teacher, student, od, ot, nd, nt) => {
-            book_RF(ctx, teacher, student, od, ot, nd, nt).await
+            book_RF(ctx, teacher, student, od, ot, nd, nt, actor).await
         }
         BookParams::S0(teacher, student, date, time) => {
             book_S0(ctx, teacher, student, date, time, actor).await
@@ -939,7 +939,17 @@ async fn book_RF<Cmd: Send + Sync + Clone>(
     ot: NaiveTime,
     nd: NaiveDate,
     nt: NaiveTime,
+    actor: &BookingActor,
 ) -> Result<()> {
+    if matches!(actor, BookingActor::Student(_)) && nd.and_time(nt).and_utc() <= Utc::now() {
+        ctx.update_markdown_message(
+            markdown_string!("⚠️ Cannot reschedule: new time must be in the future\\."),
+            None,
+        )
+        .await?;
+        return Ok(());
+    }
+
     let Some(pairing) = ctx.state.get_pairing(&student, &teacher).await else {
         ctx.update_markdown_message(
             markdown_string!("⚠️ Cannot reschedule: pairing not found\\."),
