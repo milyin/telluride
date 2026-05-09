@@ -5,12 +5,88 @@ use telluride::calendar::build_month_calendar;
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::UserProxy;
 use telluride::markdown::MarkdownString;
-use telluride::markdown_string;
+use telluride::{markdown_format, markdown_string};
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
+use crate::api::common::PageInfo;
 use crate::api::context::BotCtx;
 use crate::models::TelegramName;
 use crate::sheets::worktime::{available_slots, DayAvailability};
+
+/// Page size used by [`show_annotated_list`].
+pub const ANNOTATED_LIST_PAGE_SIZE: usize = 3;
+
+/// Shows a paginated list where each item's detail appears in the message text
+/// and buttons carry only the username (for navigation to a detail view).
+///
+/// `items` — all items as `(name, annotation)` pairs, pre-computed by the caller.
+/// `make_item_cmd` — called with the clicked name to produce the detail command.
+/// `make_page_cmd` — called with a page index to produce the prev/next command.
+pub async fn show_annotated_list<Cmd, FItem, FPage>(
+    ctx: &BotCtx<Cmd>,
+    header: MarkdownString,
+    empty_msg: MarkdownString,
+    items: Vec<(TelegramName, MarkdownString)>,
+    page: i32,
+    make_item_cmd: FItem,
+    make_page_cmd: FPage,
+    back: Option<Cmd>,
+) -> Result<()>
+where
+    Cmd: CallbackBitcode + 'static,
+    FItem: Fn(TelegramName) -> Cmd,
+    FPage: Fn(i32) -> Cmd,
+{
+    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
+
+    if items.is_empty() {
+        let keyboard = if let Some(back_cmd) = back {
+            let key = CallbackKey::pack(back_cmd, &user_proxy).await;
+            Some(InlineKeyboardMarkup::new(vec![vec![
+                InlineKeyboardButton::callback_key("↩ Back", &key),
+            ]]))
+        } else {
+            None
+        };
+        return ctx.update_markdown_message(empty_msg, keyboard).await;
+    }
+
+    let info = PageInfo::with_size(page, items.len(), ANNOTATED_LIST_PAGE_SIZE);
+    let total_pages = (items.len() + ANNOTATED_LIST_PAGE_SIZE - 1) / ANNOTATED_LIST_PAGE_SIZE;
+
+    let mut text = header;
+    text.push(&markdown_format!(" \\(page {}/{}\\):\n", info.page + 1, total_pages));
+    for (name, annotation) in &items[info.start..info.end] {
+        let mut line = markdown_format!("\n• {}: ", name.to_string());
+        line.push(annotation);
+        text.push(&line);
+    }
+
+    let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+    for (name, _) in &items[info.start..info.end] {
+        let key = CallbackKey::pack(make_item_cmd(name.clone()), &user_proxy).await;
+        buttons.push(vec![InlineKeyboardButton::callback_key(name.to_string(), &key)]);
+    }
+
+    let mut nav_row: Vec<InlineKeyboardButton> = Vec::new();
+    if info.has_prev() {
+        let k = CallbackKey::pack(make_page_cmd(info.page - 1), &user_proxy).await;
+        nav_row.push(InlineKeyboardButton::callback_key("◀", &k));
+    }
+    if info.has_next() {
+        let k = CallbackKey::pack(make_page_cmd(info.page + 1), &user_proxy).await;
+        nav_row.push(InlineKeyboardButton::callback_key("▶", &k));
+    }
+    if !nav_row.is_empty() {
+        buttons.push(nav_row);
+    }
+    if let Some(back_cmd) = back {
+        let key = CallbackKey::pack(back_cmd, &user_proxy).await;
+        buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &key)]);
+    }
+
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
+}
 
 pub(crate) async fn show_name_list<Cmd, F>(
     ctx: &BotCtx<Cmd>,

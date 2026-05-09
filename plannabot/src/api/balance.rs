@@ -5,9 +5,11 @@ use chrono_tz::Tz;
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::UserProxy;
 use telluride::{markdown_format, markdown_string};
+use telluride::markdown::MarkdownString;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
-use crate::api::common::{PageInfo, fmt_money, fmt_money_plain, format_entry_label};
+use crate::api::common::{fmt_money, fmt_money_plain, format_entry_label};
+use crate::api::menus::show_annotated_list;
 use crate::api::traits::BookingActor;
 use crate::api::context::BotCtx;
 use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams};
@@ -54,10 +56,7 @@ async fn balance_L0<Cmd: BalanceCommand + CallbackBitcode + 'static>(
     students.sort();
     students.dedup();
 
-    let total = students.len();
-    let info = PageInfo::new(page, total);
-
-    if total == 0 {
+    if students.is_empty() {
         return ctx
             .update_markdown_message(
                 markdown_string!("💰 *Balance*\n\nNo students found\\."),
@@ -69,10 +68,8 @@ async fn balance_L0<Cmd: BalanceCommand + CallbackBitcode + 'static>(
     let (schedule, _) = ctx.state.sheets.get_schedule().await?;
     let (all_payments, _) = ctx.state.sheets.get_payments().await?;
 
-    let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
-
-    for student in &students[info.start..info.end] {
+    let mut items: Vec<(TelegramName, MarkdownString)> = Vec::new();
+    for student in &students {
         let allocated: i64 = schedule
             .iter()
             .filter(|e| &e.student_telegram == student && e.status.is_none())
@@ -89,36 +86,19 @@ async fn balance_L0<Cmd: BalanceCommand + CallbackBitcode + 'static>(
             .map(|p| p.sum)
             .sum();
         let remains = paid - allocated - spent;
-
         let currency = ctx.state.get_student(student).await.and_then(|s| s.currency);
-        let balance_str = fmt_money_plain(remains, currency);
-        let label = format!("{}: {}", student, balance_str);
-
-        let key = CallbackKey::pack(
-            Cmd::balance(BalanceParams::L1(student.clone())),
-            &user_proxy,
-        )
-        .await;
-        buttons.push(vec![InlineKeyboardButton::callback_key(label, &key)]);
+        items.push((student.clone(), fmt_money(remains, currency)));
     }
 
-    let mut nav_row: Vec<InlineKeyboardButton> = Vec::new();
-    if info.has_prev() {
-        let k = CallbackKey::pack(Cmd::balance(BalanceParams::L0(info.page - 1)), &user_proxy).await;
-        nav_row.push(InlineKeyboardButton::callback_key("<", &k));
-    }
-    if info.has_next() {
-        let k = CallbackKey::pack(Cmd::balance(BalanceParams::L0(info.page + 1)), &user_proxy).await;
-        nav_row.push(InlineKeyboardButton::callback_key(">", &k));
-    }
-    if !nav_row.is_empty() {
-        buttons.push(nav_row);
-    }
-
-    let keyboard = InlineKeyboardMarkup::new(buttons);
-    ctx.update_markdown_message(
-        markdown_string!("💰 *Balance*\n\nSelect a student:"),
-        Some(keyboard),
+    show_annotated_list(
+        ctx,
+        markdown_string!("💰 *Balance*"),
+        markdown_string!("💰 *Balance*\n\nNo students found\\."),
+        items,
+        page,
+        |s| Cmd::balance(BalanceParams::L1(s)),
+        |p| Cmd::balance(BalanceParams::L0(p)),
+        None,
     )
     .await
 }
