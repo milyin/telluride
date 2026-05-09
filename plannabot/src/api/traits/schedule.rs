@@ -2,7 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use anyhow::Result;
-use telluride::utils::{format_screen_spaces, split_with_screened_spaces};
+use telluride::utils::{format_screen_spaces, split_with_screened_spaces, ParamParser};
 
 pub enum ScheduleParams {
     L0,
@@ -24,12 +24,14 @@ impl FromStr for ScheduleParams {
 
     fn from_str(s: &str) -> Result<Self> {
         let parts = split_with_screened_spaces(s);
-        let Some(first) = parts.first() else {
+        let mut p = ParamParser::new(&parts, 0);
+        let Some(first) = p.next_opt() else {
             return Ok(ScheduleParams::L0);
         };
         let w: i32 = first
             .parse()
             .map_err(|_| anyhow::anyhow!("expected integer week_offset, got: {}", first))?;
+        p.finish()?;
         Ok(ScheduleParams::L1(w))
     }
 }

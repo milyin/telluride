@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use chrono::{Datelike, Local, NaiveDate, NaiveTime, Weekday};
-use telluride::utils::{format_screen_spaces, split_with_screened_spaces};
+use telluride::utils::{format_screen_spaces, split_with_screened_spaces, ParamParser};
 
 pub enum WorktimeBranch {
     Weekday,
@@ -180,28 +180,6 @@ impl fmt::Display for WorktimeParams {
     }
 }
 
-struct P<'a> {
-    parts: &'a [String],
-    pos: usize,
-}
-
-impl<'a> P<'a> {
-    fn new(parts: &'a [String], start: usize) -> Self {
-        Self { parts, pos: start }
-    }
-    fn next(&mut self, name: &str) -> Result<&str> {
-        self.parts
-            .get(self.pos)
-            .map(|s| {
-                self.pos += 1;
-                s.as_str()
-            })
-            .ok_or_else(|| anyhow::anyhow!("missing parameter: {}", name))
-    }
-    fn peek(&self) -> Option<&str> {
-        self.parts.get(self.pos).map(|s| s.as_str())
-    }
-}
 
 impl FromStr for WorktimeParams {
     type Err = anyhow::Error;
@@ -217,7 +195,7 @@ impl FromStr for WorktimeParams {
         };
 
         let branch: WorktimeBranch = first.parse()?;
-        let mut p = P::new(&parts, 1);
+        let mut p = ParamParser::new(&parts, 1);
 
         match branch {
             WorktimeBranch::Weekday => {

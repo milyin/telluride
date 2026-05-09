@@ -2,7 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use anyhow::Result;
-use telluride::utils::{format_screen_spaces, split_with_screened_spaces};
+use telluride::utils::{format_screen_spaces, split_with_screened_spaces, ParamParser};
 
 use crate::models::TelegramName;
 
@@ -37,26 +37,23 @@ impl FromStr for BalanceParams {
 
     fn from_str(s: &str) -> Result<Self> {
         let parts = split_with_screened_spaces(s);
-        let Some(first) = parts.first() else {
+        let mut p = ParamParser::new(&parts, 0);
+        let Some(first) = p.next_opt() else {
             return Ok(BalanceParams::L0(0));
         };
-        // Integer first token → page number → L0
         if let Ok(page) = first.parse::<i32>() {
+            p.finish()?;
             return Ok(BalanceParams::L0(page));
         }
         let student: TelegramName = first.parse()?;
-        match parts.len() {
-            1 => Ok(BalanceParams::L1(student)),
-            3 => {
-                let year: i32 = parts[1]
-                    .parse()
-                    .map_err(|_| anyhow::anyhow!("invalid year: {}", parts[1]))?;
-                let month: u32 = parts[2]
-                    .parse()
-                    .map_err(|_| anyhow::anyhow!("invalid month: {}", parts[2]))?;
-                Ok(BalanceParams::L2(student, year, month))
-            }
-            n => Err(anyhow::anyhow!("unexpected token count {}", n)),
+        if p.is_empty() {
+            return Ok(BalanceParams::L1(student));
         }
+        let year: i32 = p.next("year")?.parse()
+            .map_err(|_| anyhow::anyhow!("invalid year"))?;
+        let month: u32 = p.next("month")?.parse()
+            .map_err(|_| anyhow::anyhow!("invalid month"))?;
+        p.finish()?;
+        Ok(BalanceParams::L2(student, year, month))
     }
 }

@@ -2,7 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use anyhow::Result;
-use telluride::utils::{format_screen_spaces, split_with_screened_spaces};
+use telluride::utils::{format_screen_spaces, split_with_screened_spaces, ParamParser};
 
 use crate::models::TelegramName;
 
@@ -60,13 +60,15 @@ impl FromStr for ImpersonateParams {
 
     fn from_str(s: &str) -> Result<Self> {
         let parts = split_with_screened_spaces(s);
+        let mut p = ParamParser::new(&parts, 0);
 
-        let Some(first) = parts.first() else {
+        let Some(first) = p.next_opt() else {
             return Ok(ImpersonateParams::I0);
         };
 
         let role: ImpersonateRole = first.parse()?;
-        let name = parts.get(1).map(|n| n.parse::<TelegramName>()).transpose()?;
+        let name = p.next_opt().map(|n| n.parse::<TelegramName>()).transpose()?;
+        p.finish()?;
 
         match role {
             ImpersonateRole::Student => Ok(ImpersonateParams::Student(name)),

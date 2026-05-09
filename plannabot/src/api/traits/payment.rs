@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime};
-use telluride::utils::{format_screen_spaces, split_with_screened_spaces};
+use telluride::utils::{format_screen_spaces, split_with_screened_spaces, ParamParser};
 
 use crate::models::TelegramName;
 
@@ -88,31 +88,6 @@ impl fmt::Display for PaymentParams {
     }
 }
 
-struct ParamParser<'a> {
-    parts: &'a [String],
-    pos: usize,
-}
-
-impl<'a> ParamParser<'a> {
-    fn new(parts: &'a [String], start: usize) -> Self {
-        Self { parts, pos: start }
-    }
-    fn next(&mut self, name: &str) -> Result<&str> {
-        self.parts
-            .get(self.pos)
-            .map(|s| {
-                self.pos += 1;
-                s.as_str()
-            })
-            .ok_or_else(|| anyhow::anyhow!("missing parameter: {}", name))
-    }
-    fn finish(&self) -> Result<()> {
-        match self.parts.get(self.pos) {
-            None => Ok(()),
-            Some(extra) => Err(anyhow::anyhow!("extra parameter: {}", extra)),
-        }
-    }
-}
 
 impl FromStr for PaymentParams {
     type Err = anyhow::Error;

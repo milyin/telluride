@@ -47,3 +47,4 @@ pretty_env_logger.workspace = true
 chrono.workspace = true
 humantime.workspace = true
 chrono-tz.workspace = true
+anyhow.workspace = true

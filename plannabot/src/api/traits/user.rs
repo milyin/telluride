@@ -2,7 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use anyhow::Result;
-use telluride::utils::split_with_screened_spaces;
+use telluride::utils::{split_with_screened_spaces, ParamParser};
 
 use crate::models::TelegramName;
 use crate::types::{Currency, Timezone};
@@ -177,14 +177,15 @@ impl FromStr for UserParams {
 
     fn from_str(s: &str) -> Result<Self> {
         let parts = split_with_screened_spaces(s);
+        let mut p = ParamParser::new(&parts, 0);
 
-        let Some(first) = parts.first() else {
+        let Some(first) = p.next_opt() else {
             return Ok(UserParams::U0);
         };
 
         let role: UserRole = first.parse()?;
 
-        let Some(second) = parts.get(1) else {
+        let Some(second) = p.next_opt() else {
             return Ok(match role {
                 UserRole::Student => UserParams::US,
                 UserRole::Teacher => UserParams::UT,
@@ -198,19 +199,10 @@ impl FromStr for UserParams {
             (UserRole::Teacher, UserSubcmd::Add(false)) => Ok(UserParams::UTA),
 
             (UserRole::Student, UserSubcmd::Add(true)) => {
-                let name: TelegramName = parts
-                    .get(2)
-                    .ok_or_else(|| anyhow::anyhow!("missing @username"))?
-                    .parse()?;
-                let tz: Timezone = parts
-                    .get(3)
-                    .ok_or_else(|| anyhow::anyhow!("missing timezone"))?
-                    .parse()?;
-                let currency: Currency = parts
-                    .get(4)
-                    .ok_or_else(|| anyhow::anyhow!("missing currency"))?
-                    .parse()?;
-                let display_name = parts[5..].join(" ");
+                let name: TelegramName = p.next("@username")?.parse()?;
+                let tz: Timezone = p.next("timezone")?.parse()?;
+                let currency: Currency = p.next("currency")?.parse()?;
+                let display_name = p.rest().join(" ");
                 if display_name.is_empty() {
                     return Err(anyhow::anyhow!("missing name"));
                 }
@@ -218,79 +210,55 @@ impl FromStr for UserParams {
             }
 
             (UserRole::Teacher, UserSubcmd::Add(true)) => {
-                let name: TelegramName = parts
-                    .get(2)
-                    .ok_or_else(|| anyhow::anyhow!("missing @username"))?
-                    .parse()?;
-                let tz: Timezone = parts
-                    .get(3)
-                    .ok_or_else(|| anyhow::anyhow!("missing timezone"))?
-                    .parse()?;
-                let display_name = parts[4..].join(" ");
+                let name: TelegramName = p.next("@username")?.parse()?;
+                let tz: Timezone = p.next("timezone")?.parse()?;
+                let display_name = p.rest().join(" ");
                 if display_name.is_empty() {
                     return Err(anyhow::anyhow!("missing name"));
                 }
                 Ok(UserParams::UTAF(name, tz, display_name))
             }
 
-            (UserRole::Student, UserSubcmd::Delete(false)) => {
-                match parts.get(2).map(|s| s.as_str()) {
-                    None => Ok(UserParams::USD(0)),
-                    Some(s) if s.starts_with('@') => Ok(UserParams::USDN(s.parse()?)),
-                    Some(s) => Ok(UserParams::USD(s.parse().unwrap_or(0))),
-                }
-            }
-            (UserRole::Teacher, UserSubcmd::Delete(false)) => {
-                match parts.get(2).map(|s| s.as_str()) {
-                    None => Ok(UserParams::UTD(0)),
-                    Some(s) if s.starts_with('@') => Ok(UserParams::UTDN(s.parse()?)),
-                    Some(s) => Ok(UserParams::UTD(s.parse().unwrap_or(0))),
-                }
-            }
+            (UserRole::Student, UserSubcmd::Delete(false)) => match p.next_opt() {
+                None => Ok(UserParams::USD(0)),
+                Some(s) if s.starts_with('@') => Ok(UserParams::USDN(s.parse()?)),
+                Some(s) => Ok(UserParams::USD(s.parse().unwrap_or(0))),
+            },
+            (UserRole::Teacher, UserSubcmd::Delete(false)) => match p.next_opt() {
+                None => Ok(UserParams::UTD(0)),
+                Some(s) if s.starts_with('@') => Ok(UserParams::UTDN(s.parse()?)),
+                Some(s) => Ok(UserParams::UTD(s.parse().unwrap_or(0))),
+            },
 
             (UserRole::Student, UserSubcmd::Delete(true)) => {
-                let name: TelegramName = parts
-                    .get(2)
-                    .ok_or_else(|| anyhow::anyhow!("missing @username"))?
-                    .parse()?;
+                let name: TelegramName = p.next("@username")?.parse()?;
+                p.finish()?;
                 Ok(UserParams::USDNF(name))
             }
             (UserRole::Teacher, UserSubcmd::Delete(true)) => {
-                let name: TelegramName = parts
-                    .get(2)
-                    .ok_or_else(|| anyhow::anyhow!("missing @username"))?
-                    .parse()?;
+                let name: TelegramName = p.next("@username")?.parse()?;
+                p.finish()?;
                 Ok(UserParams::UTDNF(name))
             }
 
-            (UserRole::Student, UserSubcmd::Edit(false)) => {
-                match parts.get(2).map(|s| s.as_str()) {
-                    None => Ok(UserParams::USE(0)),
-                    Some(s) if s.starts_with('@') => Ok(UserParams::USEN(s.parse()?)),
-                    Some(s) => Ok(UserParams::USE(s.parse().unwrap_or(0))),
-                }
-            }
-            (UserRole::Teacher, UserSubcmd::Edit(false)) => {
-                match parts.get(2).map(|s| s.as_str()) {
-                    None => Ok(UserParams::UTE(0)),
-                    Some(s) if s.starts_with('@') => Ok(UserParams::UTEN(s.parse()?)),
-                    Some(s) => Ok(UserParams::UTE(s.parse().unwrap_or(0))),
-                }
-            }
+            (UserRole::Student, UserSubcmd::Edit(false)) => match p.next_opt() {
+                None => Ok(UserParams::USE(0)),
+                Some(s) if s.starts_with('@') => Ok(UserParams::USEN(s.parse()?)),
+                Some(s) => Ok(UserParams::USE(s.parse().unwrap_or(0))),
+            },
+            (UserRole::Teacher, UserSubcmd::Edit(false)) => match p.next_opt() {
+                None => Ok(UserParams::UTE(0)),
+                Some(s) if s.starts_with('@') => Ok(UserParams::UTEN(s.parse()?)),
+                Some(s) => Ok(UserParams::UTE(s.parse().unwrap_or(0))),
+            },
 
             (UserRole::Student, UserSubcmd::Edit(true)) => {
-                let name: TelegramName = parts
-                    .get(2)
-                    .ok_or_else(|| anyhow::anyhow!("missing @username"))?
-                    .parse()?;
-                let tz: Timezone = parts
-                    .get(3)
-                    .ok_or_else(|| anyhow::anyhow!("missing timezone"))?
-                    .parse()?;
+                let name: TelegramName = p.next("@username")?.parse()?;
+                let tz: Timezone = p.next("timezone")?.parse()?;
                 let currency: Option<Currency> = parse_opt_currency(
-                    parts.get(4).ok_or_else(|| anyhow::anyhow!("missing currency (use '-' to remove)"))?,
+                    p.next("currency (use '-' to remove)")?,
                 )?;
-                let display_name = parts[5..].join(" ");
+                let display_name = p.rest().join(" ");
                 if display_name.is_empty() {
                     return Err(anyhow::anyhow!("missing name"));
                 }
@@ -298,15 +266,9 @@ impl FromStr for UserParams {
             }
 
             (UserRole::Teacher, UserSubcmd::Edit(true)) => {
-                let name: TelegramName = parts
-                    .get(2)
-                    .ok_or_else(|| anyhow::anyhow!("missing @username"))?
-                    .parse()?;
-                let tz: Timezone = parts
-                    .get(3)
-                    .ok_or_else(|| anyhow::anyhow!("missing timezone"))?
-                    .parse()?;
-                let display_name = parts[4..].join(" ");
+                let name: TelegramName = p.next("@username")?.parse()?;
+                let tz: Timezone = p.next("timezone")?.parse()?;
+                let display_name = p.rest().join(" ");
                 if display_name.is_empty() {
                     return Err(anyhow::anyhow!("missing name"));
                 }
