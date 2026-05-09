@@ -2,7 +2,7 @@
 use crate::models::LessonStatus;
 use crate::types::Duration;
 use anyhow::Result;
-use chrono::{Datelike, Duration as ChronoDuration, Local, NaiveDate, NaiveTime};
+use chrono::{Datelike, Duration as ChronoDuration, Local, NaiveDate, NaiveTime, Utc};
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::UserProxy;
 use telluride::markdown::MarkdownString;
@@ -489,7 +489,8 @@ async fn book_U0<Cmd: BookCommand + CallbackBitcode + 'static>(
     month: u32,
 ) -> Result<()> {
     let (all_entries, _) = ctx.state.sheets.get_schedule().await?;
-    let mut day_flags: HashMap<NaiveDate, (bool, bool)> = HashMap::new();
+    let today = Local::now().date_naive();
+    let mut lesson_days: HashMap<NaiveDate, DayAvailability> = HashMap::new();
     for entry in all_entries.iter().filter(|e| match actor {
         BookingActor::Student(s) => &e.student_telegram == s,
         BookingActor::Teacher(t) => &e.teacher_telegram == t,
@@ -498,28 +499,17 @@ async fn book_U0<Cmd: BookCommand + CallbackBitcode + 'static>(
         if date.year() != year || date.month() != month {
             continue;
         }
-        let flags = day_flags.entry(date).or_insert((false, false));
-        if entry.status.is_none() {
-            flags.0 = true;
+        let avail = if date < today {
+            DayAvailability::Done
         } else {
-            flags.1 = true;
-        }
+            DayAvailability::Planned
+        };
+        lesson_days.entry(date).or_insert(avail);
     }
-    let lesson_days: HashMap<NaiveDate, DayAvailability> = day_flags
-        .into_iter()
-        .map(|(date, (has_planned, has_finished))| {
-            let avail = match (has_planned, has_finished) {
-                (true, false) => DayAvailability::Free,
-                (false, true) => DayAvailability::Busy,
-                _ => DayAvailability::Partial,
-            };
-            (date, avail)
-        })
-        .collect();
 
     show_date_selection(
         ctx,
-        markdown_string!("📋 *Select a day with a lesson:*\n\n🟢 Planned  🟡 Mixed  🔴 Finished"),
+        markdown_string!("📋 *Select a day with a lesson:*"),
         year,
         month,
         |date| Cmd::book(BookParams::U1(date)),
@@ -614,9 +604,13 @@ async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
         .as_ref()
         .map(|e| (e.status.clone(), e.duration_minutes))
         .unwrap_or((None, 0));
-    let is_planned = status_opt.is_none();
+
+    let is_teacher = matches!(actor, BookingActor::Teacher(_));
+    let is_future = target_dt > Utc::now();
+    let no_explicit_status = status_opt.is_none();
 
     let status_str = match &status_opt {
+        None if !is_future => "passed".to_string(),
         None => "planned".to_string(),
         Some(s) => s.to_string(),
     };
@@ -639,7 +633,10 @@ async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
 
     let mut rows: Vec<Vec<InlineKeyboardButton>> = Vec::new();
 
-    if is_planned {
+    let can_delete = is_teacher || (is_future && no_explicit_status);
+    let can_reschedule = is_teacher || (is_future && no_explicit_status);
+
+    if can_delete {
         let delete_params = format!(
             "/book {}",
             BookParams::D0(teacher.clone(), student.clone(), date, time)
@@ -647,7 +644,9 @@ async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
         rows.push(vec![
             InlineKeyboardButton::switch_inline_query_current_chat("🗑️ Delete", delete_params),
         ]);
+    }
 
+    if can_reschedule {
         let now = Local::now();
         let reschedule_key = CallbackKey::pack(
             Cmd::book(BookParams::R1(
@@ -667,7 +666,7 @@ async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
         )]);
     }
 
-    if matches!(actor, BookingActor::Teacher(_)) {
+    if is_teacher {
         let s0_key = CallbackKey::pack(
             Cmd::book(BookParams::S0(teacher.clone(), student.clone(), date, time)),
             &user_proxy,

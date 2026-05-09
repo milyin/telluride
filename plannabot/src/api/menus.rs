@@ -251,6 +251,8 @@ where
                 Some(DayAvailability::Partial) => "🟡",
                 Some(DayAvailability::Busy)    => "🔴",
                 Some(DayAvailability::Marked)  => "📆",
+                Some(DayAvailability::Planned) => "📅",
+                Some(DayAvailability::Done)    => "✅",
                 None => "",
             };
             let base = if date == today { format!("[{}]", day) } else { format!("{}", day) };
