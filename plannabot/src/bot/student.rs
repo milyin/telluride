@@ -10,6 +10,8 @@ use crate::state::BotState;
 use std::sync::Arc;
 use telluride::command::CallbackKey;
 use telluride::data_store::InMemStore;
+use telluride::markdown::MarkdownStringMessage;
+use telluride::markdown_string;
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, MessageId};
 use teloxide::utils::command::BotCommands;
@@ -75,18 +77,18 @@ async fn student_handle(
     let _ = state.refresh_if_needed().await;
 
     let Some(username) = get_username(&msg) else {
-        bot.send_message(
+        bot.send_markdown_message(
             msg.chat.id,
-            "Please set a Telegram username to use this bot.",
+            markdown_string!("Please set a Telegram username to use this bot\\."),
         )
         .await?;
         return Ok(());
     };
 
     let Some(UserRole::Student(student)) = state.get_role(&username).await else {
-        bot.send_message(
+        bot.send_markdown_message(
             msg.chat.id,
-            "You are not authorized to use this bot. Please contact your teacher.",
+            markdown_string!("You are not authorized to use this bot\\. Please contact your teacher\\."),
         )
         .await?;
         return Ok(());

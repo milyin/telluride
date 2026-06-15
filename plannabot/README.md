@@ -1,39 +1,47 @@
 # Plannabot
 
-A Telegram bot for managing student-teacher scheduling, lessons, and payments.
-Built with Rust using [`teloxide`](https://github.com/teloxide/teloxide) and [`telluride`](https://github.com/milyin/telluride).
-Data is stored in a Google Spreadsheet (editable by humans, read-synced by the bot).
+A Telegram bot for student/teacher lesson management backed by Google Sheets.
+It is implemented in Rust with [`teloxide`](https://github.com/teloxide/teloxide) and [`telluride`](https://github.com/milyin/telluride).
 
 ---
 
 ## Features
 
-- **Role-based access** — students and teachers see different commands and data
-- **Google Sheets backend** — all data lives in a human-editable spreadsheet
-- **Auto-schema** — missing sheet tabs or columns are created automatically at startup
-- **Auto-formatting** — known columns are automatically formatted (`date`, `time`, `datetime`, currency-like fields, duration)
-- **`/schedule`** — students see their upcoming lessons; teachers see their full list
-- **Live data** — on every command the bot checks whether the spreadsheet was modified (via Google Drive API) and reloads data only when needed, with a 15-second throttle
-- **Safe MarkdownV2** — all messages use the `telluride` library for compile-time-validated formatting
-- **Graceful Ctrl+C shutdown**
+- **Role and mode aware**: Student, Teacher, Admin, Teacher→Student impersonation, Teacher→Teacher impersonation
+- **Google Sheets as source of truth** with **auto schema creation** and **header backfilling**
+- **Bookings with availability checks** (pairings, worktime windows, and schedule conflict detection)
+- **Balance and payment workflows** with interactive menus
+- **Notification system** (`/notification`) with background reminders for upcoming lessons
+- **Hot data refresh** via Drive `modifiedTime` checks (throttled to once per 15 seconds)
+- **Parse error reporting**: latest sheet parsing errors are pushed to teachers
 
 ---
 
-## Data Model
+## Spreadsheet data model
 
-All tables live in separate tabs of the same Google Spreadsheet.
-Extra columns beyond the required ones are preserved as custom properties.
+The bot uses one spreadsheet with these tabs:
 
-| Tab | Key columns |
-|-----|-------------|
-| **Students** | `telegram_name`, `name`, `timezone`, `currency`, `zoom_url`, `board_url` |
-| **Teachers** | `telegram_name`, `timezone` |
+| Tab | Required columns |
+|-----|-------------------|
+| **Students** | `telegram_name`, `name`, `timezone`, `currency`, `chat_id`, `notification_delay` |
+| **Teachers** | `telegram_name`, `name`, `timezone`, `admin`, `chat_id` |
 | **Schedule** | `student_telegram`, `teacher_telegram`, `datetime`, `duration_minutes`, `cost`, `status` |
 | **Payments** | `student_telegram`, `date`, `sum` |
+| **Pairings** | `teacher_telegram`, `student_telegram`, `cost`, `duration_minutes`, `zoom_url`, `board_url` |
+| **Worktime** | `teacher_telegram`, `day_of_week`, `date`, `start_time`, `end_time` |
 
-`status` in Schedule: empty = planned, `done` = completed, `cancelled` = cancelled.
+Extra columns are preserved as custom fields.
 
-`datetime` formats accepted: `2024-01-15T10:00:00+03:00`, `2024-01-15 10:00`, `2024-01-15 10:00:00`, `15/01/2024 10:00`.
+`Schedule.status` values:
+- empty = planned (future) or completed (past, inferred from time)
+- `absent`
+- `cancelled`
+
+Accepted datetime/date/time inputs include:
+- RFC3339 datetime (e.g. `2024-01-15T10:00:00+03:00`)
+- `YYYY-MM-DD HH:MM[:SS]`
+- `DD/MM/YYYY HH:MM[:SS]`
+- `YYYY-MM-DD` / `DD/MM/YYYY` / `DD.MM.YYYY` for date-only fields
 
 ---
 
@@ -41,50 +49,21 @@ Extra columns beyond the required ones are preserved as custom properties.
 
 ### 1. Create a Telegram bot
 
-1. Open [@BotFather](https://t.me/botfather) in Telegram
-2. Send `/newbot` and follow the prompts
+1. Open [@BotFather](https://t.me/botfather)
+2. Run `/newbot`
 3. Copy the bot token
 
-### 2. Set up Google Cloud project
+### 2. Set up Google Cloud
 
-Go to the [Google Cloud Console](https://console.cloud.google.com/) and create or select a project.
+Create/select a project in [Google Cloud Console](https://console.cloud.google.com/), then:
 
-You need to enable **two APIs** and create a service account:
+1. Enable **Google Sheets API**
+2. Enable **Google Drive API**
+3. Create a **Service Account**
+4. Download a JSON key
+5. Share your spreadsheet with the service account email as **Editor**
 
-#### 2a. Enable the Google Sheets API
-
-`APIs & Services → Library → search "Google Sheets API" → Enable`
-
-Or visit directly:
-`https://console.developers.google.com/apis/api/sheets.googleapis.com/overview?project=<YOUR_PROJECT_ID>`
-
-#### 2b. Enable the Google Drive API
-
-`APIs & Services → Library → search "Google Drive API" → Enable`
-
-Or visit directly:
-`https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=<YOUR_PROJECT_ID>`
-
-> **Why Drive API?** The bot calls `drive.files.get` with the `drive.metadata.readonly` scope
-> to read only the spreadsheet's last-modification timestamp — no file content is ever accessed
-> through Drive. This lets the bot detect when someone edits the spreadsheet and reload the
-> data automatically, without re-fetching everything on every command.
-
-#### 2c. Create a Service Account and download credentials
-
-1. Go to `IAM & Admin → Service Accounts → Create Service Account`
-2. Give it any name (e.g. `plannabot`)
-3. Skip the optional role and user access steps
-4. Open the created service account → **Keys** tab → **Add Key → Create new key → JSON**
-5. Save the downloaded `.json` file (e.g. as `credentials.json` next to the binary)
-
-#### 2d. Share the spreadsheet with the service account
-
-1. Create a new Google Spreadsheet (or use an existing one)
-2. Click **Share** and add the service account email  
-   (looks like `plannabot@<project>.iam.gserviceaccount.com`) with **Editor** access
-3. Copy the Spreadsheet ID from the URL:  
-   `https://docs.google.com/spreadsheets/d/<SPREADSHEET_ID>/edit`
+Drive API is used only for `files.get?fields=modifiedTime` to detect spreadsheet changes efficiently.
 
 ### 3. Configure environment
 
@@ -92,12 +71,12 @@ Or visit directly:
 cp .env.example .env
 ```
 
-Edit `.env` and fill in the three required values:
+Set required values:
 
-```
+```env
 TELOXIDE_TOKEN=<token from BotFather>
-GOOGLE_CREDENTIALS_PATH=credentials.json   # path to the JSON key file
-SPREADSHEET_ID=<the long ID from the spreadsheet URL>
+GOOGLE_CREDENTIALS_PATH=credentials.json
+SPREADSHEET_ID=<spreadsheet id from URL>
 ```
 
 ### 4. Build and run
@@ -107,47 +86,38 @@ cargo build --release
 cargo run --release
 ```
 
-On first startup the bot will create the four required sheet tabs
-(`Students`, `Teachers`, `Schedule`, `Payments`) if they don't exist yet.
+On first startup the bot ensures all six tabs exist:
+`Students`, `Teachers`, `Schedule`, `Payments`, `Pairings`, `Worktime`.
 
 ---
 
-## Commands
+## Commands by mode
 
-| Command | Student | Teacher |
-|---------|---------|---------|
-| `/start` | Greeting with student name | Greeting with Telegram handle |
-| `/help` | List of available commands | Same (labelled "Teacher Mode") |
-| `/schedule` | Upcoming planned lessons (with teacher) | Upcoming planned lessons (with students) |
-| `/book [teacher] [date] [hour] [duration]` | Month calendar picker for booking a lesson (all parameters optional) | — |
+| Mode | Commands |
+|------|----------|
+| **Student** | `/start`, `/help`, `/schedule`, `/balance`, `/book`, `/notification` |
+| **Teacher** | `/start`, `/help`, `/schedule`, `/book`, `/balance`, `/payment`, `/worktime`, `/student`, `/admin`, `/refresh` |
+| **Admin** | `/start`, `/help`, `/status`, `/refresh`, `/balance`, `/payment`, `/impersonate`, `/user`, `/quit` |
+| **Impersonate Student** | `/start`, `/help`, `/schedule`, `/balance`, `/book`, `/notification`, `/quit` |
+| **Impersonate Teacher** | `/start`, `/help`, `/schedule`, `/balance`, `/book`, `/payment`, `/worktime`, `/quit` |
 
-Parameters for `/book`:
-- `teacher` — teacher's Telegram handle (e.g., `john_doe`)
-- `date` — lesson date in YYYY-MM-DD format (e.g., `2024-12-25`)
-- `hour` — lesson start time in HH:MM format (e.g., `14:30`)
-- `duration` — lesson duration in minutes (e.g., `60`)
-
-Example: `/book john_doe 2024-12-25 14:30 60`
-
-Lesson times are shown in each user's own timezone (from the spreadsheet).
+Most command flows are interactive (inline keyboards + callback actions), but command parameters are also supported for direct entry.
 
 ---
 
 ## Access control
 
-Only users whose Telegram username appears in the **Students** or **Teachers** tab
-are allowed to interact with the bot. Everyone else receives an "unauthorized" message.
-Users without a Telegram username are asked to set one first.
+- Users must have a Telegram username and be present in `Students` or `Teachers`.
+- `Teachers.admin = true` is required to enter admin mode.
+- `/start` always resets admin/impersonation mode for the current chat.
 
 ---
 
 ## Further reading
 
-For file layout, module responsibilities, data refresh logic, and Telegram routing see **[ARCHITECTURE.md](ARCHITECTURE.md)**.
-
-For message formatting with telluride see **[TELLURIDE.md](TELLURIDE.md)**.
-
-For development checklist and contribution guidelines see **[CLAUDE.md](CLAUDE.md)**.
+- Architecture and module map: **[ARCHITECTURE.md](ARCHITECTURE.md)**
+- Telluride message formatting rules: **[TELLURIDE.md](TELLURIDE.md)**
+- Development checklist/conventions: **[CLAUDE.md](CLAUDE.md)**
 
 ---
 

@@ -11,7 +11,7 @@ use std::sync::Arc;
 use telluride::command::CallbackKey;
 use telluride::data_store::{InMemStore, UserProxy};
 use telluride::markdown::{MarkdownString, MarkdownStringMessage};
-use telluride::markdown_format;
+use telluride::{markdown_format, markdown_string};
 use teloxide::dispatching::DpHandlerDescription;
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, Me, MessageId};
@@ -159,18 +159,18 @@ pub async fn message_handler(bot: Bot, msg: Message, state: Arc<BotState>) -> Re
     let _ = state.refresh_if_needed().await;
 
     let Some(username) = get_username(&msg) else {
-        bot.send_message(
+        bot.send_markdown_message(
             msg.chat.id,
-            "Please set a Telegram username to use this bot.",
+            markdown_string!("Please set a Telegram username to use this bot\\."),
         )
         .await?;
         return Ok(());
     };
 
     let Some(role) = state.get_role(&username).await else {
-        bot.send_message(
+        bot.send_markdown_message(
             msg.chat.id,
-            "You are not authorized to use this bot. Please contact your teacher.",
+            markdown_string!("You are not authorized to use this bot\\. Please contact your teacher\\."),
         )
         .await?;
         return Ok(());
@@ -182,7 +182,10 @@ pub async fn message_handler(bot: Bot, msg: Message, state: Arc<BotState>) -> Re
             .await;
     }
 
-    bot.send_message(msg.chat.id, "Use /help to see available commands.")
+    bot.send_markdown_message(
+        msg.chat.id,
+        markdown_string!("Use /help to see available commands\\."),
+    )
         .await?;
 
     Ok(())

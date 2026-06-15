@@ -10,6 +10,8 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+use telluride::markdown::{MarkdownString, MarkdownStringMessage};
+use telluride::markdown_format;
 use teloxide::prelude::*;
 use teloxide::types::ChatId;
 use tokio::sync::RwLock;
@@ -531,18 +533,24 @@ impl BotState {
     async fn send_error_report(&self, bot: &Bot, chat_id: ChatId, errors: &[SheetParseError]) {
         let sheet_id = self.sheets.get_spreadsheet_id();
         let url = format!("https://docs.google.com/spreadsheets/d/{}/edit", sheet_id);
-
-        // Build the error message text.
-        let header = format!(
-            "⚠️ Spreadsheet parse errors ({} row(s) skipped):\n\n",
-            errors.len()
+        let url_markdown = MarkdownString::escape(url);
+        let mut text = markdown_format!(
+            "⚠️ *Spreadsheet parse errors* \\({} row\\(s\\) skipped\\):\n\n",
+            errors.len().to_string()
         );
-        let body: String = errors.iter().map(|e| format!("• {}\n", e)).collect();
-        let footer = format!("\nLink to spreadsheet: {}", url);
-        let text = format!("{}{}{}", header, body, footer);
+        for error in errors {
+            text.push(&markdown_format!(
+                "• {}\n",
+                MarkdownString::escape(error.to_string())
+            ));
+        }
+        text.push(&markdown_format!(
+            "\n[Open spreadsheet]({})",
+            @raw url_markdown
+        ));
 
         // Send the message.
-        if let Err(e) = bot.send_message(chat_id, &text).await {
+        if let Err(e) = bot.send_markdown_message(chat_id, text).await {
             log::error!("Failed to send parse-error report to chat {chat_id}: {e}");
         }
     }
