@@ -1,24 +1,28 @@
-use std::{fmt::Display, hash::{Hash, Hasher}, str::FromStr};
 use percent_encoding::{AsciiSet, CONTROLS};
+use std::{
+    fmt::Display,
+    hash::{Hash, Hasher},
+    str::FromStr,
+};
 
-use crate::api::data_store::data_store_trait::DataStoreTrait;
 use super::callback_errors::UnpackError;
+use crate::api::data_store::data_store_trait::DataStoreTrait;
 
 /// Trait for types that can be encoded/decoded to/from CallbackKey.
 /// This trait abstracts the encoding mechanism used for callback data.
-/// 
+///
 /// Most types should implement `CallbackBitcode` instead, which provides default
 /// bitcode-based encoding. Implement this trait directly only when you need
 /// completely custom encoding logic.
 pub trait CallbackEncode: Hash + Clone + Send + Sync {
     /// Encode the value into bytes
     fn encode_callback(&self) -> Vec<u8>;
-    
+
     /// Decode the value from bytes
     fn decode_callback(bytes: &[u8]) -> Result<Self, UnpackError>
     where
         Self: Sized;
-    
+
     /// Returns true if encoding should be bypassed for this instance.
     /// This is useful for large instances where inline encoding would be inefficient.
     /// Default implementation returns false.
@@ -29,25 +33,27 @@ pub trait CallbackEncode: Hash + Clone + Send + Sync {
 
 /// Trait for types that want to use bitcode encoding with CallbackKey.
 /// Provides default implementations for encoding and decoding.
-/// 
+///
 /// To use bitcode encoding for your type, simply implement this trait with an empty body:
-/// 
+///
 /// ```ignore
 /// #[derive(Clone, Hash, bitcode::Encode, bitcode::Decode)]
 /// struct MyAction { ... }
-/// 
+///
 /// impl CallbackBitcode for MyAction {}
 /// ```
-/// 
+///
 /// This will automatically implement `CallbackEncode` using bitcode.
 /// You can override `encode_callback`, `decode_callback`, or `bypass_encoding` if needed.
-pub trait CallbackBitcode: bitcode::Encode + for<'a> bitcode::Decode<'a> + Hash + Clone + Send + Sync {
+pub trait CallbackBitcode:
+    bitcode::Encode + for<'a> bitcode::Decode<'a> + Hash + Clone + Send + Sync
+{
     /// Encode the value using bitcode.
     /// Override this method to customize encoding behavior.
     fn encode_callback(&self) -> Vec<u8> {
         bitcode::encode(self)
     }
-    
+
     /// Decode the value using bitcode.
     /// Override this method to customize decoding behavior.
     fn decode_callback(bytes: &[u8]) -> Result<Self, UnpackError>
@@ -56,7 +62,7 @@ pub trait CallbackBitcode: bitcode::Encode + for<'a> bitcode::Decode<'a> + Hash 
     {
         bitcode::decode(bytes).map_err(|e| UnpackError::DeserializeError(e.to_string()))
     }
-    
+
     /// Returns true if encoding should be bypassed for this instance.
     /// Override this method to implement custom bypass logic.
     fn bypass_encoding(&self) -> bool {
@@ -73,14 +79,14 @@ where
     fn encode_callback(&self) -> Vec<u8> {
         <T as CallbackBitcode>::encode_callback(self)
     }
-    
+
     fn decode_callback(bytes: &[u8]) -> Result<Self, UnpackError>
     where
         Self: Sized,
     {
         <T as CallbackBitcode>::decode_callback(bytes)
     }
-    
+
     fn bypass_encoding(&self) -> bool {
         <T as CallbackBitcode>::bypass_encoding(self)
     }
@@ -247,17 +253,14 @@ impl CallbackKey {
     /// let key = CallbackKey::pack(Action::ShowUser(123), &storage).await;
     /// InlineKeyboardButton::callback("Show User", key.to_string())
     /// ```
-    pub fn pack<V, S>(
-        value: V,
-        storage: &S,
-    ) -> impl std::future::Future<Output = Self> + Send
+    pub fn pack<V, S>(value: V, storage: &S) -> impl std::future::Future<Output = Self> + Send
     where
         V: CallbackEncode,
         S: DataStoreTrait<CallbackKey, V> + ?Sized,
     {
         // Check if encoding should be bypassed
         let should_bypass = value.bypass_encoding();
-        
+
         // Serialize the value
         let serialized = value.encode_callback();
 
@@ -268,12 +271,12 @@ impl CallbackKey {
                 storage.set(&key, value).await;
                 return key;
             }
-            
+
             // Combine prefix and serialized data as bytes
             let mut inline_data = Vec::with_capacity(INLINE_PREFIX.len() + serialized.len());
             inline_data.extend_from_slice(INLINE_PREFIX.as_bytes());
             inline_data.extend_from_slice(&serialized);
-            
+
             if inline_data.len() <= MAX_CALLBACK_DATA_SIZE {
                 // Fits inline - use minimal percent-encoding on raw bytes
                 let encoded = percent_encode_bytes(&inline_data);
@@ -318,7 +321,7 @@ impl CallbackKey {
         async move {
             // Decode from percent-encoding to get raw bytes
             let decoded = percent_decode_bytes(&data);
-            
+
             if decoded.starts_with(INLINE_PREFIX.as_bytes()) {
                 // Inline data - skip the prefix and decode using the trait
                 let encoded_data = &decoded[INLINE_PREFIX.len()..];
@@ -351,8 +354,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::data_store::in_mem::InMemStore;
     use crate::api::data_store::data_store_trait::UserProxy;
+    use crate::api::data_store::in_mem::InMemStore;
     use std::sync::Arc;
     use teloxide::types::UserId;
 
@@ -402,7 +405,7 @@ mod tests {
         fn encode_callback(&self) -> Vec<u8> {
             bitcode::encode(&self.0)
         }
-        
+
         fn decode_callback(bytes: &[u8]) -> Result<Self, UnpackError> {
             bitcode::decode::<LargeData>(bytes)
                 .map(LargeAction)
@@ -431,7 +434,9 @@ mod tests {
 
         fn decode_callback(bytes: &[u8]) -> Result<Self, UnpackError> {
             if bytes.len() < 2 || &bytes[0..2] != [0xCA, 0xFE] {
-                return Err(UnpackError::DeserializeError("Missing magic prefix".to_string()));
+                return Err(UnpackError::DeserializeError(
+                    "Missing magic prefix".to_string(),
+                ));
             }
             bitcode::decode(&bytes[2..]).map_err(|e| UnpackError::DeserializeError(e.to_string()))
         }
@@ -451,14 +456,14 @@ mod tests {
             action_type: 1,
             user_id: 12345,
         };
-        
+
         let key = CallbackKey::pack(action.clone(), &user_store).await;
         assert!(key.is_inline(), "Small bitcode value should be inlined");
-        
+
         let unpacked = CallbackKey::unpack::<SimpleAction, _>(key.as_str(), &user_store)
             .await
             .expect("Should unpack");
-        
+
         assert_eq!(unpacked, action);
     }
 
@@ -471,14 +476,17 @@ mod tests {
         let action = CustomEncodedAction {
             data: "test_data".to_string(),
         };
-        
+
         let key = CallbackKey::pack(action.clone(), &user_store).await;
-        assert!(key.is_inline(), "Small custom encoded value should be inlined");
-        
+        assert!(
+            key.is_inline(),
+            "Small custom encoded value should be inlined"
+        );
+
         let unpacked = CallbackKey::unpack::<CustomEncodedAction, _>(key.as_str(), &user_store)
             .await
             .expect("Should unpack");
-        
+
         assert_eq!(unpacked.data, action.data);
     }
 
@@ -492,14 +500,14 @@ mod tests {
         let small_action = LargeAction(LargeData {
             payload: vec![1, 2, 3, 4, 5],
         });
-        
+
         let key = CallbackKey::pack(small_action.clone(), &user_store).await;
         assert!(key.is_inline(), "Small payload should be inlined");
-        
+
         let unpacked = CallbackKey::unpack::<LargeAction, _>(key.as_str(), &user_store)
             .await
             .expect("Should unpack");
-        
+
         assert_eq!(unpacked.0.payload, small_action.0.payload);
     }
 
@@ -513,14 +521,17 @@ mod tests {
         let large_action = LargeAction(LargeData {
             payload: vec![0; 100],
         });
-        
+
         let key = CallbackKey::pack(large_action.clone(), &user_store).await;
-        assert!(key.is_storage_backed(), "Large payload should be stored due to bypass");
-        
+        assert!(
+            key.is_storage_backed(),
+            "Large payload should be stored due to bypass"
+        );
+
         let unpacked = CallbackKey::unpack::<LargeAction, _>(key.as_str(), &user_store)
             .await
             .expect("Should unpack");
-        
+
         assert_eq!(unpacked.0.payload, large_action.0.payload);
     }
 
@@ -533,13 +544,13 @@ mod tests {
         // Small value - should be inlined with custom encoding
         let small_value = CustomBitcodeType { value: 42 };
         let key = CallbackKey::pack(small_value.clone(), &user_store).await;
-        
+
         assert!(key.is_inline(), "Small value should be inlined");
-        
+
         let unpacked = CallbackKey::unpack::<CustomBitcodeType, _>(key.as_str(), &user_store)
             .await
             .expect("Should unpack");
-        
+
         assert_eq!(unpacked, small_value);
     }
 
@@ -552,13 +563,16 @@ mod tests {
         // Large value - should bypass encoding due to custom logic
         let large_value = CustomBitcodeType { value: 2000 };
         let key = CallbackKey::pack(large_value.clone(), &user_store).await;
-        
-        assert!(key.is_storage_backed(), "Large value should be stored, not inlined");
-        
+
+        assert!(
+            key.is_storage_backed(),
+            "Large value should be stored, not inlined"
+        );
+
         let unpacked = CallbackKey::unpack::<CustomBitcodeType, _>(key.as_str(), &user_store)
             .await
             .expect("Should unpack");
-        
+
         assert_eq!(unpacked, large_value);
     }
 
@@ -572,41 +586,46 @@ mod tests {
         let long_action = CustomEncodedAction {
             data: "a".repeat(100),
         };
-        
+
         let key = CallbackKey::pack(long_action.clone(), &user_store).await;
         assert!(key.is_storage_backed(), "Long string should be stored");
-        
+
         let unpacked = CallbackKey::unpack::<CustomEncodedAction, _>(key.as_str(), &user_store)
             .await
             .expect("Should unpack");
-        
+
         assert_eq!(unpacked.data, long_action.data);
     }
 
     #[tokio::test]
     async fn test_round_trip_with_multiple_types() {
         let user_id = UserId(555);
-        
+
         // Test multiple different types can coexist (with separate stores per type)
-        let simple = SimpleAction { action_type: 5, user_id: 100 };
-        let custom = CustomEncodedAction { data: "test".to_string() };
-        
+        let simple = SimpleAction {
+            action_type: 5,
+            user_id: 100,
+        };
+        let custom = CustomEncodedAction {
+            data: "test".to_string(),
+        };
+
         let storage1 = Arc::new(InMemStore::new());
         let user_store1 = UserProxy::new(storage1, user_id);
-        
+
         let storage2 = Arc::new(InMemStore::new());
         let user_store2 = UserProxy::new(storage2, user_id);
-        
+
         let key1 = CallbackKey::pack(simple.clone(), &user_store1).await;
         let key2 = CallbackKey::pack(custom.clone(), &user_store2).await;
-        
+
         let unpacked1 = CallbackKey::unpack::<SimpleAction, _>(key1.as_str(), &user_store1)
             .await
             .expect("Should unpack simple");
         let unpacked2 = CallbackKey::unpack::<CustomEncodedAction, _>(key2.as_str(), &user_store2)
             .await
             .expect("Should unpack custom");
-        
+
         assert_eq!(unpacked1, simple);
         assert_eq!(unpacked2.data, custom.data);
     }

@@ -1,6 +1,10 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor, PaymentActor, PaymentCommand, PaymentParams, ScheduleCommand, ScheduleParams, WorktimeCommand, WorktimeParams};
+use crate::api::traits::{
+    BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor,
+    PaymentActor, PaymentCommand, PaymentParams, ScheduleCommand, ScheduleParams, WorktimeCommand,
+    WorktimeParams,
+};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -14,7 +18,10 @@ use teloxide::types::{ChatId, MessageId};
 use teloxide::utils::command::BotCommands;
 
 #[derive(BotCommands, Clone, Debug, Hash, bitcode::Encode, bitcode::Decode)]
-#[command(rename_rule = "lowercase", description = "Teacher impersonation commands:")]
+#[command(
+    rename_rule = "lowercase",
+    description = "Teacher impersonation commands:"
+)]
 pub enum ImpersonateTeacherCommand {
     #[command(description = "exit impersonation and restart the bot")]
     Start,
@@ -103,7 +110,14 @@ async fn impersonate_teacher_handle(
         .await;
 
     let user_id = msg.from.as_ref().unwrap().id;
-    let ctx = BotCtx { bot, chat_id: msg.chat.id, state, user_id, callback_storage, message_id };
+    let ctx = BotCtx {
+        bot,
+        chat_id: msg.chat.id,
+        state,
+        user_id,
+        callback_storage,
+        message_id,
+    };
 
     let Some(impersonated_teacher) = ctx.state.get_teacher(&impersonated_name).await else {
         ctx.state.clear_teacher_impersonation(ctx.chat_id).await;
@@ -119,10 +133,21 @@ async fn impersonate_teacher_handle(
         ImpersonateTeacherCommand::Start => api::common::start(&ctx, &username).await,
         ImpersonateTeacherCommand::Help => api::impersonate_teacher::help(&ctx).await,
         ImpersonateTeacherCommand::Schedule(params) => {
-            api::schedule::schedule(&ctx, params, &BookingActor::Teacher(impersonated_name.clone()), impersonated_teacher.timezone).await
+            api::schedule::schedule(
+                &ctx,
+                params,
+                &BookingActor::Teacher(impersonated_name.clone()),
+                impersonated_teacher.timezone,
+            )
+            .await
         }
         ImpersonateTeacherCommand::Balance(params) => {
-            api::balance::balance(&ctx, params, &BalanceActor::Teacher(impersonated_name.clone())).await
+            api::balance::balance(
+                &ctx,
+                params,
+                &BalanceActor::Teacher(impersonated_name.clone()),
+            )
+            .await
         }
         ImpersonateTeacherCommand::Book(params) => {
             api::book::book(
@@ -133,7 +158,12 @@ async fn impersonate_teacher_handle(
             .await
         }
         ImpersonateTeacherCommand::Payment(params) => {
-            api::payment::payment(&ctx, params, &PaymentActor::Teacher(impersonated_name.clone())).await
+            api::payment::payment(
+                &ctx,
+                params,
+                &PaymentActor::Teacher(impersonated_name.clone()),
+            )
+            .await
         }
         ImpersonateTeacherCommand::Worktime(params) => {
             api::worktime::worktime(&ctx, params, &impersonated_name).await
@@ -172,7 +202,9 @@ pub async fn impersonate_teacher_callback_command_handler(
         callback_storage,
         state,
         |bot, msg, cmd, state, cb, message_id| {
-            Box::pin(impersonate_teacher_handle(bot, msg, cmd, state, cb, message_id))
+            Box::pin(impersonate_teacher_handle(
+                bot, msg, cmd, state, cb, message_id,
+            ))
         },
     )
     .await

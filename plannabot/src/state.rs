@@ -288,8 +288,10 @@ impl BotState {
     /// Returns a sorted list of all registered student telegram names.
     pub async fn get_student_names(&self) -> Vec<TelegramName> {
         let students = self.students.read().await;
-        let mut names: Vec<TelegramName> =
-            students.keys().map(|k| k.parse().expect("stored key must be valid")).collect();
+        let mut names: Vec<TelegramName> = students
+            .keys()
+            .map(|k| k.parse().expect("stored key must be valid"))
+            .collect();
         names.sort();
         names
     }
@@ -297,8 +299,10 @@ impl BotState {
     /// Returns a sorted list of all registered teacher telegram names.
     pub async fn get_teacher_names(&self) -> Vec<TelegramName> {
         let teachers = self.teachers.read().await;
-        let mut names: Vec<TelegramName> =
-            teachers.keys().map(|k| k.parse().expect("stored key must be valid")).collect();
+        let mut names: Vec<TelegramName> = teachers
+            .keys()
+            .map(|k| k.parse().expect("stored key must be valid"))
+            .collect();
         names.sort();
         names
     }
@@ -306,7 +310,10 @@ impl BotState {
     /// Gets a student by telegram name directly, bypassing the role-based lookup.
     /// This is useful for impersonating dual-role users.
     /// Returns the student if they are registered, regardless of whether they're also a teacher.
-    pub async fn get_student(&self, telegram_name: &TelegramName) -> Option<crate::models::Student> {
+    pub async fn get_student(
+        &self,
+        telegram_name: &TelegramName,
+    ) -> Option<crate::models::Student> {
         let students = self.students.read().await;
         students.get(telegram_name.as_str()).cloned()
     }
@@ -378,7 +385,11 @@ impl BotState {
     /// Returns the telegram name of the student being impersonated in this
     /// chat, or `None` if the chat is not in student impersonation mode.
     pub async fn get_student_impersonation(&self, chat_id: ChatId) -> Option<TelegramName> {
-        self.student_impersonations.read().await.get(&chat_id).cloned()
+        self.student_impersonations
+            .read()
+            .await
+            .get(&chat_id)
+            .cloned()
     }
 
     /// Removes the student impersonation entry for `chat_id`.
@@ -401,7 +412,11 @@ impl BotState {
     /// Returns the telegram name of the teacher being impersonated in this
     /// chat, or `None` if not in teacher-impersonation mode.
     pub async fn get_teacher_impersonation(&self, chat_id: ChatId) -> Option<TelegramName> {
-        self.teacher_impersonations.read().await.get(&chat_id).cloned()
+        self.teacher_impersonations
+            .read()
+            .await
+            .get(&chat_id)
+            .cloned()
     }
 
     /// Removes the teacher-impersonation entry for `chat_id`.
@@ -410,8 +425,15 @@ impl BotState {
     }
 
     /// Looks up a teacher directly by telegram name.
-    pub async fn get_teacher(&self, telegram_name: &TelegramName) -> Option<crate::models::Teacher> {
-        self.teachers.read().await.get(telegram_name.as_str()).cloned()
+    pub async fn get_teacher(
+        &self,
+        telegram_name: &TelegramName,
+    ) -> Option<crate::models::Teacher> {
+        self.teachers
+            .read()
+            .await
+            .get(telegram_name.as_str())
+            .cloned()
     }
 
     // -----------------------------------------------------------------------
@@ -420,12 +442,22 @@ impl BotState {
 
     /// Records that a notification for `(student, lesson_dt)` has been sent.
     pub async fn mark_notification_sent(&self, student: TelegramName, lesson_dt: DateTime<Utc>) {
-        self.sent_notifications.write().await.insert((student, lesson_dt));
+        self.sent_notifications
+            .write()
+            .await
+            .insert((student, lesson_dt));
     }
 
     /// Returns `true` if a notification for `(student, lesson_dt)` was already sent.
-    pub async fn is_notification_sent(&self, student: &TelegramName, lesson_dt: DateTime<Utc>) -> bool {
-        self.sent_notifications.read().await.contains(&(student.clone(), lesson_dt))
+    pub async fn is_notification_sent(
+        &self,
+        student: &TelegramName,
+        lesson_dt: DateTime<Utc>,
+    ) -> bool {
+        self.sent_notifications
+            .read()
+            .await
+            .contains(&(student.clone(), lesson_dt))
     }
 
     // -----------------------------------------------------------------------

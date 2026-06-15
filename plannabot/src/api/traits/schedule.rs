@@ -2,7 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use anyhow::Result;
-use telluride::utils::{format_screen_spaces, split_with_screened_spaces, ParamParser};
+use telluride::utils::{ParamParser, format_screen_spaces, split_with_screened_spaces};
 
 pub enum ScheduleParams {
     L0,

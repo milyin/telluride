@@ -40,12 +40,14 @@ async fn check_and_send(bot: &Bot, state: &Arc<BotState>) -> anyhow::Result<()> 
 
     for student in students_with_delay {
         let delay = student.notification_delay.as_ref().unwrap();
-        let delay_chrono = chrono::Duration::from_std(*delay.as_ref())
-            .unwrap_or(chrono::Duration::zero());
+        let delay_chrono =
+            chrono::Duration::from_std(*delay.as_ref()).unwrap_or(chrono::Duration::zero());
 
         let next_lesson = schedule
             .iter()
-            .filter(|e| e.student_telegram == student.telegram_name && e.is_planned() && e.datetime > now)
+            .filter(|e| {
+                e.student_telegram == student.telegram_name && e.is_planned() && e.datetime > now
+            })
             .min_by_key(|e| e.datetime);
 
         let Some(lesson) = next_lesson else {
@@ -57,11 +59,16 @@ async fn check_and_send(bot: &Bot, state: &Arc<BotState>) -> anyhow::Result<()> 
             continue;
         }
 
-        if state.is_notification_sent(&student.telegram_name, lesson.datetime).await {
+        if state
+            .is_notification_sent(&student.telegram_name, lesson.datetime)
+            .await
+        {
             continue;
         }
 
-        let pairing = state.get_pairing(&student.telegram_name, &lesson.teacher_telegram).await;
+        let pairing = state
+            .get_pairing(&student.telegram_name, &lesson.teacher_telegram)
+            .await;
         let zoom = pairing.as_ref().and_then(|p| p.zoom_url.as_deref());
         let board = pairing.as_ref().and_then(|p| p.board_url.as_deref());
 

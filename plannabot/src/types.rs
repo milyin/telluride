@@ -185,11 +185,13 @@ impl TimePeriod {
     /// Returns the start instants of all full-hour-aligned slots of `duration` that fit entirely
     /// within this period.
     pub fn hour_slots(&self, duration: chrono::Duration) -> Vec<DateTime<Utc>> {
-        let first_h = if self.start.minute() == 0 && self.start.second() == 0 && self.start.nanosecond() == 0 {
-            self.start.hour()
-        } else {
-            self.start.hour() + 1
-        };
+        let first_h =
+            if self.start.minute() == 0 && self.start.second() == 0 && self.start.nanosecond() == 0
+            {
+                self.start.hour()
+            } else {
+                self.start.hour() + 1
+            };
         let mut slots = Vec::new();
         let mut h = first_h;
         loop {
@@ -229,7 +231,9 @@ impl Timezone {
     pub fn to_param(&self) -> String {
         if self.0.name().starts_with("Etc/") {
             use chrono::{Offset as _, TimeZone as _, Utc};
-            let hours = Utc.timestamp_opt(0, 0).unwrap()
+            let hours = Utc
+                .timestamp_opt(0, 0)
+                .unwrap()
                 .with_timezone(&self.0)
                 .offset()
                 .fix()
@@ -250,14 +254,19 @@ impl FromStr for Timezone {
             return Ok(Timezone(tz));
         }
         let hours: f64 = s.parse().map_err(|_| {
-            anyhow::anyhow!("unknown timezone '{}': not an IANA name or numeric offset", s)
+            anyhow::anyhow!(
+                "unknown timezone '{}': not an IANA name or numeric offset",
+                s
+            )
         })?;
         if !hours.is_finite() {
             return Err(anyhow::anyhow!("invalid timezone offset '{s}'"));
         }
         let h = hours.round() as i32;
         if !(-14..=12).contains(&h) {
-            return Err(anyhow::anyhow!("timezone offset {h}h is out of range [-14, +12]"));
+            return Err(anyhow::anyhow!(
+                "timezone offset {h}h is out of range [-14, +12]"
+            ));
         }
         let name = match h.cmp(&0) {
             Ordering::Equal => "Etc/GMT".to_string(),
@@ -322,4 +331,3 @@ impl TryFrom<&str> for Currency {
         s.parse()
     }
 }
-

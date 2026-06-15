@@ -104,8 +104,7 @@ impl fmt::Display for LessonStatus {
 impl std::str::FromStr for LessonStatus {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> anyhow::Result<Self> {
-        LessonStatus::from_str(s)
-            .ok_or_else(|| anyhow::anyhow!("unknown lesson status: '{}'", s))
+        LessonStatus::from_str(s).ok_or_else(|| anyhow::anyhow!("unknown lesson status: '{}'", s))
     }
 }
 

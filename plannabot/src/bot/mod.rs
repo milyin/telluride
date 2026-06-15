@@ -17,11 +17,17 @@ use teloxide::prelude::*;
 use teloxide::types::{ChatId, Me, MessageId};
 use teloxide::utils::command::BotCommands;
 
-pub async fn report_error(bot: &Bot, chat_id: ChatId, e: impl std::fmt::Display) -> ResponseResult<()> {
+pub async fn report_error(
+    bot: &Bot,
+    chat_id: ChatId,
+    e: impl std::fmt::Display,
+) -> ResponseResult<()> {
     log::error!("Command error: {e}");
     let text = markdown_format!("❌ *Error:* {}", MarkdownString::escape(e.to_string()));
     let _ = bot.send_markdown_message(chat_id, text).await;
-    Err(teloxide::RequestError::Io(Arc::new(std::io::Error::other(e.to_string()))))
+    Err(teloxide::RequestError::Io(Arc::new(std::io::Error::other(
+        e.to_string(),
+    ))))
 }
 
 pub fn filter_command_prefixed<C, Output>() -> dptree::Handler<'static, Output, DpHandlerDescription>
@@ -105,7 +111,14 @@ pub async fn callback_command_handler<Cmd, F, Fut>(
 ) -> ResponseResult<()>
 where
     Cmd: telluride::command::CallbackBitcode + 'static,
-    F: Fn(Bot, Message, Cmd, Arc<BotState>, Arc<InMemStore<CallbackKey, Cmd>>, Option<MessageId>) -> Fut,
+    F: Fn(
+        Bot,
+        Message,
+        Cmd,
+        Arc<BotState>,
+        Arc<InMemStore<CallbackKey, Cmd>>,
+        Option<MessageId>,
+    ) -> Fut,
     Fut: std::future::Future<Output = ResponseResult<()>> + Send,
 {
     bot.answer_callback_query(q.id.clone()).await?;

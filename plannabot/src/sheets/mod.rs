@@ -415,7 +415,9 @@ impl SheetsClient {
             .batch_update(batch_req, &self.spreadsheet_id)
             .doit()
             .await
-            .with_context(|| format!("Failed to delete row {row_index} from sheet '{sheet_name}'"))?;
+            .with_context(|| {
+                format!("Failed to delete row {row_index} from sheet '{sheet_name}'")
+            })?;
         Ok(())
     }
 
@@ -467,7 +469,11 @@ impl SheetsClient {
     }
 
     /// Applies number/date/time/currency formatting to known columns.
-    pub(crate) async fn apply_column_formats(&self, sheet_name: &str, schema: &SheetSchema) -> Result<()> {
+    pub(crate) async fn apply_column_formats(
+        &self,
+        sheet_name: &str,
+        schema: &SheetSchema,
+    ) -> Result<()> {
         let sheet_id = self.get_sheet_id(sheet_name).await?;
 
         let mut requests: Vec<api::Request> = Vec::new();

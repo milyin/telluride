@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
-use super::{SheetSchema, SheetsClient, PAYMENTS_COLS, SHEET_PAYMENTS};
+use super::{PAYMENTS_COLS, SHEET_PAYMENTS, SheetSchema, SheetsClient};
 use crate::models::{Payment, SheetParseError, TelegramName};
 
 impl SheetsClient {
@@ -43,12 +43,9 @@ impl SheetsClient {
                 continue;
             };
 
-            let Some(date) = schema.get_field::<Option<DateTime<Utc>>>(
-                row,
-                row_num,
-                Payment::DATE,
-                &mut errors,
-            ) else {
+            let Some(date) =
+                schema.get_field::<Option<DateTime<Utc>>>(row, row_num, Payment::DATE, &mut errors)
+            else {
                 continue;
             };
             let sum: i64 = schema.get_field(row, row_num, Payment::SUM, &mut errors);
@@ -114,12 +111,9 @@ impl SheetsClient {
                 continue;
             }
 
-            let Some(row_date) = schema.get_field::<Option<DateTime<Utc>>>(
-                row,
-                row_num,
-                Payment::DATE,
-                &mut errors,
-            ) else {
+            let Some(row_date) =
+                schema.get_field::<Option<DateTime<Utc>>>(row, row_num, Payment::DATE, &mut errors)
+            else {
                 continue;
             };
             if row_date != date {
@@ -160,11 +154,7 @@ impl SheetsClient {
         let schema = SheetSchema::new(SHEET_PAYMENTS.to_string(), headers.clone());
         let row: Vec<serde_json::Value> = headers
             .iter()
-            .map(|h| {
-                serde_json::Value::String(
-                    values.get(h.as_str()).cloned().unwrap_or_default(),
-                )
-            })
+            .map(|h| serde_json::Value::String(values.get(h.as_str()).cloned().unwrap_or_default()))
             .collect();
 
         self.append_row(SHEET_PAYMENTS, row).await?;

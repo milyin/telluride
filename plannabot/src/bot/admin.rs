@@ -1,6 +1,9 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, ImpersonateCommand, ImpersonateParams, PaymentActor, PaymentCommand, PaymentParams, UserCommand, UserParams};
+use crate::api::traits::{
+    BalanceActor, BalanceCommand, BalanceParams, ImpersonateCommand, ImpersonateParams,
+    PaymentActor, PaymentCommand, PaymentParams, UserCommand, UserParams,
+};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -91,7 +94,14 @@ async fn admin_handle(
         .await;
 
     let user_id = msg.from.as_ref().unwrap().id;
-    let ctx = BotCtx { bot, chat_id: msg.chat.id, state, user_id, callback_storage, message_id };
+    let ctx = BotCtx {
+        bot,
+        chat_id: msg.chat.id,
+        state,
+        user_id,
+        callback_storage,
+        message_id,
+    };
 
     let result = match cmd {
         AdminCommand::Start => api::common::start(&ctx, &username).await,
@@ -132,7 +142,14 @@ pub async fn admin_callback_command_handler(
     state: Arc<BotState>,
     callback_storage: Arc<InMemStore<CallbackKey, AdminCommand>>,
 ) -> ResponseResult<()> {
-    callback_command_handler(bot, q, callback_storage, state, |bot, msg, cmd, state, cb, message_id| {
-        Box::pin(admin_handle(bot, msg, cmd, state, cb, message_id))
-    }).await
+    callback_command_handler(
+        bot,
+        q,
+        callback_storage,
+        state,
+        |bot, msg, cmd, state, cb, message_id| {
+            Box::pin(admin_handle(bot, msg, cmd, state, cb, message_id))
+        },
+    )
+    .await
 }

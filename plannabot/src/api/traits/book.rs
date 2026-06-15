@@ -5,7 +5,7 @@ use anyhow::Result;
 use chrono::{Datelike, NaiveDate, NaiveTime};
 use telluride::markdown::MarkdownString;
 use telluride::markdown_format;
-use telluride::utils::{format_screen_spaces, split_with_screened_spaces, ParamParser};
+use telluride::utils::{ParamParser, format_screen_spaces, split_with_screened_spaces};
 
 use crate::models::{LessonStatus, TelegramName};
 use crate::types::Duration;
@@ -178,7 +178,6 @@ impl fmt::Display for BookParams {
         .fmt(f)
     }
 }
-
 
 impl FromStr for BookParams {
     type Err = anyhow::Error;
@@ -463,9 +462,7 @@ fn parse_create(parts: &[String]) -> Result<BookParams> {
     if p.is_empty() {
         return Ok(BookParams::C1(teacher));
     }
-    let student: TelegramName = p
-        .next("student")?
-        .parse()?;
+    let student: TelegramName = p.next("student")?.parse()?;
     if p.is_empty() {
         return Ok(BookParams::C2(teacher, student));
     }

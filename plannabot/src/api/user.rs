@@ -4,8 +4,8 @@ use crate::api::context::BotCtx;
 const USER_PAGE_SIZE: usize = 12;
 const USER_COLS: usize = 3;
 use crate::api::traits::{UserCommand, UserParams};
-use crate::types::{Currency, Timezone};
 use crate::models::{Student, Teacher, TelegramName};
+use crate::types::{Currency, Timezone};
 use anyhow::Result;
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::UserProxy;
@@ -98,7 +98,10 @@ async fn show_student_submenu<Cmd: UserCommand + CallbackBitcode + 'static>(
     } else {
         markdown_format!("*Students \\(page {}/{}\\):*", info.page + 1, total_pages)
     };
-    let page_lines: Vec<String> = students[info.start..info.end].iter().map(|s| student_one_line(s)).collect();
+    let page_lines: Vec<String> = students[info.start..info.end]
+        .iter()
+        .map(|s| student_one_line(s))
+        .collect();
     let text = build_paged_list_text(header, &page_lines, markdown_string!("Manage students:"));
 
     let mut buttons = vec![vec![
@@ -118,9 +121,12 @@ async fn show_student_submenu<Cmd: UserCommand + CallbackBitcode + 'static>(
     if !nav_row.is_empty() {
         buttons.push(nav_row);
     }
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back", &back_key,
+    )]);
 
-    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons)))
+        .await
 }
 
 async fn show_teacher_submenu<Cmd: UserCommand + CallbackBitcode + 'static>(
@@ -144,7 +150,10 @@ async fn show_teacher_submenu<Cmd: UserCommand + CallbackBitcode + 'static>(
     } else {
         markdown_format!("*Teachers \\(page {}/{}\\):*", info.page + 1, total_pages)
     };
-    let page_lines: Vec<String> = teachers[info.start..info.end].iter().map(|t| teacher_one_line(t)).collect();
+    let page_lines: Vec<String> = teachers[info.start..info.end]
+        .iter()
+        .map(|t| teacher_one_line(t))
+        .collect();
     let text = build_paged_list_text(header, &page_lines, markdown_string!("Manage teachers:"));
 
     let mut buttons = vec![vec![
@@ -164,9 +173,12 @@ async fn show_teacher_submenu<Cmd: UserCommand + CallbackBitcode + 'static>(
     if !nav_row.is_empty() {
         buttons.push(nav_row);
     }
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back", &back_key,
+    )]);
 
-    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons)))
+        .await
 }
 
 // ---------------------------------------------------------------------------
@@ -237,7 +249,12 @@ async fn exec_student_add<Cmd: UserCommand + CallbackBitcode + 'static>(
 ) -> Result<()> {
     ctx.state
         .sheets
-        .add_student(&name, &tz.to_string(), currency.0.iso_alpha_code, &display_name)
+        .add_student(
+            &name,
+            &tz.to_string(),
+            currency.0.iso_alpha_code,
+            &display_name,
+        )
         .await?;
     let _ = ctx.state.refresh().await;
 
@@ -279,7 +296,11 @@ enum ListAction {
     Edit,
 }
 
-fn build_paged_list_text(header: MarkdownString, lines: &[String], footer: MarkdownString) -> MarkdownString {
+fn build_paged_list_text(
+    header: MarkdownString,
+    lines: &[String],
+    footer: MarkdownString,
+) -> MarkdownString {
     let mut text = header;
     for line in lines {
         text.push(&markdown_format!("\n• {}", line));
@@ -326,18 +347,32 @@ async fn show_user_selection<Cmd: UserCommand + CallbackBitcode + 'static>(
     }
 
     let back_key = CallbackKey::pack(Cmd::user(back_param), &user_proxy).await;
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back", &back_key,
+    )]);
 
-    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons)))
+        .await
 }
 
 pub fn student_one_line(s: &Student) -> String {
     let currency_str = s.currency.map(|c| c.iso_alpha_code).unwrap_or("-");
-    format!("{} · {} · {} · {}", s.telegram_name, s.name, Timezone(s.timezone), currency_str)
+    format!(
+        "{} · {} · {} · {}",
+        s.telegram_name,
+        s.name,
+        Timezone(s.timezone),
+        currency_str
+    )
 }
 
 fn teacher_one_line(t: &Teacher) -> String {
-    format!("{} · {} · {}", t.telegram_name, t.name, Timezone(t.timezone))
+    format!(
+        "{} · {} · {}",
+        t.telegram_name,
+        t.name,
+        Timezone(t.timezone)
+    )
 }
 
 async fn show_student_list<Cmd: UserCommand + CallbackBitcode + 'static>(
@@ -359,16 +394,22 @@ async fn show_student_list<Cmd: UserCommand + CallbackBitcode + 'static>(
         ListAction::Delete => markdown_string!("Select student to delete:"),
         ListAction::Edit => markdown_string!("Select student to edit:"),
     };
-    let page_lines: Vec<String> = students[info.start..info.end].iter().map(|s| student_one_line(s)).collect();
+    let page_lines: Vec<String> = students[info.start..info.end]
+        .iter()
+        .map(|s| student_one_line(s))
+        .collect();
     let text = build_paged_list_text(header, &page_lines, footer);
 
-    let item_btns = students[info.start..info.end].iter().map(|s| {
-        let param = match action {
-            ListAction::Delete => UserParams::USDN(s.telegram_name.clone()),
-            ListAction::Edit => UserParams::USEN(s.telegram_name.clone()),
-        };
-        (s.telegram_name.to_string(), param)
-    }).collect();
+    let item_btns = students[info.start..info.end]
+        .iter()
+        .map(|s| {
+            let param = match action {
+                ListAction::Delete => UserParams::USDN(s.telegram_name.clone()),
+                ListAction::Edit => UserParams::USEN(s.telegram_name.clone()),
+            };
+            (s.telegram_name.to_string(), param)
+        })
+        .collect();
     let prev_param = info.has_prev().then(|| match action {
         ListAction::Delete => UserParams::USD(info.page - 1),
         ListAction::Edit => UserParams::USE(info.page - 1),
@@ -378,7 +419,15 @@ async fn show_student_list<Cmd: UserCommand + CallbackBitcode + 'static>(
         ListAction::Edit => UserParams::USE(info.page + 1),
     });
 
-    show_user_selection(ctx, text, item_btns, prev_param, next_param, UserParams::US(0)).await
+    show_user_selection(
+        ctx,
+        text,
+        item_btns,
+        prev_param,
+        next_param,
+        UserParams::US(0),
+    )
+    .await
 }
 
 async fn show_teacher_list<Cmd: UserCommand + CallbackBitcode + 'static>(
@@ -400,16 +449,22 @@ async fn show_teacher_list<Cmd: UserCommand + CallbackBitcode + 'static>(
         ListAction::Delete => markdown_string!("Select teacher to delete:"),
         ListAction::Edit => markdown_string!("Select teacher to edit:"),
     };
-    let page_lines: Vec<String> = teachers[info.start..info.end].iter().map(|t| teacher_one_line(t)).collect();
+    let page_lines: Vec<String> = teachers[info.start..info.end]
+        .iter()
+        .map(|t| teacher_one_line(t))
+        .collect();
     let text = build_paged_list_text(header, &page_lines, footer);
 
-    let item_btns = teachers[info.start..info.end].iter().map(|t| {
-        let param = match action {
-            ListAction::Delete => UserParams::UTDN(t.telegram_name.clone()),
-            ListAction::Edit => UserParams::UTEN(t.telegram_name.clone()),
-        };
-        (t.telegram_name.to_string(), param)
-    }).collect();
+    let item_btns = teachers[info.start..info.end]
+        .iter()
+        .map(|t| {
+            let param = match action {
+                ListAction::Delete => UserParams::UTDN(t.telegram_name.clone()),
+                ListAction::Edit => UserParams::UTEN(t.telegram_name.clone()),
+            };
+            (t.telegram_name.to_string(), param)
+        })
+        .collect();
     let prev_param = info.has_prev().then(|| match action {
         ListAction::Delete => UserParams::UTD(info.page - 1),
         ListAction::Edit => UserParams::UTE(info.page - 1),
@@ -419,7 +474,15 @@ async fn show_teacher_list<Cmd: UserCommand + CallbackBitcode + 'static>(
         ListAction::Edit => UserParams::UTE(info.page + 1),
     });
 
-    show_user_selection(ctx, text, item_btns, prev_param, next_param, UserParams::UT(0)).await
+    show_user_selection(
+        ctx,
+        text,
+        item_btns,
+        prev_param,
+        next_param,
+        UserParams::UT(0),
+    )
+    .await
 }
 
 // ---------------------------------------------------------------------------
@@ -455,7 +518,10 @@ async fn show_student_delete_confirm<Cmd: UserCommand + CallbackBitcode + 'stati
     };
 
     let buttons = vec![
-        vec![InlineKeyboardButton::switch_inline_query_current_chat("🗑 Delete!", delete_cmd)],
+        vec![InlineKeyboardButton::switch_inline_query_current_chat(
+            "🗑 Delete!",
+            delete_cmd,
+        )],
         vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)],
     ];
 
@@ -492,7 +558,10 @@ async fn show_teacher_delete_confirm<Cmd: UserCommand + CallbackBitcode + 'stati
     };
 
     let buttons = vec![
-        vec![InlineKeyboardButton::switch_inline_query_current_chat("🗑 Delete!", delete_cmd)],
+        vec![InlineKeyboardButton::switch_inline_query_current_chat(
+            "🗑 Delete!",
+            delete_cmd,
+        )],
         vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)],
     ];
 
@@ -538,15 +607,14 @@ async fn show_student_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
     let (text, edit_cmd) = match ctx.state.get_student(&name).await {
         Some(student) => {
             let currency_opt: Option<Currency> = student.currency.map(Currency);
-            let currency_display = currency_opt.as_ref().map(|c| c.0.iso_alpha_code).unwrap_or("-");
+            let currency_display = currency_opt
+                .as_ref()
+                .map(|c| c.0.iso_alpha_code)
+                .unwrap_or("-");
             let tz = Timezone(student.timezone);
 
-            let edit_params = UserParams::USENF(
-                name.clone(),
-                tz,
-                currency_opt,
-                student.name.clone(),
-            );
+            let edit_params =
+                UserParams::USENF(name.clone(), tz, currency_opt, student.name.clone());
             let info = markdown_format!(
                 "*Student: {}*\n\n\
                 • Name: {}\n\
@@ -576,7 +644,10 @@ async fn show_student_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
     };
 
     let buttons = vec![
-        vec![InlineKeyboardButton::switch_inline_query_current_chat("✏️ Edit!", edit_cmd)],
+        vec![InlineKeyboardButton::switch_inline_query_current_chat(
+            "✏️ Edit!",
+            edit_cmd,
+        )],
         vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)],
     ];
 
@@ -596,11 +667,7 @@ async fn show_teacher_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
             let admin_str = if teacher.admin { "yes" } else { "no" };
             let tz = Timezone(teacher.timezone);
 
-            let edit_params = UserParams::UTENF(
-                name.clone(),
-                tz,
-                teacher.name.clone(),
-            );
+            let edit_params = UserParams::UTENF(name.clone(), tz, teacher.name.clone());
             let info = markdown_format!(
                 "*Teacher: {}*\n\n\
                 • Name: {}\n\
@@ -629,7 +696,10 @@ async fn show_teacher_edit<Cmd: UserCommand + CallbackBitcode + 'static>(
     };
 
     let buttons = vec![
-        vec![InlineKeyboardButton::switch_inline_query_current_chat("✏️ Edit!", edit_cmd)],
+        vec![InlineKeyboardButton::switch_inline_query_current_chat(
+            "✏️ Edit!",
+            edit_cmd,
+        )],
         vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)],
     ];
 

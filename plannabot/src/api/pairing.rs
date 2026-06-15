@@ -1,8 +1,8 @@
-use crate::api::common::{fmt_money, PageInfo};
-use crate::api::user::student_one_line;
+use crate::api::common::{PageInfo, fmt_money};
 use crate::api::context::BotCtx;
 use crate::api::traits::{PairingParams, StudentCommand};
-use crate::models::{TelegramName, TeacherStudentPairing};
+use crate::api::user::student_one_line;
+use crate::models::{TeacherStudentPairing, TelegramName};
 use crate::types::Duration;
 use anyhow::Result;
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
@@ -36,7 +36,9 @@ pub async fn student<Cmd: StudentCommand + CallbackBitcode + 'static>(
         PairingParams::PE(page) => show_edit_selection(ctx, teacher, page).await,
         PairingParams::PEN(name) => show_edit_choice(ctx, teacher, name).await,
         PairingParams::PENL(name) => show_lesson_form(ctx, teacher, name).await,
-        PairingParams::PENLF(name, dur, cost) => exec_lesson_edit(ctx, teacher, name, dur, cost).await,
+        PairingParams::PENLF(name, dur, cost) => {
+            exec_lesson_edit(ctx, teacher, name, dur, cost).await
+        }
         PairingParams::PENZ(name) => show_zoom_form(ctx, teacher, name).await,
         PairingParams::PENZF(name, url) => exec_zoom_edit(ctx, teacher, name, url).await,
         PairingParams::PENB(name) => show_board_form(ctx, teacher, name).await,
@@ -68,9 +70,18 @@ async fn show_list<Cmd: StudentCommand + CallbackBitcode + 'static>(
         let mut msg = markdown_string!("*Your students:*");
         for p in &pairings {
             let dur = minutes_to_duration(p.duration_minutes);
-            let currency = ctx.state.get_student(&p.student_telegram).await.and_then(|s| s.currency);
+            let currency = ctx
+                .state
+                .get_student(&p.student_telegram)
+                .await
+                .and_then(|s| s.currency);
             let cost_str = fmt_money(p.cost, currency);
-            msg.push(&markdown_format!("\n• {} — {}, cost {}", p.student_telegram.to_string(), MarkdownString::escape(dur.to_string()), cost_str));
+            msg.push(&markdown_format!(
+                "\n• {} — {}, cost {}",
+                p.student_telegram.to_string(),
+                MarkdownString::escape(dur.to_string()),
+                cost_str
+            ));
         }
         msg
     };
@@ -81,7 +92,8 @@ async fn show_list<Cmd: StudentCommand + CallbackBitcode + 'static>(
         InlineKeyboardButton::callback_key("Remove", &remove_key),
     ]];
 
-    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons)))
+        .await
 }
 
 // ---------------------------------------------------------------------------
@@ -116,9 +128,16 @@ async fn show_add_selection<Cmd: StudentCommand + CallbackBitcode + 'static>(
         markdown_string!("*Add student:* all students are already assigned\\.")
     } else {
         let total_pages = (total + PAGE_SIZE - 1) / PAGE_SIZE;
-        let mut msg = markdown_format!("*Add student \\(page {}/{}\\):*\n\nSelect a student:", info.page + 1, total_pages);
+        let mut msg = markdown_format!(
+            "*Add student \\(page {}/{}\\):*\n\nSelect a student:",
+            info.page + 1,
+            total_pages
+        );
         for s in &available[info.start..info.end] {
-            msg.push(&markdown_format!("\n• {}", MarkdownString::escape(student_one_line(s))));
+            msg.push(&markdown_format!(
+                "\n• {}",
+                MarkdownString::escape(student_one_line(s))
+            ));
         }
         msg
     };
@@ -126,8 +145,15 @@ async fn show_add_selection<Cmd: StudentCommand + CallbackBitcode + 'static>(
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     let mut row: Vec<InlineKeyboardButton> = Vec::new();
     for s in &available[info.start..info.end] {
-        let key = CallbackKey::pack(Cmd::student(PairingParams::PAN(s.telegram_name.clone())), &user_proxy).await;
-        row.push(InlineKeyboardButton::callback_key(s.telegram_name.to_string(), &key));
+        let key = CallbackKey::pack(
+            Cmd::student(PairingParams::PAN(s.telegram_name.clone())),
+            &user_proxy,
+        )
+        .await;
+        row.push(InlineKeyboardButton::callback_key(
+            s.telegram_name.to_string(),
+            &key,
+        ));
         if row.len() == COLS {
             buttons.push(std::mem::take(&mut row));
         }
@@ -138,19 +164,24 @@ async fn show_add_selection<Cmd: StudentCommand + CallbackBitcode + 'static>(
 
     let mut nav_row: Vec<InlineKeyboardButton> = Vec::new();
     if info.has_prev() {
-        let k = CallbackKey::pack(Cmd::student(PairingParams::PA(info.page - 1)), &user_proxy).await;
+        let k =
+            CallbackKey::pack(Cmd::student(PairingParams::PA(info.page - 1)), &user_proxy).await;
         nav_row.push(InlineKeyboardButton::callback_key("◀", &k));
     }
     if info.has_next() {
-        let k = CallbackKey::pack(Cmd::student(PairingParams::PA(info.page + 1)), &user_proxy).await;
+        let k =
+            CallbackKey::pack(Cmd::student(PairingParams::PA(info.page + 1)), &user_proxy).await;
         nav_row.push(InlineKeyboardButton::callback_key("▶", &k));
     }
     if !nav_row.is_empty() {
         buttons.push(nav_row);
     }
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back", &back_key,
+    )]);
 
-    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons)))
+        .await
 }
 
 async fn show_add_form<Cmd: StudentCommand + CallbackBitcode + 'static>(
@@ -162,7 +193,10 @@ async fn show_add_form<Cmd: StudentCommand + CallbackBitcode + 'static>(
     let back_key = CallbackKey::pack(Cmd::student(PairingParams::PA(0)), &user_proxy).await;
 
     let default_dur: Duration = "1h".parse().unwrap();
-    let add_cmd = format!("/student {}", PairingParams::PANF(student.clone(), default_dur, 0));
+    let add_cmd = format!(
+        "/student {}",
+        PairingParams::PANF(student.clone(), default_dur, 0)
+    );
 
     let text = match ctx.state.get_student(&student).await {
         Some(s) => {
@@ -195,11 +229,15 @@ async fn show_add_form<Cmd: StudentCommand + CallbackBitcode + 'static>(
     };
 
     let buttons = vec![
-        vec![InlineKeyboardButton::switch_inline_query_current_chat("📝 Fill in and add", add_cmd)],
+        vec![InlineKeyboardButton::switch_inline_query_current_chat(
+            "📝 Fill in and add",
+            add_cmd,
+        )],
         vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)],
     ];
 
-    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons)))
+        .await
 }
 
 async fn exec_add<Cmd: StudentCommand + CallbackBitcode + 'static>(
@@ -209,7 +247,10 @@ async fn exec_add<Cmd: StudentCommand + CallbackBitcode + 'static>(
     duration: Duration,
     cost: i64,
 ) -> Result<()> {
-    ctx.state.sheets.add_pairing(teacher, &student, duration_to_minutes(&duration), cost).await?;
+    ctx.state
+        .sheets
+        .add_pairing(teacher, &student, duration_to_minutes(&duration), cost)
+        .await?;
     let _ = ctx.state.refresh().await;
 
     let text = markdown_format!(
@@ -240,14 +281,30 @@ async fn show_edit_choice<Cmd: StudentCommand + CallbackBitcode + 'static>(
 ) -> Result<()> {
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key = CallbackKey::pack(Cmd::student(PairingParams::PE(0)), &user_proxy).await;
-    let lesson_key = CallbackKey::pack(Cmd::student(PairingParams::PENL(student.clone())), &user_proxy).await;
-    let zoom_key = CallbackKey::pack(Cmd::student(PairingParams::PENZ(student.clone())), &user_proxy).await;
-    let board_key = CallbackKey::pack(Cmd::student(PairingParams::PENB(student.clone())), &user_proxy).await;
+    let lesson_key = CallbackKey::pack(
+        Cmd::student(PairingParams::PENL(student.clone())),
+        &user_proxy,
+    )
+    .await;
+    let zoom_key = CallbackKey::pack(
+        Cmd::student(PairingParams::PENZ(student.clone())),
+        &user_proxy,
+    )
+    .await;
+    let board_key = CallbackKey::pack(
+        Cmd::student(PairingParams::PENB(student.clone())),
+        &user_proxy,
+    )
+    .await;
 
     let text = match ctx.state.get_pairing(&student, teacher).await {
         Some(p) => {
             let dur_display = minutes_to_duration(p.duration_minutes);
-            let currency = ctx.state.get_student(&student).await.and_then(|s| s.currency);
+            let currency = ctx
+                .state
+                .get_student(&student)
+                .await
+                .and_then(|s| s.currency);
             let cost_str = fmt_money(p.cost, currency);
             let zoom_str = p.zoom_url.as_deref().unwrap_or("—");
             let board_str = p.board_url.as_deref().unwrap_or("—");
@@ -280,7 +337,8 @@ async fn show_edit_choice<Cmd: StudentCommand + CallbackBitcode + 'static>(
         vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)],
     ];
 
-    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons)))
+        .await
 }
 
 async fn show_lesson_form<Cmd: StudentCommand + CallbackBitcode + 'static>(
@@ -289,18 +347,30 @@ async fn show_lesson_form<Cmd: StudentCommand + CallbackBitcode + 'static>(
     student: TelegramName,
 ) -> Result<()> {
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key = CallbackKey::pack(Cmd::student(PairingParams::PEN(student.clone())), &user_proxy).await;
+    let back_key = CallbackKey::pack(
+        Cmd::student(PairingParams::PEN(student.clone())),
+        &user_proxy,
+    )
+    .await;
 
     let pairing = ctx.state.get_pairing(&student, teacher).await;
-    let (dur, cost) = pairing.as_ref()
+    let (dur, cost) = pairing
+        .as_ref()
         .map(|p| (minutes_to_duration(p.duration_minutes), p.cost))
         .unwrap_or_else(|| ("1h".parse().unwrap(), 0));
-    let edit_cmd = format!("/student {}", PairingParams::PENLF(student.clone(), dur, cost));
+    let edit_cmd = format!(
+        "/student {}",
+        PairingParams::PENLF(student.clone(), dur, cost)
+    );
 
     let text = match pairing {
         Some(p) => {
             let dur_display = minutes_to_duration(p.duration_minutes);
-            let currency = ctx.state.get_student(&student).await.and_then(|s| s.currency);
+            let currency = ctx
+                .state
+                .get_student(&student)
+                .await
+                .and_then(|s| s.currency);
             let cost_str = fmt_money(p.cost, currency);
             markdown_format!(
                 "*Edit lesson: {}*\n\n\
@@ -323,11 +393,15 @@ async fn show_lesson_form<Cmd: StudentCommand + CallbackBitcode + 'static>(
     };
 
     let buttons = vec![
-        vec![InlineKeyboardButton::switch_inline_query_current_chat("✏️ Edit!", edit_cmd)],
+        vec![InlineKeyboardButton::switch_inline_query_current_chat(
+            "✏️ Edit!",
+            edit_cmd,
+        )],
         vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)],
     ];
 
-    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons)))
+        .await
 }
 
 async fn show_zoom_form<Cmd: StudentCommand + CallbackBitcode + 'static>(
@@ -336,15 +410,27 @@ async fn show_zoom_form<Cmd: StudentCommand + CallbackBitcode + 'static>(
     student: TelegramName,
 ) -> Result<()> {
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key = CallbackKey::pack(Cmd::student(PairingParams::PEN(student.clone())), &user_proxy).await;
+    let back_key = CallbackKey::pack(
+        Cmd::student(PairingParams::PEN(student.clone())),
+        &user_proxy,
+    )
+    .await;
 
     let pairing = ctx.state.get_pairing(&student, teacher).await;
-    let current_url = pairing.as_ref()
+    let current_url = pairing
+        .as_ref()
         .and_then(|p| p.zoom_url.clone())
         .unwrap_or_default();
-    let edit_cmd = format!("/student {}", PairingParams::PENZF(student.clone(), current_url.clone()));
+    let edit_cmd = format!(
+        "/student {}",
+        PairingParams::PENZF(student.clone(), current_url.clone())
+    );
 
-    let zoom_display = if current_url.is_empty() { "—".to_string() } else { current_url };
+    let zoom_display = if current_url.is_empty() {
+        "—".to_string()
+    } else {
+        current_url
+    };
     let text = markdown_format!(
         "*Edit Zoom link: {}*\n\n\
         • Current: {}\n\n\
@@ -356,11 +442,15 @@ async fn show_zoom_form<Cmd: StudentCommand + CallbackBitcode + 'static>(
     );
 
     let buttons = vec![
-        vec![InlineKeyboardButton::switch_inline_query_current_chat("✏️ Edit!", edit_cmd)],
+        vec![InlineKeyboardButton::switch_inline_query_current_chat(
+            "✏️ Edit!",
+            edit_cmd,
+        )],
         vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)],
     ];
 
-    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons)))
+        .await
 }
 
 async fn show_board_form<Cmd: StudentCommand + CallbackBitcode + 'static>(
@@ -369,15 +459,27 @@ async fn show_board_form<Cmd: StudentCommand + CallbackBitcode + 'static>(
     student: TelegramName,
 ) -> Result<()> {
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key = CallbackKey::pack(Cmd::student(PairingParams::PEN(student.clone())), &user_proxy).await;
+    let back_key = CallbackKey::pack(
+        Cmd::student(PairingParams::PEN(student.clone())),
+        &user_proxy,
+    )
+    .await;
 
     let pairing = ctx.state.get_pairing(&student, teacher).await;
-    let current_url = pairing.as_ref()
+    let current_url = pairing
+        .as_ref()
         .and_then(|p| p.board_url.clone())
         .unwrap_or_default();
-    let edit_cmd = format!("/student {}", PairingParams::PENBF(student.clone(), current_url.clone()));
+    let edit_cmd = format!(
+        "/student {}",
+        PairingParams::PENBF(student.clone(), current_url.clone())
+    );
 
-    let board_display = if current_url.is_empty() { "—".to_string() } else { current_url };
+    let board_display = if current_url.is_empty() {
+        "—".to_string()
+    } else {
+        current_url
+    };
     let text = markdown_format!(
         "*Edit Board link: {}*\n\n\
         • Current: {}\n\n\
@@ -389,11 +491,15 @@ async fn show_board_form<Cmd: StudentCommand + CallbackBitcode + 'static>(
     );
 
     let buttons = vec![
-        vec![InlineKeyboardButton::switch_inline_query_current_chat("✏️ Edit!", edit_cmd)],
+        vec![InlineKeyboardButton::switch_inline_query_current_chat(
+            "✏️ Edit!",
+            edit_cmd,
+        )],
         vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)],
     ];
 
-    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons)))
+        .await
 }
 
 async fn exec_lesson_edit<Cmd: StudentCommand + CallbackBitcode + 'static>(
@@ -403,7 +509,10 @@ async fn exec_lesson_edit<Cmd: StudentCommand + CallbackBitcode + 'static>(
     duration: Duration,
     cost: i64,
 ) -> Result<()> {
-    ctx.state.sheets.update_pairing(teacher, &student, duration_to_minutes(&duration), cost).await?;
+    ctx.state
+        .sheets
+        .update_pairing(teacher, &student, duration_to_minutes(&duration), cost)
+        .await?;
     let _ = ctx.state.refresh().await;
 
     let text = markdown_format!(
@@ -421,13 +530,13 @@ async fn exec_zoom_edit<Cmd: StudentCommand + CallbackBitcode + 'static>(
     student: TelegramName,
     url: String,
 ) -> Result<()> {
-    ctx.state.sheets.update_pairing_zoom(teacher, &student, &url).await?;
+    ctx.state
+        .sheets
+        .update_pairing_zoom(teacher, &student, &url)
+        .await?;
     let _ = ctx.state.refresh().await;
 
-    let text = markdown_format!(
-        "✅ Zoom link for {} updated\\.",
-        student.to_string()
-    );
+    let text = markdown_format!("✅ Zoom link for {} updated\\.", student.to_string());
     ctx.update_markdown_message(text, None).await
 }
 
@@ -437,13 +546,13 @@ async fn exec_board_edit<Cmd: StudentCommand + CallbackBitcode + 'static>(
     student: TelegramName,
     url: String,
 ) -> Result<()> {
-    ctx.state.sheets.update_pairing_board(teacher, &student, &url).await?;
+    ctx.state
+        .sheets
+        .update_pairing_board(teacher, &student, &url)
+        .await?;
     let _ = ctx.state.refresh().await;
 
-    let text = markdown_format!(
-        "✅ Board link for {} updated\\.",
-        student.to_string()
-    );
+    let text = markdown_format!("✅ Board link for {} updated\\.", student.to_string());
     ctx.update_markdown_message(text, None).await
 }
 
@@ -471,7 +580,11 @@ async fn show_remove_confirm<Cmd: StudentCommand + CallbackBitcode + 'static>(
     let text = match ctx.state.get_pairing(&student, teacher).await {
         Some(p) => {
             let dur = minutes_to_duration(p.duration_minutes);
-            let currency = ctx.state.get_student(&student).await.and_then(|s| s.currency);
+            let currency = ctx
+                .state
+                .get_student(&student)
+                .await
+                .and_then(|s| s.currency);
             let cost_str = fmt_money(p.cost, currency);
             markdown_format!(
                 "*Remove {} from your students*\n\n\
@@ -493,11 +606,15 @@ async fn show_remove_confirm<Cmd: StudentCommand + CallbackBitcode + 'static>(
     };
 
     let buttons = vec![
-        vec![InlineKeyboardButton::switch_inline_query_current_chat("🗑 Remove!", remove_cmd)],
+        vec![InlineKeyboardButton::switch_inline_query_current_chat(
+            "🗑 Remove!",
+            remove_cmd,
+        )],
         vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)],
     ];
 
-    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons)))
+        .await
 }
 
 async fn exec_remove<Cmd: StudentCommand + CallbackBitcode + 'static>(
@@ -534,7 +651,10 @@ async fn show_paired_list<Cmd: StudentCommand + CallbackBitcode + 'static>(
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key = CallbackKey::pack(Cmd::student(PairingParams::P0), &user_proxy).await;
 
-    let action_label = match action { PairingAction::Edit => "edit", PairingAction::Remove => "remove" };
+    let action_label = match action {
+        PairingAction::Edit => "edit",
+        PairingAction::Remove => "remove",
+    };
 
     let text = if total == 0 {
         markdown_string!("*Your students:* none assigned\\.")
@@ -548,9 +668,18 @@ async fn show_paired_list<Cmd: StudentCommand + CallbackBitcode + 'static>(
         );
         for p in &pairings[info.start..info.end] {
             let dur = minutes_to_duration(p.duration_minutes);
-            let currency = ctx.state.get_student(&p.student_telegram).await.and_then(|s| s.currency);
+            let currency = ctx
+                .state
+                .get_student(&p.student_telegram)
+                .await
+                .and_then(|s| s.currency);
             let cost_str = fmt_money(p.cost, currency);
-            msg.push(&markdown_format!("\n• {} — {}, cost {}", p.student_telegram.to_string(), MarkdownString::escape(dur.to_string()), cost_str));
+            msg.push(&markdown_format!(
+                "\n• {} — {}, cost {}",
+                p.student_telegram.to_string(),
+                MarkdownString::escape(dur.to_string()),
+                cost_str
+            ));
         }
         msg
     };
@@ -560,7 +689,10 @@ async fn show_paired_list<Cmd: StudentCommand + CallbackBitcode + 'static>(
     for p in &pairings[info.start..info.end] {
         let param = pairing_action_param(action, p);
         let key = CallbackKey::pack(Cmd::student(param), &user_proxy).await;
-        row.push(InlineKeyboardButton::callback_key(p.student_telegram.to_string(), &key));
+        row.push(InlineKeyboardButton::callback_key(
+            p.student_telegram.to_string(),
+            &key,
+        ));
         if row.len() == COLS {
             buttons.push(std::mem::take(&mut row));
         }
@@ -571,19 +703,24 @@ async fn show_paired_list<Cmd: StudentCommand + CallbackBitcode + 'static>(
 
     let mut nav_row: Vec<InlineKeyboardButton> = Vec::new();
     if info.has_prev() {
-        let k = CallbackKey::pack(Cmd::student(page_param(action, info.page - 1)), &user_proxy).await;
+        let k =
+            CallbackKey::pack(Cmd::student(page_param(action, info.page - 1)), &user_proxy).await;
         nav_row.push(InlineKeyboardButton::callback_key("◀", &k));
     }
     if info.has_next() {
-        let k = CallbackKey::pack(Cmd::student(page_param(action, info.page + 1)), &user_proxy).await;
+        let k =
+            CallbackKey::pack(Cmd::student(page_param(action, info.page + 1)), &user_proxy).await;
         nav_row.push(InlineKeyboardButton::callback_key("▶", &k));
     }
     if !nav_row.is_empty() {
         buttons.push(nav_row);
     }
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back", &back_key,
+    )]);
 
-    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons)))
+        .await
 }
 
 fn pairing_action_param(action: PairingAction, p: &TeacherStudentPairing) -> PairingParams {

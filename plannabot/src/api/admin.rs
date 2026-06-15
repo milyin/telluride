@@ -1,13 +1,14 @@
 use crate::api::context::BotCtx;
 use crate::models::Teacher;
-use teloxide::prelude::*;
 use anyhow::Result;
 use chrono_tz::Tz;
 use telluride::markdown::{MarkdownString, MarkdownStringMessage};
 use telluride::{markdown_format, markdown_string};
+use teloxide::prelude::*;
 
 pub async fn refresh(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
-    ctx.bot.send_message(ctx.chat_id, "🔄 Refreshing data from Google Sheets...")
+    ctx.bot
+        .send_message(ctx.chat_id, "🔄 Refreshing data from Google Sheets...")
         .await?;
 
     match ctx.state.refresh().await {
@@ -32,7 +33,10 @@ pub async fn refresh(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
             ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
         }
         Err(e) => {
-            let text = markdown_format!("❌ *Failed to refresh data:* {}", MarkdownString::escape(e.to_string()));
+            let text = markdown_format!(
+                "❌ *Failed to refresh data:* {}",
+                MarkdownString::escape(e.to_string())
+            );
             ctx.bot.send_markdown_message(ctx.chat_id, text).await?;
         }
     }
@@ -105,6 +109,8 @@ pub async fn status(ctx: &BotCtx<impl Send + Sync + Clone>, teacher: &Teacher) -
 
 pub async fn quit(ctx: &BotCtx<impl Send + Sync + Clone>) -> Result<()> {
     ctx.state.exit_admin_mode(ctx.chat_id).await;
-    ctx.bot.send_message(ctx.chat_id, "Exited admin mode.").await?;
+    ctx.bot
+        .send_message(ctx.chat_id, "Exited admin mode.")
+        .await?;
     Ok(())
 }

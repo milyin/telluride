@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use chrono::{Datelike, NaiveDate, NaiveTime, Weekday};
 use std::collections::HashMap;
 
-use super::{SheetSchema, SheetsClient, SHEET_WORKTIME, WORKTIME_COLS};
+use super::{SHEET_WORKTIME, SheetSchema, SheetsClient, WORKTIME_COLS};
 use crate::models::{ScheduleEntry, SheetParseError, TelegramName, TimePeriod, Worktime};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,7 +42,10 @@ impl SheetsClient {
             let row_num = row_idx + 1;
 
             let Some(teacher_telegram) = schema.get_field::<Option<TelegramName>>(
-                row, row_num, Worktime::TEACHER_TELEGRAM, &mut errors,
+                row,
+                row_num,
+                Worktime::TEACHER_TELEGRAM,
+                &mut errors,
             ) else {
                 continue;
             };
@@ -99,29 +102,40 @@ pub fn find_exception_entry<'a>(
     date: NaiveDate,
     start: NaiveTime,
 ) -> Option<&'a Worktime> {
-    worktime.iter().find(|w| {
-        &w.teacher_telegram == teacher
-            && w.date == Some(date)
-            && w.start_time == start
-    })
+    worktime
+        .iter()
+        .find(|w| &w.teacher_telegram == teacher && w.date == Some(date) && w.start_time == start)
 }
 
 /// Returns the applicable worktime windows for `teacher` on `date` as [`TimePeriod`]s.
 ///
 /// Specific-date rows take precedence over day-of-week rows.
-pub fn worktime_periods(worktime: &[Worktime], teacher: &TelegramName, date: NaiveDate) -> Vec<TimePeriod> {
+pub fn worktime_periods(
+    worktime: &[Worktime],
+    teacher: &TelegramName,
+    date: NaiveDate,
+) -> Vec<TimePeriod> {
     let weekday: Weekday = date.weekday();
 
-    let for_teacher: Vec<&Worktime> =
-        worktime.iter().filter(|w| &w.teacher_telegram == teacher).collect();
+    let for_teacher: Vec<&Worktime> = worktime
+        .iter()
+        .filter(|w| &w.teacher_telegram == teacher)
+        .collect();
 
-    let specific: Vec<&Worktime> =
-        for_teacher.iter().filter(|w| w.date == Some(date)).copied().collect();
+    let specific: Vec<&Worktime> = for_teacher
+        .iter()
+        .filter(|w| w.date == Some(date))
+        .copied()
+        .collect();
 
     let applicable: Vec<&Worktime> = if !specific.is_empty() {
         specific
     } else {
-        for_teacher.iter().filter(|w| w.day_of_week == Some(weekday)).copied().collect()
+        for_teacher
+            .iter()
+            .filter(|w| w.day_of_week == Some(weekday))
+            .copied()
+            .collect()
     };
 
     applicable.iter().map(|w| w.time_period(date)).collect()
@@ -154,8 +168,11 @@ pub fn available_slots(
     }
 
     // Collect hour-aligned slots of lesson_duration from all remaining free windows.
-    let mut slots: Vec<NaiveTime> =
-        free.iter().flat_map(|p| p.hour_slots(lesson_duration)).map(|dt| dt.time()).collect();
+    let mut slots: Vec<NaiveTime> = free
+        .iter()
+        .flat_map(|p| p.hour_slots(lesson_duration))
+        .map(|dt| dt.time())
+        .collect();
 
     slots.sort();
     slots.dedup();
@@ -364,8 +381,7 @@ impl SheetsClient {
             if row_teacher.as_ref() != Some(teacher) {
                 continue;
             }
-            let row_date: Option<NaiveDate> =
-                schema.get_str(row, Worktime::DATE).parse().ok();
+            let row_date: Option<NaiveDate> = schema.get_str(row, Worktime::DATE).parse().ok();
             if row_date != Some(date) {
                 continue;
             }

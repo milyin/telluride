@@ -9,9 +9,9 @@
 
 use std::str::FromStr;
 
+use crate::types::Duration;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc, Weekday};
 use chrono_tz::Tz;
-use crate::types::Duration;
 
 use crate::models::{LessonStatus, SheetParseError, TelegramName};
 
@@ -94,9 +94,9 @@ impl FromSheetValue for Tz {
         if let Ok(tz) = Tz::from_str(s) {
             return Ok(tz);
         }
-        let hours: f64 = s
-            .parse()
-            .map_err(|_| format!("cannot parse timezone '{s}': not an IANA name or numeric offset"))?;
+        let hours: f64 = s.parse().map_err(|_| {
+            format!("cannot parse timezone '{s}': not an IANA name or numeric offset")
+        })?;
         if !hours.is_finite() {
             return Err(format!("invalid timezone offset '{s}'"));
         }
@@ -130,7 +130,11 @@ impl FromSheetValue for NaiveTime {
         if let Ok(frac) = s.replace(',', ".").parse::<f64>() {
             if frac >= 0.0 && frac < 1.0 {
                 let total_secs = (frac * 86400.0).round() as u32;
-                if let Some(t) = NaiveTime::from_hms_opt(total_secs / 3600, (total_secs % 3600) / 60, total_secs % 60) {
+                if let Some(t) = NaiveTime::from_hms_opt(
+                    total_secs / 3600,
+                    (total_secs % 3600) / 60,
+                    total_secs % 60,
+                ) {
                     return Ok(t);
                 }
             }
@@ -246,13 +250,25 @@ fn push_error(
 // --- infallible primitives --------------------------------------------------
 
 impl FromSheet for String {
-    fn from_sheet(schema: &SheetSchema, row: &[String], _row_num: usize, col_name: &str, _errors: &mut Vec<SheetParseError>) -> Self {
+    fn from_sheet(
+        schema: &SheetSchema,
+        row: &[String],
+        _row_num: usize,
+        col_name: &str,
+        _errors: &mut Vec<SheetParseError>,
+    ) -> Self {
         schema.get_str(row, col_name).to_string()
     }
 }
 
 impl FromSheet for Option<String> {
-    fn from_sheet(schema: &SheetSchema, row: &[String], _row_num: usize, col_name: &str, _errors: &mut Vec<SheetParseError>) -> Self {
+    fn from_sheet(
+        schema: &SheetSchema,
+        row: &[String],
+        _row_num: usize,
+        col_name: &str,
+        _errors: &mut Vec<SheetParseError>,
+    ) -> Self {
         schema.get_optional(row, col_name).map(|s| s.to_string())
     }
 }
@@ -260,7 +276,13 @@ impl FromSheet for Option<String> {
 /// Parses as f64 with comma-or-dot decimal separator; returns 0.0 on failure
 /// without logging an error (matches the sheet convention for optional costs).
 impl FromSheet for f64 {
-    fn from_sheet(schema: &SheetSchema, row: &[String], _row_num: usize, col_name: &str, _errors: &mut Vec<SheetParseError>) -> Self {
+    fn from_sheet(
+        schema: &SheetSchema,
+        row: &[String],
+        _row_num: usize,
+        col_name: &str,
+        _errors: &mut Vec<SheetParseError>,
+    ) -> Self {
         f64::from_sheet_value(schema.get_str(row, col_name)).unwrap_or(0.0)
     }
 }
@@ -269,7 +291,13 @@ impl FromSheet for f64 {
 /// (e.g. "100.00" returned by the Sheets API when a column has `#,##0.00` format);
 /// returns 0 on failure without logging an error.
 impl FromSheet for i64 {
-    fn from_sheet(schema: &SheetSchema, row: &[String], _row_num: usize, col_name: &str, _errors: &mut Vec<SheetParseError>) -> Self {
+    fn from_sheet(
+        schema: &SheetSchema,
+        row: &[String],
+        _row_num: usize,
+        col_name: &str,
+        _errors: &mut Vec<SheetParseError>,
+    ) -> Self {
         let s = schema.get_str(row, col_name);
         i64::from_sheet_value(s)
             .or_else(|_| f64::from_sheet_value(s).map(|f| f.round() as i64))
@@ -290,8 +318,7 @@ fn normalize_currency_code(s: &str) -> &str {
 impl FromSheetValue for &'static rusty_money::iso::Currency {
     fn from_sheet_value(s: &str) -> Result<Self, String> {
         let code = normalize_currency_code(s).to_uppercase();
-        rusty_money::iso::find(&code)
-            .ok_or_else(|| format!("unknown ISO 4217 currency code '{s}'"))
+        rusty_money::iso::find(&code).ok_or_else(|| format!("unknown ISO 4217 currency code '{s}'"))
     }
 }
 
@@ -320,7 +347,13 @@ impl FromSheet for Option<&'static rusty_money::iso::Currency> {
 
 /// Empty or unrecognised cell → `false` (silent).  "true"/"yes"/"1" → `true`.
 impl FromSheet for bool {
-    fn from_sheet(schema: &SheetSchema, row: &[String], _row_num: usize, col_name: &str, _errors: &mut Vec<SheetParseError>) -> Self {
+    fn from_sheet(
+        schema: &SheetSchema,
+        row: &[String],
+        _row_num: usize,
+        col_name: &str,
+        _errors: &mut Vec<SheetParseError>,
+    ) -> Self {
         bool::from_sheet_value(schema.get_str(row, col_name)).unwrap_or(false)
     }
 }
@@ -330,12 +363,24 @@ impl FromSheet for bool {
 /// Parses as IANA name or numeric offset; on failure logs an error and returns
 /// UTC.
 impl FromSheet for Tz {
-    fn from_sheet(schema: &SheetSchema, row: &[String], row_num: usize, col_name: &str, errors: &mut Vec<SheetParseError>) -> Self {
+    fn from_sheet(
+        schema: &SheetSchema,
+        row: &[String],
+        row_num: usize,
+        col_name: &str,
+        errors: &mut Vec<SheetParseError>,
+    ) -> Self {
         let raw = schema.get_str(row, col_name);
         match Tz::from_sheet_value(raw) {
             Ok(tz) => tz,
             Err(msg) => {
-                push_error(schema, row_num, col_name, format!("{msg}; using UTC"), errors);
+                push_error(
+                    schema,
+                    row_num,
+                    col_name,
+                    format!("{msg}; using UTC"),
+                    errors,
+                );
                 chrono_tz::UTC
             }
         }
@@ -345,7 +390,13 @@ impl FromSheet for Tz {
 /// Empty cell → `None` (silent).  Non-empty but invalid → `None` + error
 /// logged.
 impl FromSheet for Option<TelegramName> {
-    fn from_sheet(schema: &SheetSchema, row: &[String], row_num: usize, col_name: &str, errors: &mut Vec<SheetParseError>) -> Self {
+    fn from_sheet(
+        schema: &SheetSchema,
+        row: &[String],
+        row_num: usize,
+        col_name: &str,
+        errors: &mut Vec<SheetParseError>,
+    ) -> Self {
         let raw = schema.get_str(row, col_name);
         match TelegramName::from_sheet_value(raw) {
             Ok(name) => Some(name),
@@ -361,7 +412,13 @@ impl FromSheet for Option<TelegramName> {
 
 /// Empty or unrecognised cell → `None` (no error; treated as "planned").
 impl FromSheet for Option<LessonStatus> {
-    fn from_sheet(schema: &SheetSchema, row: &[String], _row_num: usize, col_name: &str, _errors: &mut Vec<SheetParseError>) -> Self {
+    fn from_sheet(
+        schema: &SheetSchema,
+        row: &[String],
+        _row_num: usize,
+        col_name: &str,
+        _errors: &mut Vec<SheetParseError>,
+    ) -> Self {
         LessonStatus::from_str(schema.get_str(row, col_name))
     }
 }
@@ -369,7 +426,13 @@ impl FromSheet for Option<LessonStatus> {
 /// Empty cell → `None` (silent).  Non-empty but unparseable → `None` + error
 /// logged.
 impl FromSheet for Option<DateTime<Utc>> {
-    fn from_sheet(schema: &SheetSchema, row: &[String], row_num: usize, col_name: &str, errors: &mut Vec<SheetParseError>) -> Self {
+    fn from_sheet(
+        schema: &SheetSchema,
+        row: &[String],
+        row_num: usize,
+        col_name: &str,
+        errors: &mut Vec<SheetParseError>,
+    ) -> Self {
         let raw = schema.get_str(row, col_name);
         if raw.is_empty() {
             return None;
@@ -386,7 +449,13 @@ impl FromSheet for Option<DateTime<Utc>> {
 
 /// Empty cell → `None` (silent).  Non-empty but unparseable → `None` + error logged.
 impl FromSheet for Option<NaiveDate> {
-    fn from_sheet(schema: &SheetSchema, row: &[String], row_num: usize, col_name: &str, errors: &mut Vec<SheetParseError>) -> Self {
+    fn from_sheet(
+        schema: &SheetSchema,
+        row: &[String],
+        row_num: usize,
+        col_name: &str,
+        errors: &mut Vec<SheetParseError>,
+    ) -> Self {
         let raw = schema.get_str(row, col_name);
         if raw.is_empty() {
             return None;
@@ -403,7 +472,13 @@ impl FromSheet for Option<NaiveDate> {
 
 /// Empty cell → `None` (silent).  Non-empty but unparseable → `None` + error logged.
 impl FromSheet for Option<Weekday> {
-    fn from_sheet(schema: &SheetSchema, row: &[String], row_num: usize, col_name: &str, errors: &mut Vec<SheetParseError>) -> Self {
+    fn from_sheet(
+        schema: &SheetSchema,
+        row: &[String],
+        row_num: usize,
+        col_name: &str,
+        errors: &mut Vec<SheetParseError>,
+    ) -> Self {
         let raw = schema.get_str(row, col_name);
         if raw.is_empty() {
             return None;
@@ -443,12 +518,24 @@ impl FromSheet for Option<Duration> {
 
 /// Missing or unparseable cell logs an error and falls back to midnight.
 impl FromSheet for NaiveTime {
-    fn from_sheet(schema: &SheetSchema, row: &[String], row_num: usize, col_name: &str, errors: &mut Vec<SheetParseError>) -> Self {
+    fn from_sheet(
+        schema: &SheetSchema,
+        row: &[String],
+        row_num: usize,
+        col_name: &str,
+        errors: &mut Vec<SheetParseError>,
+    ) -> Self {
         let raw = schema.get_str(row, col_name);
         match NaiveTime::from_sheet_value(raw) {
             Ok(t) => t,
             Err(msg) => {
-                push_error(schema, row_num, col_name, format!("{msg}; using midnight"), errors);
+                push_error(
+                    schema,
+                    row_num,
+                    col_name,
+                    format!("{msg}; using midnight"),
+                    errors,
+                );
                 NaiveTime::from_hms_opt(0, 0, 0).unwrap()
             }
         }

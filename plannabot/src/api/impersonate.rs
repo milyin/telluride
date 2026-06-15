@@ -10,8 +10,16 @@ pub async fn impersonate<Cmd: ImpersonateCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
     params: &str,
 ) -> Result<()> {
-    if ctx.state.get_student_impersonation(ctx.chat_id).await.is_some()
-        || ctx.state.get_teacher_impersonation(ctx.chat_id).await.is_some()
+    if ctx
+        .state
+        .get_student_impersonation(ctx.chat_id)
+        .await
+        .is_some()
+        || ctx
+            .state
+            .get_teacher_impersonation(ctx.chat_id)
+            .await
+            .is_some()
     {
         ctx.update_markdown_message(
             markdown_string!("You are already in impersonation mode\\. Use /quit first\\."),
@@ -29,7 +37,9 @@ pub async fn impersonate<Cmd: ImpersonateCommand + CallbackBitcode + 'static>(
             match ctx.state.get_student(&name).await {
                 Some(_) => {
                     ctx.state.exit_admin_mode(ctx.chat_id).await;
-                    ctx.state.impersonate_student(ctx.chat_id, name.clone()).await;
+                    ctx.state
+                        .impersonate_student(ctx.chat_id, name.clone())
+                        .await;
                     let text = markdown_format!(
                         "Now impersonating {}\\. All commands will behave as if you were that student\\. \
                          Use /help to see available commands, use /quit to exit",
@@ -52,7 +62,9 @@ pub async fn impersonate<Cmd: ImpersonateCommand + CallbackBitcode + 'static>(
             match ctx.state.get_teacher(&name).await {
                 Some(_) => {
                     ctx.state.exit_admin_mode(ctx.chat_id).await;
-                    ctx.state.impersonate_teacher(ctx.chat_id, name.clone()).await;
+                    ctx.state
+                        .impersonate_teacher(ctx.chat_id, name.clone())
+                        .await;
                     let text = markdown_format!(
                         "Now impersonating teacher {}\\. All commands will behave as if you were that teacher\\. \
                          Use /help to see available commands, use /quit to exit",
@@ -90,8 +102,14 @@ async fn show_role_selection<Cmd: ImpersonateCommand + CallbackBitcode + 'static
     .await;
 
     let buttons = vec![
-        vec![InlineKeyboardButton::callback_key("Student".to_string(), &student_key)],
-        vec![InlineKeyboardButton::callback_key("Teacher".to_string(), &teacher_key)],
+        vec![InlineKeyboardButton::callback_key(
+            "Student".to_string(),
+            &student_key,
+        )],
+        vec![InlineKeyboardButton::callback_key(
+            "Teacher".to_string(),
+            &teacher_key,
+        )],
     ];
 
     ctx.update_markdown_message(
@@ -129,7 +147,10 @@ async fn show_student_selection<Cmd: ImpersonateCommand + CallbackBitcode + 'sta
     }
 
     let back_key = CallbackKey::pack(Cmd::impersonate(ImpersonateParams::I0), &user_proxy).await;
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back".to_string(), &back_key)]);
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back".to_string(),
+        &back_key,
+    )]);
 
     ctx.update_markdown_message(
         markdown_string!("Select the student you want to impersonate:"),
@@ -166,7 +187,10 @@ async fn show_teacher_selection<Cmd: ImpersonateCommand + CallbackBitcode + 'sta
     }
 
     let back_key = CallbackKey::pack(Cmd::impersonate(ImpersonateParams::I0), &user_proxy).await;
-    buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back".to_string(), &back_key)]);
+    buttons.push(vec![InlineKeyboardButton::callback_key(
+        "↩ Back".to_string(),
+        &back_key,
+    )]);
 
     ctx.update_markdown_message(
         markdown_string!("Select the teacher you want to impersonate:"),

@@ -1,6 +1,10 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor, PairingParams, PaymentActor, PaymentCommand, PaymentParams, ScheduleCommand, ScheduleParams, StudentCommand, WorktimeCommand, WorktimeParams};
+use crate::api::traits::{
+    BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor,
+    PairingParams, PaymentActor, PaymentCommand, PaymentParams, ScheduleCommand, ScheduleParams,
+    StudentCommand, WorktimeCommand, WorktimeParams,
+};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole};
 use crate::state::BotState;
@@ -107,20 +111,41 @@ async fn teacher_handle(
         .await;
 
     if teacher.chat_id != msg.chat.id.0 {
-        let _ = state.sheets.update_teacher_chat_id(&teacher.telegram_name, msg.chat.id.0).await;
+        let _ = state
+            .sheets
+            .update_teacher_chat_id(&teacher.telegram_name, msg.chat.id.0)
+            .await;
     }
 
     let user_id: UserId = msg.from.as_ref().unwrap().id;
-    let ctx = BotCtx { bot, chat_id: msg.chat.id, state, user_id, callback_storage, message_id };
+    let ctx = BotCtx {
+        bot,
+        chat_id: msg.chat.id,
+        state,
+        user_id,
+        callback_storage,
+        message_id,
+    };
 
     let result = match cmd {
         TeacherCommand::Start => api::common::start(&ctx, &username).await,
         TeacherCommand::Help => api::teacher::help(&ctx).await,
         TeacherCommand::Schedule(ref params) => {
-            api::schedule::schedule(&ctx, params, &BookingActor::Teacher(teacher.telegram_name.clone()), teacher.timezone).await
+            api::schedule::schedule(
+                &ctx,
+                params,
+                &BookingActor::Teacher(teacher.telegram_name.clone()),
+                teacher.timezone,
+            )
+            .await
         }
         TeacherCommand::Balance(ref params) => {
-            api::balance::balance(&ctx, params, &BalanceActor::Teacher(teacher.telegram_name.clone())).await
+            api::balance::balance(
+                &ctx,
+                params,
+                &BalanceActor::Teacher(teacher.telegram_name.clone()),
+            )
+            .await
         }
         TeacherCommand::Book(ref params) => {
             api::book::book(&ctx, params, &BookingActor::Teacher(teacher.telegram_name)).await
@@ -128,7 +153,12 @@ async fn teacher_handle(
         TeacherCommand::Admin => api::teacher::admin(&ctx, &teacher).await,
         TeacherCommand::Refresh => api::admin::refresh(&ctx).await,
         TeacherCommand::Payment(ref params) => {
-            api::payment::payment(&ctx, params, &PaymentActor::Teacher(teacher.telegram_name.clone())).await
+            api::payment::payment(
+                &ctx,
+                params,
+                &PaymentActor::Teacher(teacher.telegram_name.clone()),
+            )
+            .await
         }
         TeacherCommand::Worktime(ref params) => {
             api::worktime::worktime(&ctx, params, &teacher.telegram_name).await
@@ -161,7 +191,14 @@ pub async fn teacher_callback_command_handler(
     state: Arc<BotState>,
     callback_storage: Arc<InMemStore<CallbackKey, TeacherCommand>>,
 ) -> ResponseResult<()> {
-    callback_command_handler(bot, q, callback_storage, state, |bot, msg, cmd, state, cb, message_id| {
-        Box::pin(teacher_handle(bot, msg, cmd, state, cb, message_id))
-    }).await
+    callback_command_handler(
+        bot,
+        q,
+        callback_storage,
+        state,
+        |bot, msg, cmd, state, cb, message_id| {
+            Box::pin(teacher_handle(bot, msg, cmd, state, cb, message_id))
+        },
+    )
+    .await
 }

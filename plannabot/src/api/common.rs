@@ -22,7 +22,8 @@ pub async fn start(ctx: &BotCtx<impl Send + Sync + Clone>, username: &str) -> Re
     text.push(&greeting);
 
     if let Some(UserRole::Teacher(teacher)) = &role {
-        if ctx.state
+        if ctx
+            .state
             .is_both_teacher_and_student(teacher.telegram_name.as_str())
             .await
         {
@@ -78,10 +79,19 @@ impl PageInfo {
         let page_idx = page.max(0) as usize;
         let start = (page_idx * page_size).min(total);
         let end = (start + page_size).min(total);
-        Self { start, end, page, total }
+        Self {
+            start,
+            end,
+            page,
+            total,
+        }
     }
-    pub fn has_prev(&self) -> bool { self.page > 0 }
-    pub fn has_next(&self) -> bool { self.end < self.total }
+    pub fn has_prev(&self) -> bool {
+        self.page > 0
+    }
+    pub fn has_next(&self) -> bool {
+        self.end < self.total
+    }
 }
 
 /// Plain formatted money for button labels: "100 $" or "-100 $".

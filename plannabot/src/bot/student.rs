@@ -1,6 +1,9 @@
 use crate::api;
 use crate::api::context::BotCtx;
-use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor, NotificationCommand, NotificationParams, ScheduleCommand, ScheduleParams};
+use crate::api::traits::{
+    BalanceActor, BalanceCommand, BalanceParams, BookCommand, BookParams, BookingActor,
+    NotificationCommand, NotificationParams, ScheduleCommand, ScheduleParams,
+};
 use crate::bot::{callback_command_handler, get_username, report_error};
 use crate::models::{TelegramName, UserEffectiveRole, UserRole};
 use crate::state::BotState;
@@ -22,9 +25,7 @@ pub enum StudentCommand {
     Schedule(String),
     #[command(description = "view your balance")]
     Balance(String),
-    #[command(
-        description = "book a lesson (optionally provide: teacher_name date hour duration)"
-    )]
+    #[command(description = "book a lesson (optionally provide: teacher_name date hour duration)")]
     Book(String),
     #[command(description = "manage lesson notifications")]
     Notification(String),
@@ -92,23 +93,49 @@ async fn student_handle(
     };
 
     if student.chat_id != msg.chat.id.0 {
-        let _ = state.sheets.update_student_chat_id(&student.telegram_name, msg.chat.id.0).await;
+        let _ = state
+            .sheets
+            .update_student_chat_id(&student.telegram_name, msg.chat.id.0)
+            .await;
     }
 
     let user_id = msg.from.as_ref().unwrap().id;
-    let ctx = BotCtx { bot, chat_id: msg.chat.id, state, user_id, callback_storage, message_id };
+    let ctx = BotCtx {
+        bot,
+        chat_id: msg.chat.id,
+        state,
+        user_id,
+        callback_storage,
+        message_id,
+    };
 
     let result = match &cmd {
         StudentCommand::Start => api::common::start(&ctx, &username).await,
         StudentCommand::Help => api::student::help(&ctx).await,
         StudentCommand::Schedule(params) => {
-            api::schedule::schedule(&ctx, params, &BookingActor::Student(student.telegram_name.clone()), student.timezone).await
+            api::schedule::schedule(
+                &ctx,
+                params,
+                &BookingActor::Student(student.telegram_name.clone()),
+                student.timezone,
+            )
+            .await
         }
         StudentCommand::Balance(params) => {
-            api::balance::balance(&ctx, params, &BalanceActor::Student(student.telegram_name.clone())).await
+            api::balance::balance(
+                &ctx,
+                params,
+                &BalanceActor::Student(student.telegram_name.clone()),
+            )
+            .await
         }
         StudentCommand::Book(params) => {
-            api::book::book(&ctx, params, &BookingActor::Student(student.telegram_name.clone())).await
+            api::book::book(
+                &ctx,
+                params,
+                &BookingActor::Student(student.telegram_name.clone()),
+            )
+            .await
         }
         StudentCommand::Notification(params) => {
             api::notification::notification(&ctx, params, &student).await
@@ -138,7 +165,14 @@ pub async fn student_callback_command_handler(
     state: Arc<BotState>,
     callback_storage: Arc<InMemStore<CallbackKey, StudentCommand>>,
 ) -> ResponseResult<()> {
-    callback_command_handler(bot, q, callback_storage, state, |bot, msg, cmd, state, cb, message_id| {
-        Box::pin(student_handle(bot, msg, cmd, state, cb, message_id))
-    }).await
+    callback_command_handler(
+        bot,
+        q,
+        callback_storage,
+        state,
+        |bot, msg, cmd, state, cb, message_id| {
+            Box::pin(student_handle(bot, msg, cmd, state, cb, message_id))
+        },
+    )
+    .await
 }

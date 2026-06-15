@@ -75,12 +75,17 @@ async fn schedule_L1<Cmd: ScheduleCommand + CallbackBitcode + 'static>(
     }
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let prev_key =
-        CallbackKey::pack(Cmd::schedule(ScheduleParams::L1(week_offset - 1)), &user_proxy).await;
-    let this_key =
-        CallbackKey::pack(Cmd::schedule(ScheduleParams::L1(0)), &user_proxy).await;
-    let next_key =
-        CallbackKey::pack(Cmd::schedule(ScheduleParams::L1(week_offset + 1)), &user_proxy).await;
+    let prev_key = CallbackKey::pack(
+        Cmd::schedule(ScheduleParams::L1(week_offset - 1)),
+        &user_proxy,
+    )
+    .await;
+    let this_key = CallbackKey::pack(Cmd::schedule(ScheduleParams::L1(0)), &user_proxy).await;
+    let next_key = CallbackKey::pack(
+        Cmd::schedule(ScheduleParams::L1(week_offset + 1)),
+        &user_proxy,
+    )
+    .await;
     let keyboard = InlineKeyboardMarkup::new(vec![vec![
         InlineKeyboardButton::callback_key("<", &prev_key),
         InlineKeyboardButton::callback_key("This week", &this_key),
@@ -92,8 +97,7 @@ async fn schedule_L1<Cmd: ScheduleCommand + CallbackBitcode + 'static>(
 
 fn week_monday(tz: Tz, week_offset: i32) -> NaiveDate {
     let today = chrono::Utc::now().with_timezone(&tz).date_naive();
-    let this_monday =
-        today - ChronoDuration::days(today.weekday().num_days_from_monday() as i64);
+    let this_monday = today - ChronoDuration::days(today.weekday().num_days_from_monday() as i64);
     this_monday + ChronoDuration::weeks(week_offset as i64)
 }
 

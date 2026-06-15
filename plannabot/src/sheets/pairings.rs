@@ -57,11 +57,19 @@ impl SheetsClient {
 
             let zoom_url = {
                 let s = schema.get_str(row, TeacherStudentPairing::ZOOM_URL);
-                if s.is_empty() { None } else { Some(s.to_string()) }
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s.to_string())
+                }
             };
             let board_url = {
                 let s = schema.get_str(row, TeacherStudentPairing::BOARD_URL);
-                if s.is_empty() { None } else { Some(s.to_string()) }
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s.to_string())
+                }
             };
             pairings.push(TeacherStudentPairing {
                 teacher_telegram,
@@ -108,10 +116,19 @@ impl SheetsClient {
         let headers = rows.into_iter().next().unwrap_or_default();
 
         let mut values: std::collections::HashMap<&str, String> = std::collections::HashMap::new();
-        values.insert(TeacherStudentPairing::TEACHER_TELEGRAM, teacher.as_str().to_string());
-        values.insert(TeacherStudentPairing::STUDENT_TELEGRAM, student.as_str().to_string());
+        values.insert(
+            TeacherStudentPairing::TEACHER_TELEGRAM,
+            teacher.as_str().to_string(),
+        );
+        values.insert(
+            TeacherStudentPairing::STUDENT_TELEGRAM,
+            student.as_str().to_string(),
+        );
         values.insert(TeacherStudentPairing::COST, cost.to_string());
-        values.insert(TeacherStudentPairing::DURATION_MINUTES, duration_minutes.to_string());
+        values.insert(
+            TeacherStudentPairing::DURATION_MINUTES,
+            duration_minutes.to_string(),
+        );
         values.insert(TeacherStudentPairing::ZOOM_URL, String::new());
         values.insert(TeacherStudentPairing::BOARD_URL, String::new());
 
@@ -147,8 +164,14 @@ impl SheetsClient {
             if row.is_empty() || row.iter().all(|c| c.is_empty()) {
                 continue;
             }
-            let row_teacher = TelegramName::try_from(schema.get_str(row, TeacherStudentPairing::TEACHER_TELEGRAM)).ok();
-            let row_student = TelegramName::try_from(schema.get_str(row, TeacherStudentPairing::STUDENT_TELEGRAM)).ok();
+            let row_teacher = TelegramName::try_from(
+                schema.get_str(row, TeacherStudentPairing::TEACHER_TELEGRAM),
+            )
+            .ok();
+            let row_student = TelegramName::try_from(
+                schema.get_str(row, TeacherStudentPairing::STUDENT_TELEGRAM),
+            )
+            .ok();
             if row_teacher.as_ref() != Some(teacher) || row_student.as_ref() != Some(student) {
                 continue;
             }
@@ -169,15 +192,19 @@ impl SheetsClient {
             let sheet_row = row_idx + 1;
             let last_col = super::col_index_to_letter(updated_row.len().saturating_sub(1));
             let update_range = format!("{SHEET_PAIRINGS}!A{sheet_row}:{last_col}{sheet_row}");
-            let values: Vec<Vec<serde_json::Value>> = vec![updated_row
-                .into_iter()
-                .map(serde_json::Value::String)
-                .collect()];
+            let values: Vec<Vec<serde_json::Value>> = vec![
+                updated_row
+                    .into_iter()
+                    .map(serde_json::Value::String)
+                    .collect(),
+            ];
             self.update_values(&update_range, values).await?;
             return Ok(());
         }
 
-        Err(anyhow::anyhow!("Pairing {teacher} ↔ {student} not found in sheet"))
+        Err(anyhow::anyhow!(
+            "Pairing {teacher} ↔ {student} not found in sheet"
+        ))
     }
 
     /// Updates the `zoom_url` of an existing pairing row.
@@ -187,7 +214,8 @@ impl SheetsClient {
         student: &TelegramName,
         url: &str,
     ) -> Result<()> {
-        self.update_pairing_url_field(teacher, student, TeacherStudentPairing::ZOOM_URL, url).await
+        self.update_pairing_url_field(teacher, student, TeacherStudentPairing::ZOOM_URL, url)
+            .await
     }
 
     /// Updates the `board_url` of an existing pairing row.
@@ -197,7 +225,8 @@ impl SheetsClient {
         student: &TelegramName,
         url: &str,
     ) -> Result<()> {
-        self.update_pairing_url_field(teacher, student, TeacherStudentPairing::BOARD_URL, url).await
+        self.update_pairing_url_field(teacher, student, TeacherStudentPairing::BOARD_URL, url)
+            .await
     }
 
     async fn update_pairing_url_field(
@@ -223,8 +252,14 @@ impl SheetsClient {
             if row.is_empty() || row.iter().all(|c| c.is_empty()) {
                 continue;
             }
-            let row_teacher = TelegramName::try_from(schema.get_str(row, TeacherStudentPairing::TEACHER_TELEGRAM)).ok();
-            let row_student = TelegramName::try_from(schema.get_str(row, TeacherStudentPairing::STUDENT_TELEGRAM)).ok();
+            let row_teacher = TelegramName::try_from(
+                schema.get_str(row, TeacherStudentPairing::TEACHER_TELEGRAM),
+            )
+            .ok();
+            let row_student = TelegramName::try_from(
+                schema.get_str(row, TeacherStudentPairing::STUDENT_TELEGRAM),
+            )
+            .ok();
             if row_teacher.as_ref() != Some(teacher) || row_student.as_ref() != Some(student) {
                 continue;
             }
@@ -242,15 +277,19 @@ impl SheetsClient {
             let sheet_row = row_idx + 1;
             let last_col = super::col_index_to_letter(updated_row.len().saturating_sub(1));
             let update_range = format!("{SHEET_PAIRINGS}!A{sheet_row}:{last_col}{sheet_row}");
-            let values: Vec<Vec<serde_json::Value>> = vec![updated_row
-                .into_iter()
-                .map(serde_json::Value::String)
-                .collect()];
+            let values: Vec<Vec<serde_json::Value>> = vec![
+                updated_row
+                    .into_iter()
+                    .map(serde_json::Value::String)
+                    .collect(),
+            ];
             self.update_values(&update_range, values).await?;
             return Ok(());
         }
 
-        Err(anyhow::anyhow!("Pairing {teacher} ↔ {student} not found in sheet"))
+        Err(anyhow::anyhow!(
+            "Pairing {teacher} ↔ {student} not found in sheet"
+        ))
     }
 
     /// Deletes the pairing row for the given teacher ↔ student pair.
@@ -275,15 +314,23 @@ impl SheetsClient {
             if row.is_empty() || row.iter().all(|c| c.is_empty()) {
                 continue;
             }
-            let row_teacher = TelegramName::try_from(schema.get_str(row, TeacherStudentPairing::TEACHER_TELEGRAM)).ok();
-            let row_student = TelegramName::try_from(schema.get_str(row, TeacherStudentPairing::STUDENT_TELEGRAM)).ok();
+            let row_teacher = TelegramName::try_from(
+                schema.get_str(row, TeacherStudentPairing::TEACHER_TELEGRAM),
+            )
+            .ok();
+            let row_student = TelegramName::try_from(
+                schema.get_str(row, TeacherStudentPairing::STUDENT_TELEGRAM),
+            )
+            .ok();
             if row_teacher.as_ref() == Some(teacher) && row_student.as_ref() == Some(student) {
                 self.delete_row(SHEET_PAIRINGS, row_idx).await?;
                 return Ok(());
             }
         }
 
-        Err(anyhow::anyhow!("Pairing {teacher} ↔ {student} not found in sheet"))
+        Err(anyhow::anyhow!(
+            "Pairing {teacher} ↔ {student} not found in sheet"
+        ))
     }
 
     /// Returns the teacher(s) assigned to the given student, if any.

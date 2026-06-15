@@ -16,11 +16,7 @@ fn noop_button(label: &str) -> InlineKeyboardButton {
 ///
 /// `day_button_fn` is called for each valid day and must return the
 /// `InlineKeyboardButton` to display for that date.
-pub fn build_month_calendar<F>(
-    year: i32,
-    month: u32,
-    day_button_fn: F,
-) -> InlineKeyboardMarkup
+pub fn build_month_calendar<F>(year: i32, month: u32, day_button_fn: F) -> InlineKeyboardMarkup
 where
     F: Fn(NaiveDate) -> InlineKeyboardButton,
 {

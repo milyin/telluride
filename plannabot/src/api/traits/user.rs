@@ -2,7 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use anyhow::Result;
-use telluride::utils::{split_with_screened_spaces, ParamParser};
+use telluride::utils::{ParamParser, split_with_screened_spaces};
 
 use crate::models::TelegramName;
 use crate::types::{Currency, Timezone};
@@ -150,7 +150,11 @@ impl fmt::Display for UserParams {
                 write!(f, " {display_name}")
             }
             UserParams::UTAF(name, tz, display_name) => {
-                write!(f, "{teacher} {add_f} {name} {} {display_name}", tz.to_param())
+                write!(
+                    f,
+                    "{teacher} {add_f} {name} {} {display_name}",
+                    tz.to_param()
+                )
             }
             UserParams::USD(page) => write!(f, "{student} {del} {page}"),
             UserParams::UTD(page) => write!(f, "{teacher} {del} {page}"),
@@ -168,7 +172,11 @@ impl fmt::Display for UserParams {
                 write!(f, " {display_name}")
             }
             UserParams::UTENF(name, tz, display_name) => {
-                write!(f, "{teacher} {edit_f} {name} {} {display_name}", tz.to_param())
+                write!(
+                    f,
+                    "{teacher} {edit_f} {name} {} {display_name}",
+                    tz.to_param()
+                )
             }
         }
     }
@@ -264,9 +272,8 @@ impl FromStr for UserParams {
             (UserRole::Student, UserSubcmd::Edit(true)) => {
                 let name: TelegramName = p.next("@username")?.parse()?;
                 let tz: Timezone = p.next("timezone")?.parse()?;
-                let currency: Option<Currency> = parse_opt_currency(
-                    p.next("currency (use '-' to remove)")?,
-                )?;
+                let currency: Option<Currency> =
+                    parse_opt_currency(p.next("currency (use '-' to remove)")?)?;
                 let display_name = p.rest().join(" ");
                 if display_name.is_empty() {
                     return Err(anyhow::anyhow!("missing name"));

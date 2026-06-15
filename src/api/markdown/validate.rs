@@ -54,7 +54,9 @@ pub const fn validate_markdownv2_format(format_str: &str) {
                             spoiler_delimiter_count = spoiler_delimiter_count.wrapping_add(1);
                             i += 1;
                         } else {
-                            panic!("Unescaped '|' in MarkdownV2 format string. Use \\| to escape it or ||spoiler|| for spoiler formatting.");
+                            panic!(
+                                "Unescaped '|' in MarkdownV2 format string. Use \\| to escape it or ||spoiler|| for spoiler formatting."
+                            );
                         }
                     }
                 }
@@ -341,7 +343,6 @@ mod tests {
             );
         }
     }
-
 
     #[test]
     fn test_pipe_validation_accepts_spoilers_and_escaped_pipes() {

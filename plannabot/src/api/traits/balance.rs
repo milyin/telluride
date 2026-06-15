@@ -2,7 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use anyhow::Result;
-use telluride::utils::{format_screen_spaces, split_with_screened_spaces, ParamParser};
+use telluride::utils::{ParamParser, format_screen_spaces, split_with_screened_spaces};
 
 use crate::models::TelegramName;
 
@@ -24,8 +24,8 @@ pub enum BalanceActor {
 impl fmt::Display for BalanceParams {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BalanceParams::L0(page)        => format_screen_spaces!(page),
-            BalanceParams::L1(s)           => format_screen_spaces!(s),
+            BalanceParams::L0(page) => format_screen_spaces!(page),
+            BalanceParams::L1(s) => format_screen_spaces!(s),
             BalanceParams::L2(s, year, mo) => format_screen_spaces!(s, year, mo),
         }
         .fmt(f)

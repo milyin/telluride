@@ -5,7 +5,7 @@ use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use std::collections::HashMap;
 
 use super::from_sheet::FromSheetValue;
-use super::{col_index_to_letter, SheetSchema, SheetsClient, SCHEDULE_COLS, SHEET_SCHEDULE};
+use super::{SCHEDULE_COLS, SHEET_SCHEDULE, SheetSchema, SheetsClient, col_index_to_letter};
 use crate::models::{LessonStatus, ScheduleEntry, SheetParseError, TelegramName};
 
 // ---------------------------------------------------------------------------
@@ -27,9 +27,7 @@ impl SheetsClient {
     /// Reads **all** rows from the `Schedule` sheet and returns them as a
     /// `Vec<ScheduleEntry>`, together with any [`SheetParseError`]s encountered
     /// while parsing rows.
-    pub async fn get_schedule(
-        &self,
-    ) -> Result<(Vec<ScheduleEntry>, Vec<SheetParseError>)> {
+    pub async fn get_schedule(&self) -> Result<(Vec<ScheduleEntry>, Vec<SheetParseError>)> {
         let range = format!("{SHEET_SCHEDULE}!A:Z");
         let rows = self
             .get_values(&range)
@@ -76,17 +74,32 @@ impl SheetsClient {
                     }
                 }
             } else {
-                match schema.get_field::<Option<DateTime<Utc>>>(row, row_num, ScheduleEntry::DATETIME, &mut errors) {
+                match schema.get_field::<Option<DateTime<Utc>>>(
+                    row,
+                    row_num,
+                    ScheduleEntry::DATETIME,
+                    &mut errors,
+                ) {
                     Some(dt) => dt,
                     None => continue,
                 }
             };
 
             // --- telegram names -------------------------------------------------
-            let Some(student_telegram) = schema.get_field::<Option<TelegramName>>(row, row_num, ScheduleEntry::STUDENT_TELEGRAM, &mut errors) else {
+            let Some(student_telegram) = schema.get_field::<Option<TelegramName>>(
+                row,
+                row_num,
+                ScheduleEntry::STUDENT_TELEGRAM,
+                &mut errors,
+            ) else {
                 continue;
             };
-            let Some(teacher_telegram) = schema.get_field::<Option<TelegramName>>(row, row_num, ScheduleEntry::TEACHER_TELEGRAM, &mut errors) else {
+            let Some(teacher_telegram) = schema.get_field::<Option<TelegramName>>(
+                row,
+                row_num,
+                ScheduleEntry::TEACHER_TELEGRAM,
+                &mut errors,
+            ) else {
                 continue;
             };
 
@@ -154,11 +167,7 @@ impl SheetsClient {
         let schema = SheetSchema::new(SHEET_SCHEDULE.to_string(), headers.clone());
         let row: Vec<serde_json::Value> = headers
             .iter()
-            .map(|h| {
-                serde_json::Value::String(
-                    values.get(h.as_str()).cloned().unwrap_or_default(),
-                )
-            })
+            .map(|h| serde_json::Value::String(values.get(h.as_str()).cloned().unwrap_or_default()))
             .collect();
 
         self.append_row(SHEET_SCHEDULE, row).await?;
@@ -210,7 +219,10 @@ impl SheetsClient {
 
             let status_str = schema.get_str(row, ScheduleEntry::STATUS);
             if LessonStatus::from_str(status_str).is_some() {
-                return Err(anyhow::anyhow!("Lesson is not planned (status: {})", status_str));
+                return Err(anyhow::anyhow!(
+                    "Lesson is not planned (status: {})",
+                    status_str
+                ));
             }
 
             // row_idx is 0-based (0 = header row in the sheet).
@@ -279,12 +291,9 @@ impl SheetsClient {
                 Some(s) => s.as_sheet_str(),
                 None => "",
             };
-            self.update_values(
-                &cell_range,
-                vec![vec![serde_json::json!(status_value)]],
-            )
-            .await
-            .context("Failed to write lesson status")?;
+            self.update_values(&cell_range, vec![vec![serde_json::json!(status_value)]])
+                .await
+                .context("Failed to write lesson status")?;
             return Ok(());
         }
 

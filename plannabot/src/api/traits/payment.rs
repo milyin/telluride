@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime};
-use telluride::utils::{format_screen_spaces, split_with_screened_spaces, ParamParser};
+use telluride::utils::{ParamParser, format_screen_spaces, split_with_screened_spaces};
 
 use crate::models::TelegramName;
 
@@ -87,7 +87,6 @@ impl fmt::Display for PaymentParams {
         .fmt(f)
     }
 }
-
 
 impl FromStr for PaymentParams {
     type Err = anyhow::Error;

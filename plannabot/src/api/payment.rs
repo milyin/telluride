@@ -149,7 +149,11 @@ async fn payment_PL<Cmd: PaymentCommand + CallbackBitcode + 'static>(
     let mut payments = ctx.state.sheets.get_payments_for_student(&student).await?;
     payments.sort_by(|a, b| b.date.cmp(&a.date));
 
-    let currency = ctx.state.get_student(&student).await.and_then(|s| s.currency);
+    let currency = ctx
+        .state
+        .get_student(&student)
+        .await
+        .and_then(|s| s.currency);
 
     let total = payments.len();
     let info = PageInfo::new(page, total);
@@ -230,7 +234,11 @@ async fn payment_PS<Cmd: PaymentCommand + CallbackBitcode + 'static>(
     date: NaiveDate,
     time: NaiveTime,
 ) -> Result<()> {
-    let currency = ctx.state.get_student(&student).await.and_then(|s| s.currency);
+    let currency = ctx
+        .state
+        .get_student(&student)
+        .await
+        .and_then(|s| s.currency);
 
     let dt = date.and_time(time).and_utc();
     let payments = ctx.state.sheets.get_payments_for_student(&student).await?;
@@ -244,7 +252,10 @@ async fn payment_PS<Cmd: PaymentCommand + CallbackBitcode + 'static>(
         "⏰ Time: {}\n",
         time.format("%H:%M").to_string()
     ));
-    text.push(&markdown_format!("💵 Amount: {}\n", fmt_money(sum, currency)));
+    text.push(&markdown_format!(
+        "💵 Amount: {}\n",
+        fmt_money(sum, currency)
+    ));
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key = CallbackKey::pack(
@@ -276,7 +287,11 @@ async fn payment_PD<Cmd: PaymentCommand + CallbackBitcode + 'static>(
     date: NaiveDate,
     time: NaiveTime,
 ) -> Result<()> {
-    let currency = ctx.state.get_student(&student).await.and_then(|s| s.currency);
+    let currency = ctx
+        .state
+        .get_student(&student)
+        .await
+        .and_then(|s| s.currency);
 
     let dt = date.and_time(time).and_utc();
     let payments = ctx.state.sheets.get_payments_for_student(&student).await?;
@@ -290,7 +305,10 @@ async fn payment_PD<Cmd: PaymentCommand + CallbackBitcode + 'static>(
         "⏰ Time: {}\n",
         time.format("%H:%M").to_string()
     ));
-    text.push(&markdown_format!("💵 Amount: {}\n", fmt_money(sum, currency)));
+    text.push(&markdown_format!(
+        "💵 Amount: {}\n",
+        fmt_money(sum, currency)
+    ));
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key = CallbackKey::pack(
@@ -346,7 +364,11 @@ async fn payment_PN<Cmd: PaymentCommand + CallbackBitcode + 'static>(
     let (all_payments, _) = ctx.state.sheets.get_payments().await?;
     let (schedule, _) = ctx.state.sheets.get_schedule().await?;
 
-    let currency = ctx.state.get_student(&student).await.and_then(|s| s.currency);
+    let currency = ctx
+        .state
+        .get_student(&student)
+        .await
+        .and_then(|s| s.currency);
 
     let now = Utc::now();
     let spent: i64 = schedule
@@ -362,7 +384,10 @@ async fn payment_PN<Cmd: PaymentCommand + CallbackBitcode + 'static>(
         .sum();
     let balance = paid - spent;
     let mut text = markdown_format!("💰 *New Payment: {}*\n\n", student.to_string());
-    text.push(&markdown_format!("Balance: {}\n\n", fmt_money(balance, currency)));
+    text.push(&markdown_format!(
+        "Balance: {}\n\n",
+        fmt_money(balance, currency)
+    ));
     text.push(&markdown_string!(
         "Type the amount after the command below and send:"
     ));
@@ -395,14 +420,21 @@ async fn payment_PNF<Cmd: Send + Sync + Clone>(
     student: TelegramName,
     amount: i64,
 ) -> Result<()> {
-    let currency = ctx.state.get_student(&student).await.and_then(|s| s.currency);
+    let currency = ctx
+        .state
+        .get_student(&student)
+        .await
+        .and_then(|s| s.currency);
 
     let now = Utc::now();
     ctx.state.sheets.add_payment(&student, now, amount).await?;
 
     let mut text = markdown_string!("✅ *Payment Added*\n\n");
     text.push(&markdown_format!("🎓 Student: {}\n", student.to_string()));
-    text.push(&markdown_format!("💵 Amount: {}\n", fmt_money(amount, currency)));
+    text.push(&markdown_format!(
+        "💵 Amount: {}\n",
+        fmt_money(amount, currency)
+    ));
 
     ctx.update_markdown_message(text, None).await
 }

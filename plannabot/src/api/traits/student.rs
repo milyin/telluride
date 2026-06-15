@@ -2,7 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use anyhow::Result;
-use telluride::utils::{split_with_screened_spaces, ParamParser};
+use telluride::utils::{ParamParser, split_with_screened_spaces};
 
 use crate::models::TelegramName;
 use crate::types::Duration;
@@ -93,7 +93,9 @@ impl fmt::Display for PairingParams {
             PairingParams::PE(page) => write!(f, "{edit} {page}"),
             PairingParams::PEN(name) => write!(f, "{edit} {name}"),
             PairingParams::PENL(name) => write!(f, "{edit} lesson {name}"),
-            PairingParams::PENLF(name, dur, cost) => write!(f, "{edit} lesson! {name} {dur} {cost}"),
+            PairingParams::PENLF(name, dur, cost) => {
+                write!(f, "{edit} lesson! {name} {dur} {cost}")
+            }
             PairingParams::PENZ(name) => write!(f, "{edit} zoom {name}"),
             PairingParams::PENZF(name, url) => write!(f, "{edit} zoom! {name} {url}"),
             PairingParams::PENB(name) => write!(f, "{edit} board {name}"),
@@ -168,9 +170,9 @@ impl FromStr for PairingParams {
                 }
                 Some(s) => Ok(PairingParams::PE(s.parse().unwrap_or(0))),
             },
-            PairingSubcmd::Edit(true) => {
-                Err(anyhow::anyhow!("use 'edit lesson!' / 'edit zoom!' / 'edit board!' instead of 'edit!'"))
-            }
+            PairingSubcmd::Edit(true) => Err(anyhow::anyhow!(
+                "use 'edit lesson!' / 'edit zoom!' / 'edit board!' instead of 'edit!'"
+            )),
             PairingSubcmd::Remove(false) => match p.next_opt() {
                 None => Ok(PairingParams::PR(0)),
                 Some(s) if s.starts_with('@') => Ok(PairingParams::PRN(s.parse()?)),

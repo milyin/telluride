@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use chrono::{Datelike, Local, NaiveDate, NaiveTime, Weekday};
-use telluride::utils::{format_screen_spaces, split_with_screened_spaces, ParamParser};
+use telluride::utils::{ParamParser, format_screen_spaces, split_with_screened_spaces};
 
 pub enum WorktimeBranch {
     Weekday,
@@ -84,7 +84,6 @@ fn parse_weekday(s: &str) -> Result<Weekday> {
     }
 }
 
-
 #[allow(non_camel_case_types)]
 pub enum WorktimeParams {
     /// Main menu: Week days / Exceptions
@@ -144,10 +143,18 @@ impl fmt::Display for WorktimeParams {
                 format_screen_spaces!(wd, add, weekday_short(*w), s.format("%H:%M"))
             }
             WorktimeParams::WAWHH(w, s, e) => format_screen_spaces!(
-                wd, add, weekday_short(*w), s.format("%H:%M"), e.format("%H:%M")
+                wd,
+                add,
+                weekday_short(*w),
+                s.format("%H:%M"),
+                e.format("%H:%M")
             ),
             WorktimeParams::WAWHHF(w, s, e) => format_screen_spaces!(
-                wd, add_f, weekday_short(*w), s.format("%H:%M"), e.format("%H:%M")
+                wd,
+                add_f,
+                weekday_short(*w),
+                s.format("%H:%M"),
+                e.format("%H:%M")
             ),
             WorktimeParams::WR => format_screen_spaces!(wd, rm),
             WorktimeParams::WRWH(w, s) => {
@@ -163,10 +170,17 @@ impl fmt::Display for WorktimeParams {
                 format_screen_spaces!(ex, d.format("%Y-%m-%d"), s.format("%H:%M"))
             }
             WorktimeParams::EDHH(d, s, e) => format_screen_spaces!(
-                ex, d.format("%Y-%m-%d"), s.format("%H:%M"), e.format("%H:%M")
+                ex,
+                d.format("%Y-%m-%d"),
+                s.format("%H:%M"),
+                e.format("%H:%M")
             ),
             WorktimeParams::EDHHF(d, s, e) => format_screen_spaces!(
-                ex, add_f, d.format("%Y-%m-%d"), s.format("%H:%M"), e.format("%H:%M")
+                ex,
+                add_f,
+                d.format("%Y-%m-%d"),
+                s.format("%H:%M"),
+                e.format("%H:%M")
             ),
             WorktimeParams::ERYM(y, m) => format_screen_spaces!(ex, rm, y, m),
             WorktimeParams::ERDH(d, s) => {
@@ -179,7 +193,6 @@ impl fmt::Display for WorktimeParams {
         .fmt(f)
     }
 }
-
 
 impl FromStr for WorktimeParams {
     type Err = anyhow::Error;

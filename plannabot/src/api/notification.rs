@@ -34,15 +34,13 @@ async fn notification_N0<Cmd: NotificationCommand + BookCommand + CallbackBitcod
 
     let next_lesson = all_entries
         .iter()
-        .filter(|e| e.student_telegram == student.telegram_name && e.is_planned() && e.datetime > now)
+        .filter(|e| {
+            e.student_telegram == student.telegram_name && e.is_planned() && e.datetime > now
+        })
         .min_by_key(|e| e.datetime);
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let setup_key = CallbackKey::pack(
-        Cmd::notification(NotificationParams::S0),
-        &user_proxy,
-    )
-    .await;
+    let setup_key = CallbackKey::pack(Cmd::notification(NotificationParams::S0), &user_proxy).await;
 
     let delay_str = match &student.notification_delay {
         None => markdown_string!("_not set_"),
@@ -53,13 +51,17 @@ async fn notification_N0<Cmd: NotificationCommand + BookCommand + CallbackBitcod
         let mut text = markdown_string!("🔔 *Notifications*\n\n");
         text.push(&markdown_string!("No upcoming lessons scheduled\\.\n\n"));
         text.push(&markdown_format!("🔔 Notification: {}\n", delay_str));
-        let keyboard = InlineKeyboardMarkup::new(vec![vec![
-            InlineKeyboardButton::callback_key("⚙️ Setup", &setup_key),
-        ]]);
+        let keyboard = InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback_key(
+            "⚙️ Setup",
+            &setup_key,
+        )]]);
         return ctx.update_markdown_message(text, Some(keyboard)).await;
     };
 
-    let pairing = ctx.state.get_pairing(&student.telegram_name, &lesson.teacher_telegram).await;
+    let pairing = ctx
+        .state
+        .get_pairing(&student.telegram_name, &lesson.teacher_telegram)
+        .await;
 
     let tz = student.timezone;
     let local_dt = lesson.datetime.with_timezone(&tz);
@@ -86,13 +88,19 @@ async fn notification_N0<Cmd: NotificationCommand + BookCommand + CallbackBitcod
         if let Some(zoom) = &p.zoom_url {
             if !zoom.is_empty() {
                 let url = zoom.replace('\\', "\\\\").replace(')', "\\)");
-                text.push(&MarkdownString::from_validated_string(format!("[🎥 Zoom]({})\n", url)));
+                text.push(&MarkdownString::from_validated_string(format!(
+                    "[🎥 Zoom]({})\n",
+                    url
+                )));
             }
         }
         if let Some(board) = &p.board_url {
             if !board.is_empty() {
                 let url = board.replace('\\', "\\\\").replace(')', "\\)");
-                text.push(&MarkdownString::from_validated_string(format!("[📋 Board]({})\n", url)));
+                text.push(&MarkdownString::from_validated_string(format!(
+                    "[📋 Board]({})\n",
+                    url
+                )));
             }
         }
     }
@@ -130,11 +138,7 @@ async fn notification_S0<Cmd: NotificationCommand + CallbackBitcode + 'static>(
     );
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
-    let back_key = CallbackKey::pack(
-        Cmd::notification(NotificationParams::N0),
-        &user_proxy,
-    )
-    .await;
+    let back_key = CallbackKey::pack(Cmd::notification(NotificationParams::N0), &user_proxy).await;
 
     let text = markdown_format!(
         "⚙️ *Notification Setup*\n\n\
@@ -145,7 +149,10 @@ async fn notification_S0<Cmd: NotificationCommand + CallbackBitcode + 'static>(
     );
 
     let keyboard = InlineKeyboardMarkup::new(vec![
-        vec![InlineKeyboardButton::switch_inline_query_current_chat("✏️ Set...", prefill)],
+        vec![InlineKeyboardButton::switch_inline_query_current_chat(
+            "✏️ Set...",
+            prefill,
+        )],
         vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)],
     ]);
 
@@ -206,13 +213,19 @@ pub fn format_notification_message(
     if let Some(zoom) = zoom_url {
         if !zoom.is_empty() {
             let url = zoom.replace('\\', "\\\\").replace(')', "\\)");
-            text.push(&MarkdownString::from_validated_string(format!("[🎥 Zoom]({})\n", url)));
+            text.push(&MarkdownString::from_validated_string(format!(
+                "[🎥 Zoom]({})\n",
+                url
+            )));
         }
     }
     if let Some(board) = board_url {
         if !board.is_empty() {
             let url = board.replace('\\', "\\\\").replace(')', "\\)");
-            text.push(&MarkdownString::from_validated_string(format!("[📋 Board]({})\n", url)));
+            text.push(&MarkdownString::from_validated_string(format!(
+                "[📋 Board]({})\n",
+                url
+            )));
         }
     }
 

@@ -1,13 +1,13 @@
 pub mod admin;
 pub mod balance;
 pub mod book;
-pub mod notification;
 pub mod common;
 pub mod context;
 pub mod impersonate;
 pub mod impersonate_student;
 pub mod impersonate_teacher;
 pub mod menus;
+pub mod notification;
 pub mod pairing;
 pub mod payment;
 pub mod schedule;

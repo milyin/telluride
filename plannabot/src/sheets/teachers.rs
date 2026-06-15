@@ -112,7 +112,10 @@ impl SheetsClient {
             }
         }
 
-        Err(anyhow::anyhow!("Teacher {} not found in sheet", telegram_name))
+        Err(anyhow::anyhow!(
+            "Teacher {} not found in sheet",
+            telegram_name
+        ))
     }
 
     /// Updates the timezone and name fields of an existing teacher row.
@@ -159,15 +162,20 @@ impl SheetsClient {
             let sheet_row = row_idx + 1;
             let last_col = col_index_to_letter(updated_row.len().saturating_sub(1));
             let update_range = format!("{SHEET_TEACHERS}!A{sheet_row}:{last_col}{sheet_row}");
-            let values: Vec<Vec<serde_json::Value>> = vec![updated_row
-                .into_iter()
-                .map(serde_json::Value::String)
-                .collect()];
+            let values: Vec<Vec<serde_json::Value>> = vec![
+                updated_row
+                    .into_iter()
+                    .map(serde_json::Value::String)
+                    .collect(),
+            ];
             self.update_values(&update_range, values).await?;
             return Ok(());
         }
 
-        Err(anyhow::anyhow!("Teacher {} not found in sheet", telegram_name))
+        Err(anyhow::anyhow!(
+            "Teacher {} not found in sheet",
+            telegram_name
+        ))
     }
 
     /// Updates the `chat_id` column for an existing teacher row.
@@ -210,14 +218,19 @@ impl SheetsClient {
             let sheet_row = row_idx + 1;
             let last_col = col_index_to_letter(updated_row.len().saturating_sub(1));
             let update_range = format!("{SHEET_TEACHERS}!A{sheet_row}:{last_col}{sheet_row}");
-            let values: Vec<Vec<serde_json::Value>> = vec![updated_row
-                .into_iter()
-                .map(serde_json::Value::String)
-                .collect()];
+            let values: Vec<Vec<serde_json::Value>> = vec![
+                updated_row
+                    .into_iter()
+                    .map(serde_json::Value::String)
+                    .collect(),
+            ];
             self.update_values(&update_range, values).await?;
             return Ok(());
         }
 
-        Err(anyhow::anyhow!("Teacher {} not found in sheet", telegram_name))
+        Err(anyhow::anyhow!(
+            "Teacher {} not found in sheet",
+            telegram_name
+        ))
     }
 }

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 use chrono_tz::Tz;
 
-use super::{SheetSchema, SheetsClient, SHEET_STUDENTS, STUDENTS_COLS, col_index_to_letter};
+use super::{SHEET_STUDENTS, STUDENTS_COLS, SheetSchema, SheetsClient, col_index_to_letter};
 use crate::models::{SheetParseError, Student, TelegramName};
 use crate::types::Duration;
 
@@ -13,9 +13,7 @@ impl SheetsClient {
     /// Reads all rows from the `Students` sheet and returns a map from
     /// (normalised) Telegram username → [`Student`], together with any
     /// [`SheetParseError`]s encountered while parsing rows.
-    pub async fn get_students(
-        &self,
-    ) -> Result<(HashMap<String, Student>, Vec<SheetParseError>)> {
+    pub async fn get_students(&self) -> Result<(HashMap<String, Student>, Vec<SheetParseError>)> {
         let range = format!("{SHEET_STUDENTS}!A:Z");
         let rows = self
             .get_values(&range)
@@ -38,7 +36,12 @@ impl SheetsClient {
 
             let row_num = row_idx + 1;
 
-            let Some(telegram_name) = schema.get_field::<Option<TelegramName>>(row, row_num, Student::TELEGRAM_NAME, &mut errors) else {
+            let Some(telegram_name) = schema.get_field::<Option<TelegramName>>(
+                row,
+                row_num,
+                Student::TELEGRAM_NAME,
+                &mut errors,
+            ) else {
                 continue;
             };
 
@@ -47,7 +50,12 @@ impl SheetsClient {
                 name: schema.get_field(row, row_num, Student::NAME, &mut errors),
                 currency: schema.get_field(row, row_num, Student::CURRENCY, &mut errors),
                 chat_id: schema.get_field(row, row_num, Student::CHAT_ID, &mut errors),
-                notification_delay: schema.get_field(row, row_num, Student::NOTIFICATION_DELAY, &mut errors),
+                notification_delay: schema.get_field(
+                    row,
+                    row_num,
+                    Student::NOTIFICATION_DELAY,
+                    &mut errors,
+                ),
                 custom: schema.get_custom(row, STUDENTS_COLS),
                 telegram_name: telegram_name.clone(),
             };
@@ -112,7 +120,10 @@ impl SheetsClient {
             }
         }
 
-        Err(anyhow::anyhow!("Student {} not found in sheet", telegram_name))
+        Err(anyhow::anyhow!(
+            "Student {} not found in sheet",
+            telegram_name
+        ))
     }
 
     /// Updates the timezone, currency, and name fields of an existing student row.
@@ -165,15 +176,20 @@ impl SheetsClient {
             let sheet_row = row_idx + 1; // 1-based row number
             let last_col = col_index_to_letter(updated_row.len().saturating_sub(1));
             let update_range = format!("{SHEET_STUDENTS}!A{sheet_row}:{last_col}{sheet_row}");
-            let values: Vec<Vec<serde_json::Value>> = vec![updated_row
-                .into_iter()
-                .map(serde_json::Value::String)
-                .collect()];
+            let values: Vec<Vec<serde_json::Value>> = vec![
+                updated_row
+                    .into_iter()
+                    .map(serde_json::Value::String)
+                    .collect(),
+            ];
             self.update_values(&update_range, values).await?;
             return Ok(());
         }
 
-        Err(anyhow::anyhow!("Student {} not found in sheet", telegram_name))
+        Err(anyhow::anyhow!(
+            "Student {} not found in sheet",
+            telegram_name
+        ))
     }
 
     /// Updates the `chat_id` column for an existing student row.
@@ -182,7 +198,8 @@ impl SheetsClient {
         telegram_name: &TelegramName,
         chat_id: i64,
     ) -> Result<()> {
-        self.update_student_single_column(telegram_name, Student::CHAT_ID, chat_id.to_string()).await
+        self.update_student_single_column(telegram_name, Student::CHAT_ID, chat_id.to_string())
+            .await
     }
 
     /// Updates the `notification_delay` column for an existing student row.
@@ -193,7 +210,8 @@ impl SheetsClient {
         delay: Option<&Duration>,
     ) -> Result<()> {
         let value = delay.map(|d| d.to_string()).unwrap_or_default();
-        self.update_student_single_column(telegram_name, Student::NOTIFICATION_DELAY, value).await
+        self.update_student_single_column(telegram_name, Student::NOTIFICATION_DELAY, value)
+            .await
     }
 
     async fn update_student_single_column(
@@ -236,14 +254,19 @@ impl SheetsClient {
             let sheet_row = row_idx + 1;
             let last_col = col_index_to_letter(updated_row.len().saturating_sub(1));
             let update_range = format!("{SHEET_STUDENTS}!A{sheet_row}:{last_col}{sheet_row}");
-            let values: Vec<Vec<serde_json::Value>> = vec![updated_row
-                .into_iter()
-                .map(serde_json::Value::String)
-                .collect()];
+            let values: Vec<Vec<serde_json::Value>> = vec![
+                updated_row
+                    .into_iter()
+                    .map(serde_json::Value::String)
+                    .collect(),
+            ];
             self.update_values(&update_range, values).await?;
             return Ok(());
         }
 
-        Err(anyhow::anyhow!("Student {} not found in sheet", telegram_name))
+        Err(anyhow::anyhow!(
+            "Student {} not found in sheet",
+            telegram_name
+        ))
     }
 }

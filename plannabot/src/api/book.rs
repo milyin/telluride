@@ -9,7 +9,7 @@ use telluride::markdown::MarkdownString;
 use telluride::{markdown_format, markdown_string};
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
-use crate::api::common::{format_duration, format_entry_label, fmt_money};
+use crate::api::common::{fmt_money, format_duration, format_entry_label};
 use crate::api::context::BotCtx;
 use crate::api::menus::{
     show_date_selection, show_month_selection, show_name_list, show_slot_selection,
@@ -350,7 +350,10 @@ async fn book_C8<Cmd: BookCommand + CallbackBitcode + 'static>(
         hour,
         duration.clone(),
     )));
-    text.push(&markdown_format!("💰 Cost: {}\n", fmt_money(actual_cost, currency)));
+    text.push(&markdown_format!(
+        "💰 Cost: {}\n",
+        fmt_money(actual_cost, currency)
+    ));
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
     let back_key = CallbackKey::pack(
@@ -449,7 +452,10 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
         hour,
         duration,
     )));
-    text.push(&markdown_format!("💰 Cost: {}\n", fmt_money(actual_cost, currency)));
+    text.push(&markdown_format!(
+        "💰 Cost: {}\n",
+        fmt_money(actual_cost, currency)
+    ));
 
     ctx.update_markdown_message(text, None).await?;
     Ok(())
@@ -458,7 +464,6 @@ async fn book_CF<Cmd: Send + Sync + Clone>(
 // ---------------------------------------------------------------------------
 // List flow (L0, L1)
 // ---------------------------------------------------------------------------
-
 
 async fn book_L0<Cmd: BookCommand + CallbackBitcode + 'static>(
     ctx: &BotCtx<Cmd>,
@@ -632,13 +637,19 @@ async fn book_L1<Cmd: BookCommand + CallbackBitcode + 'static>(
         if let Some(zoom) = &pairing.zoom_url {
             if !zoom.is_empty() {
                 let url = zoom.replace('\\', "\\\\").replace(')', "\\)");
-                text.push(&MarkdownString::from_validated_string(format!("[🎥 Zoom]({})\n", url)));
+                text.push(&MarkdownString::from_validated_string(format!(
+                    "[🎥 Zoom]({})\n",
+                    url
+                )));
             }
         }
         if let Some(board) = &pairing.board_url {
             if !board.is_empty() {
                 let url = board.replace('\\', "\\\\").replace(')', "\\)");
-                text.push(&MarkdownString::from_validated_string(format!("[📋 Board]({})\n", url)));
+                text.push(&MarkdownString::from_validated_string(format!(
+                    "[📋 Board]({})\n",
+                    url
+                )));
             }
         }
     }

@@ -2,7 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use anyhow::Result;
-use telluride::utils::{format_screen_spaces, split_with_screened_spaces, ParamParser};
+use telluride::utils::{ParamParser, format_screen_spaces, split_with_screened_spaces};
 
 use crate::models::TelegramName;
 
@@ -67,7 +67,10 @@ impl FromStr for ImpersonateParams {
         };
 
         let role: ImpersonateRole = first.parse()?;
-        let name = p.next_opt().map(|n| n.parse::<TelegramName>()).transpose()?;
+        let name = p
+            .next_opt()
+            .map(|n| n.parse::<TelegramName>())
+            .transpose()?;
         p.finish()?;
 
         match role {

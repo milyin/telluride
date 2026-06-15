@@ -4,14 +4,14 @@ use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use chrono_tz::Tz;
 use telluride::command::{CallbackBitcode, CallbackKey, InlineKeyboardButtonPackedExt};
 use telluride::data_store::UserProxy;
-use telluride::{markdown_format, markdown_string};
 use telluride::markdown::MarkdownString;
+use telluride::{markdown_format, markdown_string};
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
 use crate::api::common::{fmt_money, fmt_money_plain, format_entry_label};
+use crate::api::context::BotCtx;
 use crate::api::menus::show_annotated_list;
 use crate::api::traits::BookingActor;
-use crate::api::context::BotCtx;
 use crate::api::traits::{BalanceActor, BalanceCommand, BalanceParams};
 use crate::models::{LessonStatus, TelegramName};
 
@@ -88,7 +88,11 @@ async fn balance_L0<Cmd: BalanceCommand + CallbackBitcode + 'static>(
             .map(|p| p.sum)
             .sum();
         let remains = paid - allocated - spent;
-        let currency = ctx.state.get_student(student).await.and_then(|s| s.currency);
+        let currency = ctx
+            .state
+            .get_student(student)
+            .await
+            .and_then(|s| s.currency);
         items.push((student.clone(), fmt_money(remains, currency)));
     }
 
@@ -189,15 +193,26 @@ async fn balance_L2<Cmd: BalanceCommand + CallbackBitcode + 'static>(
     }
     text.push(&markdown_format!("Paid: {}\n", fmt_money(paid, currency)));
     text.push(&markdown_format!("Spent: {}\n", fmt_money(spent, currency)));
-    text.push(&markdown_format!("Balance: {}\n", fmt_money(balance, currency)));
-    text.push(&markdown_format!("  Allocated: {}\n", fmt_money(allocated, currency)));
-    text.push(&markdown_format!("  Remains: {}\n", fmt_money(remains, currency)));
+    text.push(&markdown_format!(
+        "Balance: {}\n",
+        fmt_money(balance, currency)
+    ));
+    text.push(&markdown_format!(
+        "  Allocated: {}\n",
+        fmt_money(allocated, currency)
+    ));
+    text.push(&markdown_format!(
+        "  Remains: {}\n",
+        fmt_money(remains, currency)
+    ));
 
     // Month name
     let month_label = NaiveDate::from_ymd_opt(year, month, 1)
         .map(|d| d.format("%B %Y").to_string())
         .unwrap_or_else(|| format!("{}/{}", month, year));
-    text.push(&markdown_string!("\nUse /book to view or edit planned lessons\\.\n"));
+    text.push(&markdown_string!(
+        "\nUse /book to view or edit planned lessons\\.\n"
+    ));
     text.push(&markdown_format!("\n*Transactions on {}*\n", month_label));
 
     // Collect this month's transactions sorted by datetime
@@ -282,9 +297,10 @@ async fn balance_L2<Cmd: BalanceCommand + CallbackBitcode + 'static>(
 
     match actor {
         BalanceActor::Teacher(_) | BalanceActor::Admin => {
-            let back_key =
-                CallbackKey::pack(Cmd::balance(BalanceParams::L0(0)), &user_proxy).await;
-            rows.push(vec![InlineKeyboardButton::callback_key("↩ Back", &back_key)]);
+            let back_key = CallbackKey::pack(Cmd::balance(BalanceParams::L0(0)), &user_proxy).await;
+            rows.push(vec![InlineKeyboardButton::callback_key(
+                "↩ Back", &back_key,
+            )]);
         }
         BalanceActor::Student(_) => {}
     }

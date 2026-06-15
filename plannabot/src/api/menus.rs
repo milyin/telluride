@@ -11,7 +11,7 @@ use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 use crate::api::common::PageInfo;
 use crate::api::context::BotCtx;
 use crate::models::TelegramName;
-use crate::sheets::worktime::{available_slots, DayAvailability};
+use crate::sheets::worktime::{DayAvailability, available_slots};
 
 /// Page size used by [`show_annotated_list`].
 pub const ANNOTATED_LIST_PAGE_SIZE: usize = 3;
@@ -55,7 +55,11 @@ where
     let total_pages = (items.len() + ANNOTATED_LIST_PAGE_SIZE - 1) / ANNOTATED_LIST_PAGE_SIZE;
 
     let mut text = header;
-    text.push(&markdown_format!(" \\(page {}/{}\\):\n", info.page + 1, total_pages));
+    text.push(&markdown_format!(
+        " \\(page {}/{}\\):\n",
+        info.page + 1,
+        total_pages
+    ));
     for (name, annotation) in &items[info.start..info.end] {
         let mut line = markdown_format!("\n• {}: ", name.to_string());
         line.push(annotation);
@@ -65,7 +69,10 @@ where
     let mut buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     for (name, _) in &items[info.start..info.end] {
         let key = CallbackKey::pack(make_item_cmd(name.clone()), &user_proxy).await;
-        buttons.push(vec![InlineKeyboardButton::callback_key(name.to_string(), &key)]);
+        buttons.push(vec![InlineKeyboardButton::callback_key(
+            name.to_string(),
+            &key,
+        )]);
     }
 
     let mut nav_row: Vec<InlineKeyboardButton> = Vec::new();
@@ -85,7 +92,8 @@ where
         buttons.push(vec![InlineKeyboardButton::callback_key("↩ Back", &key)]);
     }
 
-    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons))).await
+    ctx.update_markdown_message(text, Some(InlineKeyboardMarkup::new(buttons)))
+        .await
 }
 
 pub(crate) async fn show_name_list<Cmd, F>(
@@ -166,8 +174,18 @@ where
     F: Fn(u32) -> Cmd,
 {
     const MONTH_NAMES: [&str; 12] = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December",
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
     ];
 
     let user_proxy = UserProxy::new(ctx.callback_storage.clone(), ctx.user_id);
@@ -225,8 +243,16 @@ where
         date_keys.push(key);
     }
 
-    let (prev_year, prev_month) = if month == 1 { (year - 1, 12u32) } else { (year, month - 1) };
-    let (next_year, next_month) = if month == 12 { (year + 1, 1u32) } else { (year, month + 1) };
+    let (prev_year, prev_month) = if month == 1 {
+        (year - 1, 12u32)
+    } else {
+        (year, month - 1)
+    };
+    let (next_year, next_month) = if month == 12 {
+        (year + 1, 1u32)
+    } else {
+        (year, month + 1)
+    };
 
     let prev_key = CallbackKey::pack(make_prev_month(prev_year, prev_month), &user_proxy).await;
     let next_key = CallbackKey::pack(make_next_month(next_year, next_month), &user_proxy).await;
@@ -237,35 +263,46 @@ where
     let next_btn = InlineKeyboardButton::callback_key(">", &next_key);
     let year_btn = InlineKeyboardButton::callback_key(year.to_string(), &year_key);
     let month_btn = InlineKeyboardButton::callback_key(
-        NaiveDate::from_ymd_opt(year, month, 1).unwrap().format("%B").to_string(),
+        NaiveDate::from_ymd_opt(year, month, 1)
+            .unwrap()
+            .format("%B")
+            .to_string(),
         &month_key,
     );
 
-    let mut keyboard = build_month_calendar(
-        year,
-        month,
-        |date| {
-            let day = date.day();
-            let marker = match day_availability.get(&date) {
-                Some(DayAvailability::Free)    => "🟢",
-                Some(DayAvailability::Partial) => "🟡",
-                Some(DayAvailability::Busy)    => "🔴",
-                Some(DayAvailability::Marked)  => "📆",
-                Some(DayAvailability::Planned) => "📅",
-                Some(DayAvailability::Done)    => "✅",
-                None => "",
-            };
-            let base = if date == today { format!("[{}]", day) } else { format!("{}", day) };
-            let label = if marker.is_empty() { base } else { format!("{}{}", marker, base) };
-            InlineKeyboardButton::callback_key(label, &date_keys[(day - 1) as usize])
-        },
-    );
+    let mut keyboard = build_month_calendar(year, month, |date| {
+        let day = date.day();
+        let marker = match day_availability.get(&date) {
+            Some(DayAvailability::Free) => "🟢",
+            Some(DayAvailability::Partial) => "🟡",
+            Some(DayAvailability::Busy) => "🔴",
+            Some(DayAvailability::Marked) => "📆",
+            Some(DayAvailability::Planned) => "📅",
+            Some(DayAvailability::Done) => "✅",
+            None => "",
+        };
+        let base = if date == today {
+            format!("[{}]", day)
+        } else {
+            format!("{}", day)
+        };
+        let label = if marker.is_empty() {
+            base
+        } else {
+            format!("{}{}", marker, base)
+        };
+        InlineKeyboardButton::callback_key(label, &date_keys[(day - 1) as usize])
+    });
 
-    keyboard.inline_keyboard.insert(0, vec![prev_btn, year_btn, month_btn, next_btn]);
+    keyboard
+        .inline_keyboard
+        .insert(0, vec![prev_btn, year_btn, month_btn, next_btn]);
 
     if let Some(back_cmd) = back {
         let key = CallbackKey::pack(back_cmd, &user_proxy).await;
-        keyboard.inline_keyboard.push(vec![InlineKeyboardButton::callback_key("↩ Back", &key)]);
+        keyboard
+            .inline_keyboard
+            .push(vec![InlineKeyboardButton::callback_key("↩ Back", &key)]);
     }
 
     ctx.update_markdown_message(message, Some(keyboard)).await
@@ -293,7 +330,14 @@ where
 
     let (worktime, _) = ctx.state.sheets.get_worktime().await?;
     let (schedule, _) = ctx.state.sheets.get_schedule().await?;
-    let slots = available_slots(&worktime, &schedule, teacher, student, date, lesson_duration);
+    let slots = available_slots(
+        &worktime,
+        &schedule,
+        teacher,
+        student,
+        date,
+        lesson_duration,
+    );
 
     let mut message = header;
     if slots.is_empty() {
@@ -307,7 +351,13 @@ where
 
     for slot in slots {
         let end_time = slot + lesson_duration;
-        let label = format!("{:02}:{:02} – {:02}:{:02}", slot.hour(), slot.minute(), end_time.hour(), end_time.minute());
+        let label = format!(
+            "{:02}:{:02} – {:02}:{:02}",
+            slot.hour(),
+            slot.minute(),
+            end_time.hour(),
+            end_time.minute()
+        );
         let cmd = make_cmd(slot);
         let key = CallbackKey::pack(cmd, &user_proxy).await;
         buttons.push(vec![InlineKeyboardButton::callback_key(label, &key)]);

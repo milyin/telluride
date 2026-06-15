@@ -56,11 +56,17 @@ impl<'a> ParamParser<'a> {
     pub fn next(&mut self, name: &str) -> anyhow::Result<&str> {
         self.parts
             .get(self.pos)
-            .map(|s| { self.pos += 1; s.as_str() })
+            .map(|s| {
+                self.pos += 1;
+                s.as_str()
+            })
             .ok_or_else(|| anyhow::anyhow!("missing parameter: {}", name))
     }
     pub fn next_opt(&mut self) -> Option<&str> {
-        self.parts.get(self.pos).map(|s| { self.pos += 1; s.as_str() })
+        self.parts.get(self.pos).map(|s| {
+            self.pos += 1;
+            s.as_str()
+        })
     }
     pub fn rest(&self) -> &[String] {
         &self.parts[self.pos..]
