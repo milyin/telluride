@@ -89,6 +89,10 @@ cargo run --release
 On first startup the bot ensures all six tabs exist:
 `Students`, `Teachers`, `Schedule`, `Payments`, `Pairings`, `Worktime`.
 
+## Detailed usage
+
+For complete operational documentation (bootstrap from zero, no-manual-sheet workflow, mode transitions, and per-command behavior), see **[USAGE.md](USAGE.md)**.
+
 ---
 
 ## Commands by mode
