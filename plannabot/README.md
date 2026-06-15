@@ -89,36 +89,11 @@ cargo run --release
 On first startup the bot ensures all six tabs exist:
 `Students`, `Teachers`, `Schedule`, `Payments`, `Pairings`, `Worktime`.
 
-## Detailed usage
-
-For complete operational documentation (bootstrap from zero, no-manual-sheet workflow, mode transitions, and per-command behavior), see **[USAGE.md](USAGE.md)**.
-
----
-
-## Commands by mode
-
-| Mode | Commands |
-|------|----------|
-| **Student** | `/start`, `/help`, `/schedule`, `/balance`, `/book`, `/notification` |
-| **Teacher** | `/start`, `/help`, `/schedule`, `/book`, `/balance`, `/payment`, `/worktime`, `/student`, `/admin`, `/refresh` |
-| **Admin** | `/start`, `/help`, `/status`, `/refresh`, `/balance`, `/payment`, `/impersonate`, `/user`, `/quit` |
-| **Impersonate Student** | `/start`, `/help`, `/schedule`, `/balance`, `/book`, `/notification`, `/quit` |
-| **Impersonate Teacher** | `/start`, `/help`, `/schedule`, `/balance`, `/book`, `/payment`, `/worktime`, `/quit` |
-
-Most command flows are interactive (inline keyboards + callback actions), but command parameters are also supported for direct entry.
-
----
-
-## Access control
-
-- Users must have a Telegram username and be present in `Students` or `Teachers`.
-- `Teachers.admin = true` is required to enter admin mode.
-- `/start` always resets admin/impersonation mode for the current chat.
-
 ---
 
 ## Further reading
 
+- Complete usage workflows and command reference: **[USAGE.md](USAGE.md)**
 - Architecture and module map: **[ARCHITECTURE.md](ARCHITECTURE.md)**
 - Telluride message formatting rules: **[TELLURIDE.md](TELLURIDE.md)**
 - Development checklist/conventions: **[CLAUDE.md](CLAUDE.md)**
